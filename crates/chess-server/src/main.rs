@@ -8,13 +8,22 @@ use anyhow::{Context, Result, ensure};
 use chess_server::config::{LogFormat, ServerConfig};
 use tracing_subscriber::EnvFilter;
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     let config = ServerConfig::load().context("invalid configuration")?;
     if std::env::args().any(|arg| arg == "--healthcheck") {
         return healthcheck(config.bind.port());
     }
     init_logging(config.log_format);
+    // Searches run on blocking threads and recurse deeply: give them room.
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .thread_stack_size(8 * 1024 * 1024)
+        .build()
+        .context("cannot start the async runtime")?
+        .block_on(serve(config))
+}
+
+async fn serve(config: ServerConfig) -> Result<()> {
     tracing::info!(?config, "starting chess-server");
 
     let listener = tokio::net::TcpListener::bind(config.bind)
@@ -22,10 +31,13 @@ async fn main() -> Result<()> {
         .with_context(|| format!("cannot listen on {}", config.bind))?;
     tracing::info!(addr = %config.bind, "listening");
 
-    axum::serve(listener, chess_server::api::router())
-        .with_graceful_shutdown(shutdown_signal())
-        .await
-        .context("server error")
+    axum::serve(
+        listener,
+        chess_server::api::router(chess_server::AppState::new(&config)),
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .await
+    .context("server error")
 }
 
 /// Docker `HEALTHCHECK`: queries `/api/health` on localhost with std only, so

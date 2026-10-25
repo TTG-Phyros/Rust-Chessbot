@@ -32,6 +32,10 @@ pub struct ServerConfig {
     pub data_dir: PathBuf,
     /// Log output format.
     pub log_format: LogFormat,
+    /// Maximum number of engine searches running at once (one CPU core each).
+    pub max_searches: usize,
+    /// Transposition table size of each search, in MiB.
+    pub engine_hash_mb: usize,
 }
 
 impl Default for ServerConfig {
@@ -40,6 +44,8 @@ impl Default for ServerConfig {
             bind: SocketAddr::from(([0, 0, 0, 0], 3000)),
             data_dir: PathBuf::from("data"),
             log_format: LogFormat::Pretty,
+            max_searches: std::thread::available_parallelism().map_or(2, std::num::NonZero::get),
+            engine_hash_mb: 16,
         }
     }
 }

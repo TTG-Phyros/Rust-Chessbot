@@ -48,7 +48,8 @@ ts-rs = "12.0.1"
 tokio-tungstenite = "0.30.0"
 
 # Training
-burn = { version = "0.22.1", default-features = false, features = ["std", "autodiff", "flex", "rayon"] }
+burn = { version = "0.22.1", default-features = false, features = ["std", "autodiff", "optim", "flex", "rayon"] }
+ctrlc = { version = "3.5.2", features = ["termination"] }
 # Same features as cubecl-cuda so cargo unifies them; used only to probe the GPU.
 cudarc = { version = "0.19.10", default-features = false, features = ["std", "driver", "nvrtc", "fallback-dynamic-loading", "cuda-version-from-build-system", "fallback-latest"] }
 

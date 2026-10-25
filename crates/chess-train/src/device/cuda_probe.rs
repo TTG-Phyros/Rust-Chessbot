@@ -43,3 +43,10 @@ pub(super) fn probe() -> Result<GpuInfo, String> {
         free_vram,
     })
 }
+
+/// Bytes of GPU memory in use on device 0, or `None` if it cannot be queried.
+pub(super) fn memory_used() -> Option<u64> {
+    let ctx = CudaContext::new(0).ok()?;
+    let (free, total) = ctx.mem_get_info().ok()?;
+    Some(total.saturating_sub(free) as u64)
+}

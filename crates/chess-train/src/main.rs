@@ -1,16 +1,39 @@
-//! `chess-train` binary: self-play, dataset generation, NNUE training and export.
+//! `chess-train` binary: self-play data generation, NNUE training on GPU
+//! (CPU fallback) and export of quantized weights for `chess-eval`.
 //!
-//! Phase 1 implements `gpu-check` only; the other subcommands are wired so the
-//! CLI shape is stable, and are filled in during phases 5 and 6.
+//! ```text
+//! chess-train gpu-check            # which device, and is it working?
+//! chess-train selfplay --games N   # generate a dataset
+//! chess-train train                # train on the dataset directory
+//! chess-train pipeline             # both at once, until stopped
+//! chess-train export --out f.nnue  # quantize the latest checkpoint
+//! ```
+//!
+//! Settings come from `chess-train.toml`, `CHESS_TRAIN_*` variables and flags.
 
+mod batch;
+mod config;
+mod dataset;
 mod device;
 mod gpu_check;
+mod metrics;
+mod model;
+mod pipeline;
+mod rng;
+mod selfplay;
+mod trainer;
 
-use anyhow::{Result, bail};
+use std::path::PathBuf;
+use std::sync::atomic::Ordering;
+
+use anyhow::{Context, Result, bail};
+use chess_search::StopFlag;
 use clap::{Parser, Subcommand};
 use tracing_subscriber::EnvFilter;
 
+use crate::config::Config;
 use crate::device::DevicePreference;
+use crate::metrics::{Metrics, Status, now};
 
 #[derive(Debug, Parser)]
 #[command(version, about)]
@@ -25,6 +48,14 @@ struct Cli {
     )]
     device: DevicePreference,
 
+    /// Configuration file (default: `chess-train.toml` if present).
+    #[arg(long, env = config::CONFIG_PATH_ENV, global = true)]
+    config: Option<String>,
+
+    /// Name of the run (overrides the configuration).
+    #[arg(long, global = true)]
+    run: Option<String>,
+
     #[command(subcommand)]
     command: Command,
 }
@@ -37,12 +68,45 @@ enum Command {
         #[arg(long, default_value_t = 2048)]
         size: usize,
     },
-    /// Generates training positions by self-play (phase 5).
-    Selfplay,
-    /// Trains the NNUE on a dataset (phase 5).
-    Train,
-    /// Exports quantized weights for `chess-eval` (phase 5).
-    Export,
+    /// Generates training positions by self-play.
+    Selfplay {
+        /// Games to play (0 = until Ctrl+C).
+        #[arg(long)]
+        games: Option<u64>,
+        /// Nodes searched per move.
+        #[arg(long)]
+        nodes: Option<u64>,
+        /// Worker threads (0 = all cores).
+        #[arg(long)]
+        threads: Option<usize>,
+    },
+    /// Trains the network on the dataset directory.
+    Train {
+        /// Superbatches to train (0 = until Ctrl+C).
+        #[arg(long)]
+        superbatches: Option<u64>,
+        /// Positions per step.
+        #[arg(long)]
+        batch_size: Option<usize>,
+        /// Start from scratch instead of resuming the run's checkpoint.
+        #[arg(long)]
+        fresh: bool,
+    },
+    /// Self-play and training together, until Ctrl+C or the superbatch limit.
+    Pipeline {
+        /// Superbatches to train (0 = until Ctrl+C).
+        #[arg(long)]
+        superbatches: Option<u64>,
+        /// Start from scratch instead of resuming the run's checkpoint.
+        #[arg(long)]
+        fresh: bool,
+    },
+    /// Quantizes the run's latest checkpoint into a `.nnue` file.
+    Export {
+        /// Output file (default: `<data_dir>/weights/<run>.nnue`).
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
     /// Plays a match between two networks to estimate the Elo gain (phase 6).
     Match,
 }
@@ -56,13 +120,168 @@ fn main() -> Result<()> {
         .init();
 
     let cli = Cli::parse();
+    let mut config = Config::load(cli.config.as_deref()).context("invalid configuration")?;
+    if let Some(run) = cli.run {
+        config.run = run;
+    }
+
     match cli.command {
         Command::GpuCheck { size } => {
             let selected = device::select(cli.device)?;
             gpu_check::run(&selected, size)
         }
-        Command::Selfplay | Command::Train | Command::Export | Command::Match => {
-            bail!("`{:?}` is not implemented yet", cli.command)
+        Command::Selfplay {
+            games,
+            nodes,
+            threads,
+        } => {
+            if let Some(games) = games {
+                config.selfplay.games = games;
+            }
+            if let Some(nodes) = nodes {
+                config.selfplay.nodes = nodes;
+            }
+            if let Some(threads) = threads {
+                config.selfplay.threads = threads;
+            }
+            run_selfplay(&config)
         }
+        Command::Train {
+            superbatches,
+            batch_size,
+            fresh,
+        } => {
+            if let Some(superbatches) = superbatches {
+                config.train.superbatches = superbatches;
+            }
+            if let Some(batch_size) = batch_size {
+                config.train.batch_size = batch_size;
+            }
+            run_train(&config, cli.device, !fresh)
+        }
+        Command::Pipeline {
+            superbatches,
+            fresh,
+        } => {
+            if let Some(superbatches) = superbatches {
+                config.train.superbatches = superbatches;
+            }
+            run_pipeline(&config, cli.device, !fresh)
+        }
+        Command::Export { out } => {
+            let out =
+                out.unwrap_or_else(|| config.weights_dir().join(format!("{}.nnue", config.run)));
+            trainer::export_checkpoint(&config.checkpoint_dir(), &config.run, &out)?;
+            println!("exported {}", out.display());
+            Ok(())
+        }
+        Command::Match => bail!("`match` arrives in phase 6"),
     }
+}
+
+/// A flag raised by Ctrl+C or SIGTERM (`docker stop`), for a clean shutdown
+/// that writes a final checkpoint.
+fn stop_on_signal() -> Result<StopFlag> {
+    let stop = StopFlag::new();
+    let flag = stop.clone();
+    ctrlc::set_handler(move || {
+        tracing::warn!("stop requested: finishing the current step");
+        flag.stop();
+    })
+    .context("cannot install the signal handler")?;
+    Ok(stop)
+}
+
+fn open_metrics(config: &Config, phase: &str, device: String) -> Result<Metrics> {
+    let status = Status {
+        run: config.run.clone(),
+        phase: phase.into(),
+        device,
+        started_at: now(),
+        ..Status::default()
+    };
+    Metrics::open(&config.data_dir, status)
+}
+
+fn run_selfplay(config: &Config) -> Result<()> {
+    let stop = stop_on_signal()?;
+    let metrics = open_metrics(config, "selfplay", "CPU".into())?;
+    let stats = selfplay::SelfplayStats::default();
+    selfplay::run(
+        &config.selfplay,
+        &config.dataset_dir,
+        &config.run,
+        &stop,
+        &stats,
+        |path| {
+            metrics.event("dataset", serde_json::json!({ "file": path }));
+            metrics.update(|status| {
+                status.games = stats.games.load(Ordering::Relaxed);
+                status.positions = stats.positions.load(Ordering::Relaxed);
+            });
+        },
+    )?;
+    metrics.update(|status| {
+        status.phase = "finished".into();
+        status.games = stats.games.load(Ordering::Relaxed);
+        status.positions = stats.positions.load(Ordering::Relaxed);
+    });
+    Ok(())
+}
+
+fn run_train(config: &Config, preference: DevicePreference, resume: bool) -> Result<()> {
+    let stop = stop_on_signal()?;
+    let selected = device::select(preference)?;
+    println!("device: {}", selected.info);
+    let metrics = open_metrics(config, "training", selected.info.to_string())?;
+    let files = dataset::dataset_files(&config.dataset_dir, None);
+    if files.is_empty() {
+        bail!(
+            "no dataset in {} (run `chess-train selfplay` first)",
+            config.dataset_dir.display()
+        );
+    }
+    let positions: u64 = files.iter().map(|f| dataset::record_count(f)).sum();
+    tracing::info!(files = files.len(), positions, "dataset found");
+    let trainer = trainer::Trainer {
+        config: config.train.clone(),
+        run: config.run.clone(),
+        checkpoint_dir: config.checkpoint_dir(),
+        weights_dir: config.weights_dir(),
+        device: &selected,
+        metrics: &metrics,
+        stop,
+    };
+    let state = trainer.train(Box::new(move || files.clone()), resume)?;
+    metrics.update(|status| status.phase = "finished".into());
+    println!(
+        "trained {} superbatches ({} positions)",
+        state.superbatch, state.positions
+    );
+    Ok(())
+}
+
+fn run_pipeline(config: &Config, preference: DevicePreference, resume: bool) -> Result<()> {
+    let stop = stop_on_signal()?;
+    let selected = device::select(preference)?;
+    println!("device: {}", selected.info);
+    let metrics = open_metrics(config, "pipeline", selected.info.to_string())?;
+    let state = pipeline::run(config, &selected, &metrics, &stop, resume)?;
+    metrics.update(|status| status.phase = "finished".into());
+    println!(
+        "trained {} superbatches ({} positions)",
+        state.superbatch, state.positions
+    );
+    Ok(())
+}
+
+/// A fresh, empty directory for a test.
+#[cfg(test)]
+pub(crate) fn test_dir(name: &str) -> PathBuf {
+    let dir = std::env::temp_dir()
+        .join("chess-train-tests")
+        .join(format!("{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap_or_default();
+    dir
 }

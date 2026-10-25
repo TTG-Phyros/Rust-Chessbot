@@ -14,21 +14,28 @@ path = "src/main.rs"
 [features]
 default = []
 # NVIDIA GPU backend. Enabled in the CUDA Docker image; without it the CPU
-# (ndarray) backend is used. With it, the CPU backend remains the fallback when
+# (flex) backend is used. With it, the CPU backend remains the fallback when
 # no GPU is detected at runtime.
 cuda = ["burn/cuda", "dep:cudarc"]
 
 [dependencies]
-cudarc = { workspace = true, optional = true }
 chess-core.workspace = true
-chess-eval = { workspace = true, features = ["classic"] }
+chess-eval = { workspace = true, features = ["classic", "nnue"] }
 chess-search.workspace = true
 anyhow.workspace = true
 burn.workspace = true
 clap.workspace = true
+ctrlc.workspace = true
+cudarc = { workspace = true, optional = true }
+figment.workspace = true
 rayon.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+
+[dev-dependencies]
+figment = { workspace = true, features = ["test"] }
 
 [lints]
 workspace = true

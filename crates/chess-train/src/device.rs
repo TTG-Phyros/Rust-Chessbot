@@ -117,6 +117,15 @@ fn probe_cuda() -> Result<GpuInfo, String> {
     Err("binary built without the `cuda` feature".into())
 }
 
+/// GPU memory in use (whole device, all processes), in MiB; `None` on CPU.
+pub(crate) fn vram_used_mb(info: &DeviceInfo) -> Option<u64> {
+    match info {
+        #[cfg(feature = "cuda")]
+        DeviceInfo::Cuda(_) => cuda_probe::memory_used().map(|bytes| bytes / (1024 * 1024)),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

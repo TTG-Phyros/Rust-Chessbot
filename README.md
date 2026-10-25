@@ -6,7 +6,7 @@ Moteur d'échecs en Rust avec trois parties :
 2. **Entraînement** : self-play et entraînement d'un réseau NNUE avec [burn](https://burn.dev), sur GPU NVIDIA avec repli automatique sur le CPU.
 3. **Visualisation** : interface web (React + TypeScript) pour jouer, analyser et suivre l'entraînement.
 
-> **État : phase 2 sur 7.** `chess-core` est complet : génération de coups légaux exacte (perft validé), FEN, SAN, UCI, PGN, fins de partie. La recherche arrive en phase 3. Voir [Feuille de route](#feuille-de-route).
+> **État : phase 3 sur 7.** Le moteur joue : génération de coups exacte (perft validé), recherche alpha-beta avec table de transposition et élagages, évaluation classique (matériel + tables pièce-case progressives), protocole UCI complet. Il est utilisable dans Cute Chess ou Arena. Voir [Feuille de route](#feuille-de-route).
 
 ## Démarrage rapide
 
@@ -44,6 +44,7 @@ Sous Windows : `winget install Rustlang.Rustup Casey.Just OpenJS.NodeJS.LTS`, pl
 | `just test` / `just lint` | tests et vérifications de la CI (rustfmt, clippy `-D warnings`, ESLint, tsc, Prettier) |
 | `just perft` | perft profond en release (positions CPW + cas limites, ~760M nœuds, quelques secondes) |
 | `just play` | moteur UCI sur stdin/stdout |
+| `just engine-bench` | signature et vitesse (nœuds/s) du moteur, via `chess-uci bench` |
 | `just gen-types` | régénère les types TypeScript depuis les structs Rust |
 
 ## Architecture
@@ -85,18 +86,31 @@ cargo build --release -p chess-uci
 # binaire : target/release/chess-uci (chess-uci.exe sous Windows)
 ```
 
-- **Cute Chess** : *Tools → Settings → Engines → +*. Mettre le chemin du binaire dans *Command* et choisir le protocole *UCI*.
+- **Cute Chess** : *Tools → Settings → Engines → +*. Mettre le chemin du binaire dans *Command* et choisir le protocole *UCI*. Toutes les cadences sont gérées : temps + incrément, nombre de coups (`movestogo`), temps fixe par coup, profondeur ou nombre de nœuds fixes.
 - **Arena** : *Engines → Install New Engine*, sélectionner le binaire, choisir *UCI*.
 
-Les logs du moteur partent sur stderr, ce qui n'interfère pas avec le protocole. `RUST_LOG=debug` les rend visibles.
+Options UCI :
 
-> En phase 2, le moteur joue le premier coup légal (la vraie recherche arrive en phase 3). Commandes de débogage : `go perft <n>` (détail par coup puis total, format Stockfish) et `d` (affiche le plateau et la FEN).
+| Option | Défaut | Effet |
+| --- | --- | --- |
+| `Hash` | 16 | taille de la table de transposition, en Mio |
+| `Move Overhead` | 30 | marge en ms gardée à chaque coup pour la latence de la GUI |
+| `Clear Hash` | — | vide la table de transposition |
+
+La recherche tourne dans un thread séparé : `stop` et `isready` répondent pendant la réflexion. Les logs du moteur partent sur stderr, ce qui n'interfère pas avec le protocole. `RUST_LOG=debug` les rend visibles.
+
+Commandes de débogage :
+- `go perft <n>` : nombre de nœuds par coup puis total (format Stockfish) ;
+- `d` : affiche le plateau et la FEN ;
+- `bench [profondeur]` (ou `chess-uci bench [profondeur]` en ligne de commande) : recherche à profondeur fixe sur 12 positions. Le nombre de nœuds sert de signature : il change dès que la recherche ou l'évaluation change.
+
+Le moteur peut aussi être piloté par script : `echo "position startpos\ngo depth 10" | chess-uci` affiche le résultat complet avant de quitter.
 
 ## Feuille de route
 
 - [x] **Phase 1** : squelette du workspace et du front, CI, Docker (avec `gpu-check`), justfile
 - [x] **Phase 2** : `chess-core` complet (magic bitboards, coups légaux, make/unmake, Zobrist, FEN/SAN/UCI/PGN, fins de partie), perft exact
-- [ ] **Phase 3** : `chess-search`, évaluation classique, UCI jouable
+- [x] **Phase 3** : `chess-search` (PVS, iterative deepening, TT, quiescence, null move, LMR, killers, history, MVV-LVA, gestion du temps), évaluation PeSTO, UCI complet
 - [ ] **Phase 4** : `chess-server` + front : modes jeu et analyse
 - [ ] **Phase 5** : `chess-train` : self-play, dataset, entraînement NNUE, export
 - [ ] **Phase 6** : NNUE dans `chess-eval`, mode entraînement de l'UI, matchs entre versions

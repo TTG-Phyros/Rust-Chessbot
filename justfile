@@ -88,3 +88,7 @@ gen-types:
 
 # lint + test
 ci: lint test
+
+# Engine signature and speed: fixed-depth search over the bench positions
+engine-bench depth="10":
+    cargo run --release -p chess-uci -- bench {{ depth }}

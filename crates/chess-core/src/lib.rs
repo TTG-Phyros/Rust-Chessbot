@@ -3,8 +3,10 @@
 //! This crate is pure computation: it performs no I/O and depends on no other
 //! crate of the project. Every other crate builds on the types defined here.
 
+pub mod attacks;
 mod bitboard;
 mod error;
+mod magic;
 mod piece;
 mod position;
 mod square;

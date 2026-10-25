@@ -38,9 +38,9 @@ impl Evaluator for ClassicEval {
 }
 
 /// Middlegame and endgame material values (pawn, knight, bishop, rook, queen, king).
-pub const MG_VALUE: [Score; 6] = [82, 337, 365, 477, 1025, 0];
+pub(crate) const MG_VALUE: [Score; 6] = [82, 337, 365, 477, 1025, 0];
 /// See [`MG_VALUE`].
-pub const EG_VALUE: [Score; 6] = [94, 281, 297, 512, 936, 0];
+pub(crate) const EG_VALUE: [Score; 6] = [94, 281, 297, 512, 936, 0];
 
 /// Contribution of each piece kind to the game phase: 24 with all pieces on
 /// the board (pure middlegame), 0 with only kings and pawns (pure endgame).

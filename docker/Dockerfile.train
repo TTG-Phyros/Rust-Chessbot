@@ -84,21 +84,36 @@ RUN useradd --system --uid ${UID} --home-dir /data --shell /usr/sbin/nologin che
 COPY --from=builder-cpu /usr/local/bin/chess-train /usr/local/bin/
 USER chess
 WORKDIR /data
-ENV CHESS_TRAIN_DEVICE=cpu
+ENV CHESS_TRAIN_DEVICE=cpu \
+    CHESS_TRAIN_DATA_DIR=/data \
+    CHESS_TRAIN_DATASET_DIR=/datasets
 ENTRYPOINT ["chess-train"]
-CMD ["gpu-check"]
+# Self-play + training until stopped (`docker compose stop` checkpoints cleanly).
+CMD ["pipeline"]
 
 # Last stage: what `docker build` produces without --target.
-# burn/cubecl JIT-compiles kernels in-process (LLVM -> PTX) and only needs the
-# driver (libcuda), which the NVIDIA Container Toolkit injects at `docker run`.
+# burn/cubecl JIT-compiles kernels in-process (LLVM -> PTX). Math functions
+# without a PTX instruction (exp in the sigmoid, ...) are linked from CUDA's
+# libdevice, shipped by the cuda-nvvm package; the driver (libcuda) itself is
+# injected by the NVIDIA Container Toolkit at `docker run`.
 FROM nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu${UBUNTU_VERSION} AS runtime-cuda
 ARG UID=10001
-RUN useradd --system --uid ${UID} --home-dir /data --shell /usr/sbin/nologin chess \
+ARG CUDA_VERSION
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+       "cuda-nvvm-$(echo "${CUDA_VERSION}" | cut -d. -f1-2 | tr . -)" \
+    && rm -rf /var/lib/apt/lists/* \
+    && test -f /usr/local/cuda/nvvm/libdevice/libdevice.10.bc \
+    && useradd --system --uid ${UID} --home-dir /data --shell /usr/sbin/nologin chess \
     && mkdir -p /data /datasets && chown chess /data /datasets
+ENV CUDA_PATH=/usr/local/cuda
 COPY --from=builder-cuda /usr/local/bin/chess-train /usr/local/bin/
 USER chess
 WORKDIR /data
 ENV CHESS_TRAIN_DEVICE=auto \
+    CHESS_TRAIN_DATA_DIR=/data \
+    CHESS_TRAIN_DATASET_DIR=/datasets \
     NVIDIA_DRIVER_CAPABILITIES=compute,utility
 ENTRYPOINT ["chess-train"]
-CMD ["gpu-check"]
+# Self-play + training until stopped (`docker compose stop` checkpoints cleanly).
+CMD ["pipeline"]

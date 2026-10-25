@@ -145,8 +145,9 @@ impl<E: Evaluator> Searcher<E> {
         let mut previous = 0;
         for depth in 1..=max_depth {
             let score = ctx.aspiration(depth as i32, previous);
-            // A partial iteration is only trusted for the very first depth.
-            if ctx.stopped && depth > 1 {
+            // A partial iteration is only trusted for the very first depth, and
+            // only if it got as far as a best move.
+            if ctx.stopped && (depth > 1 || ctx.pv_len[0] == 0) {
                 break;
             }
             previous = score;

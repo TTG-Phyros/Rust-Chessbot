@@ -17,7 +17,17 @@ impl Position {
     #[must_use]
     pub fn legal_moves(&self) -> MoveList {
         let mut moves = MoveList::new();
-        self.generate(&mut moves);
+        self.generate(&mut moves, false);
+        moves
+    }
+
+    /// Legal captures (en passant included) and promotions: the "noisy" moves
+    /// searched by quiescence. Out of check, this is `legal_moves` minus the
+    /// quiet moves; in check it is the same subset of the evasions.
+    #[must_use]
+    pub fn legal_noisy_moves(&self) -> MoveList {
+        let mut moves = MoveList::new();
+        self.generate(&mut moves, true);
         moves
     }
 
@@ -27,7 +37,7 @@ impl Position {
         self.legal_moves().contains(&mv)
     }
 
-    fn generate(&self, moves: &mut MoveList) {
+    fn generate(&self, moves: &mut MoveList, noisy_only: bool) {
         let us = self.side_to_move;
         let them = !us;
         let ours = self.occupied_by(us);
@@ -38,7 +48,8 @@ impl Position {
         // King: any square not attacked once the king has left its square
         // (so that it cannot hide "behind itself" from a slider).
         let without_king = occupied.without(king);
-        for to in king_attacks(king) & !ours {
+        let destinations = if noisy_only { theirs } else { !ours };
+        for to in king_attacks(king) & destinations {
             if !self.is_attacked_by(to, them, without_king) {
                 push_simple(moves, king, to, theirs);
             }
@@ -52,12 +63,14 @@ impl Position {
         let target = match checkers.lsb() {
             Some(checker) => between(king, checker) | checkers,
             None => {
-                self.castling_moves(moves, king, occupied);
+                if !noisy_only {
+                    self.castling_moves(moves, king, occupied);
+                }
                 Bitboard::FULL
             }
         };
         let pinned = self.pinned(us);
-        let movable = !ours & target;
+        let movable = destinations & target;
 
         for from in self.pieces(us, PieceKind::Knight) & !pinned {
             push_targets(moves, from, knight_attacks(from) & movable, theirs);
@@ -78,10 +91,17 @@ impl Position {
             push_targets(moves, from, targets, theirs);
         }
 
-        self.pawn_moves(moves, king, pinned, target);
+        self.pawn_moves(moves, king, pinned, target, noisy_only);
     }
 
-    fn pawn_moves(&self, moves: &mut MoveList, king: Square, pinned: Bitboard, target: Bitboard) {
+    fn pawn_moves(
+        &self,
+        moves: &mut MoveList,
+        king: Square,
+        pinned: Bitboard,
+        target: Bitboard,
+        noisy_only: bool,
+    ) {
         let us = self.side_to_move;
         let theirs = self.occupied_by(!us);
         let occupied = self.occupied();
@@ -100,10 +120,11 @@ impl Position {
             // Pawns never stand on their last rank, so one step forward is on the board.
             let one = from.shifted(forward);
             if !occupied.contains(one) {
-                if allowed.contains(one) {
+                let promotes = one.rank().index() == last_rank;
+                if allowed.contains(one) && (promotes || !noisy_only) {
                     push_pawn(moves, from, one, false, last_rank);
                 }
-                if from.rank().index() == start_rank {
+                if !noisy_only && from.rank().index() == start_rank {
                     let two = one.shifted(forward);
                     if !occupied.contains(two) && allowed.contains(two) {
                         moves.push(Move::new(from, two, MoveKind::DoublePawnPush));
@@ -276,6 +297,36 @@ mod tests {
         let moves = moves_of("4k3/1P6/8/8/8/8/8/4K3 w - - 0 1");
         for promo in ["b7b8q", "b7b8r", "b7b8b", "b7b8n"] {
             assert!(moves.contains(&promo.to_owned()));
+        }
+    }
+
+    #[test]
+    fn noisy_moves_are_the_captures_and_promotions() {
+        let fens = [
+            "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
+            "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1",
+            "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8",
+            "8/8/1k6/2b5/2pP4/8/5K2/8 b - d3 0 1",
+        ];
+        for fen in fens {
+            let mut pos = Position::from_fen(fen).unwrap();
+            // Walk a few plies deterministically to cover checks and en passant.
+            for ply in 0..12 {
+                let all = pos.legal_moves();
+                let mut expected: Vec<Move> = all
+                    .iter()
+                    .copied()
+                    .filter(|mv| mv.is_capture() || mv.promotion().is_some())
+                    .collect();
+                let mut noisy: Vec<Move> = pos.legal_noisy_moves().to_vec();
+                expected.sort_by_key(|mv| mv.to_bits());
+                noisy.sort_by_key(|mv| mv.to_bits());
+                assert_eq!(noisy, expected, "{}", pos.to_fen());
+                let Some(&mv) = all.get((ply * 7) % all.len().max(1)) else {
+                    break;
+                };
+                pos.make_move(mv);
+            }
         }
     }
 

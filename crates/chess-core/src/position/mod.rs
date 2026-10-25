@@ -464,25 +464,27 @@ impl Position {
             self.fullmove_number = self.fullmove_number.saturating_sub(1);
         }
 
-        match mv.kind() {
-            MoveKind::Promotion(_) | MoveKind::PromotionCapture(_) => {
-                self.remove_piece(to);
-                self.put_piece(to, Piece::new(us, PieceKind::Pawn));
+        if !mv.is_null() {
+            match mv.kind() {
+                MoveKind::Promotion(_) | MoveKind::PromotionCapture(_) => {
+                    self.remove_piece(to);
+                    self.put_piece(to, Piece::new(us, PieceKind::Pawn));
+                }
+                MoveKind::KingCastle | MoveKind::QueenCastle => {
+                    let (rook_from, rook_to) = castling_rook(to);
+                    self.move_piece(rook_to, rook_from);
+                }
+                _ => {}
             }
-            MoveKind::KingCastle | MoveKind::QueenCastle => {
-                let (rook_from, rook_to) = castling_rook(to);
-                self.move_piece(rook_to, rook_from);
+            self.move_piece(to, from);
+            if let Some(captured) = undo.captured {
+                let square = if mv.kind() == MoveKind::EnPassant {
+                    en_passant_victim(to, us)
+                } else {
+                    to
+                };
+                self.put_piece(square, captured);
             }
-            _ => {}
-        }
-        self.move_piece(to, from);
-        if let Some(captured) = undo.captured {
-            let square = if mv.kind() == MoveKind::EnPassant {
-                en_passant_victim(to, us)
-            } else {
-                to
-            };
-            self.put_piece(square, captured);
         }
 
         self.castling = undo.castling;
@@ -490,6 +492,66 @@ impl Position {
         self.halfmove_clock = undo.halfmove_clock;
         self.hash = undo.hash;
         self.checkers = undo.checkers;
+    }
+
+    /// Passes the turn without moving (for null-move pruning). Must not be
+    /// called in check. Undo it with [`Position::unmake_move`].
+    ///
+    /// The half-move clock is reset so that repetition detection never looks
+    /// across a null move (such "repetitions" are artefacts of the search).
+    pub fn make_null_move(&mut self) {
+        debug_assert!(!self.in_check(), "null move while in check");
+        self.history.push(Undo {
+            mv: Move::NULL,
+            captured: None,
+            castling: self.castling,
+            en_passant: self.en_passant,
+            halfmove_clock: self.halfmove_clock,
+            hash: self.hash,
+            checkers: self.checkers,
+        });
+        self.set_en_passant(None);
+        self.halfmove_clock = 0;
+        if self.side_to_move == Color::Black {
+            self.fullmove_number = self.fullmove_number.saturating_add(1);
+        }
+        self.side_to_move = !self.side_to_move;
+        self.hash ^= KEYS.side;
+        self.checkers = self.compute_checkers();
+    }
+
+    /// Whether `color` has a piece other than pawns and king (null-move
+    /// pruning is unsafe without one, because of zugzwang).
+    #[must_use]
+    pub fn has_non_pawn_material(&self, color: Color) -> bool {
+        let pawns_and_king =
+            self.pieces_of_kind(PieceKind::Pawn) | self.pieces_of_kind(PieceKind::King);
+        !(self.occupied_by(color) & !pawns_and_king).is_empty()
+    }
+
+    /// The same position seen from the other side: board mirrored vertically,
+    /// colors swapped (white pieces become black ones on the mirrored square),
+    /// side to move, castling rights and en passant swapped accordingly.
+    /// The move history is not kept.
+    #[must_use]
+    pub fn flipped(&self) -> Self {
+        let mut flipped = Self::empty();
+        for square in self.occupied() {
+            if let Some(piece) = self.piece_at(square) {
+                flipped.put_piece(square.flip_rank(), Piece::new(!piece.color, piece.kind));
+            }
+        }
+        flipped.side_to_move = !self.side_to_move;
+        if flipped.side_to_move == Color::Black {
+            flipped.hash ^= KEYS.side;
+        }
+        let bits = self.castling.bits();
+        flipped.set_castling(CastlingRights(((bits & 3) << 2) | ((bits >> 2) & 3)));
+        flipped.set_en_passant(self.en_passant.map(Square::flip_rank));
+        flipped.halfmove_clock = self.halfmove_clock;
+        flipped.fullmove_number = self.fullmove_number;
+        flipped.checkers = flipped.compute_checkers();
+        flipped
     }
 
     /// Plays `mv` after checking that it is legal.
@@ -657,6 +719,49 @@ mod tests {
         let mut pos = Position::from_fen("4k3/8/8/8/3p4/8/4P3/4K3 w - - 0 1").unwrap();
         pos.make_move(Move::new(Square::E2, Square::E4, MoveKind::DoublePawnPush));
         assert_eq!(pos.en_passant(), Some(Square::E3));
+    }
+
+    #[test]
+    fn null_move_round_trip() {
+        let mut pos =
+            Position::from_fen("rnbqkbnr/ppp1p1pp/8/3pPp2/8/8/PPPP1PPP/RNBQKBNR w KQkq f6 0 3")
+                .unwrap();
+        let original = pos.clone();
+        pos.make_null_move();
+        assert_eq!(pos.side_to_move(), Color::Black);
+        assert_eq!(pos.en_passant(), None);
+        assert_eq!(
+            pos.hash(),
+            Position::from_fen(&pos.to_fen()).unwrap().hash()
+        );
+        pos.unmake_move();
+        assert_eq!(pos, original);
+        assert_eq!(pos.hash(), original.hash());
+    }
+
+    #[test]
+    fn flipped_mirrors_everything() {
+        let pos =
+            Position::from_fen("rnbqkbnr/ppp1p1pp/8/3pPp2/8/8/PPPP1PPP/RNBQKBN1 w Qkq f6 0 3")
+                .unwrap();
+        let flipped = pos.flipped();
+        assert_eq!(
+            flipped.to_fen(),
+            "rnbqkbn1/pppp1ppp/8/8/3PpP2/8/PPP1P1PP/RNBQKBNR b KQq f3 0 3"
+        );
+        assert_eq!(
+            flipped.hash(),
+            Position::from_fen(&flipped.to_fen()).unwrap().hash()
+        );
+        assert_eq!(flipped.flipped(), pos);
+        assert_eq!(flipped.legal_moves().len(), pos.legal_moves().len());
+    }
+
+    #[test]
+    fn non_pawn_material() {
+        let pos = Position::from_fen("4k3/pppp4/8/8/8/8/4P3/3NK3 w - - 0 1").unwrap();
+        assert!(pos.has_non_pawn_material(Color::White));
+        assert!(!pos.has_non_pawn_material(Color::Black));
     }
 
     #[test]

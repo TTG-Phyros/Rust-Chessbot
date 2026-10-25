@@ -6,7 +6,7 @@ Moteur d'échecs en Rust avec trois parties :
 2. **Entraînement** : self-play et entraînement d'un réseau NNUE avec [burn](https://burn.dev), sur GPU NVIDIA avec repli automatique sur le CPU.
 3. **Visualisation** : interface web (React + TypeScript) pour jouer, analyser et suivre l'entraînement.
 
-> **État : phase 1 sur 7 (squelette).** L'infrastructure fonctionne (workspace, CI, Docker, GPU, UI), mais le moteur ne joue pas encore. Voir [Feuille de route](#feuille-de-route).
+> **État : phase 2 sur 7.** `chess-core` est complet : génération de coups légaux exacte (perft validé), FEN, SAN, UCI, PGN, fins de partie. La recherche arrive en phase 3. Voir [Feuille de route](#feuille-de-route).
 
 ## Démarrage rapide
 
@@ -42,7 +42,7 @@ Sous Windows : `winget install Rustlang.Rustup Casey.Just OpenJS.NodeJS.LTS`, pl
 | `just gpu-check` | lance `nvidia-smi` dans un conteneur, puis un matmul et une rétropropagation burn sur le GPU, comparés au CPU |
 | `just web-dev` | Vite (rechargement à chaud) + `chess-server` natif, sans reconstruire d'image |
 | `just test` / `just lint` | tests et vérifications de la CI (rustfmt, clippy `-D warnings`, ESLint, tsc, Prettier) |
-| `just perft` | suite perft en mode release |
+| `just perft` | perft profond en release (positions CPW + cas limites, ~760M nœuds, quelques secondes) |
 | `just play` | moteur UCI sur stdin/stdout |
 | `just gen-types` | régénère les types TypeScript depuis les structs Rust |
 
@@ -90,12 +90,12 @@ cargo build --release -p chess-uci
 
 Les logs du moteur partent sur stderr, ce qui n'interfère pas avec le protocole. `RUST_LOG=debug` les rend visibles.
 
-> En phase 1, le moteur répond au protocole mais renvoie `bestmove 0000`. Il commence à jouer en phase 3.
+> En phase 2, le moteur joue le premier coup légal (la vraie recherche arrive en phase 3). Commandes de débogage : `go perft <n>` (détail par coup puis total, format Stockfish) et `d` (affiche le plateau et la FEN).
 
 ## Feuille de route
 
 - [x] **Phase 1** : squelette du workspace et du front, CI, Docker (avec `gpu-check`), justfile
-- [ ] **Phase 2** : `chess-core` complet, perft exact
+- [x] **Phase 2** : `chess-core` complet (magic bitboards, coups légaux, make/unmake, Zobrist, FEN/SAN/UCI/PGN, fins de partie), perft exact
 - [ ] **Phase 3** : `chess-search`, évaluation classique, UCI jouable
 - [ ] **Phase 4** : `chess-server` + front : modes jeu et analyse
 - [ ] **Phase 5** : `chess-train` : self-play, dataset, entraînement NNUE, export

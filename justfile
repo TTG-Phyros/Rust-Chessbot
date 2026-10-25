@@ -18,9 +18,9 @@ test:
     cargo test --workspace
     npm --prefix web test
 
-# Run the perft suite (exact node counts on reference positions), optimised
+# Run the full perft suite (deep reference counts, ~760M nodes) in release mode
 perft:
-    cargo test --release -p chess-core perft
+    cargo test --release -p chess-core --test perft -- --include-ignored
 
 # Start the UCI engine on stdin/stdout
 play:

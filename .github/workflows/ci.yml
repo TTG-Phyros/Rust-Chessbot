@@ -30,6 +30,8 @@ jobs:
       # chess-search alone: fails if it uses a concrete evaluator instead of the trait.
       - run: cargo check -p chess-search
       - run: cargo test --workspace
+      - name: Deep perft (release)
+        run: cargo test --release -p chess-core --test perft -- --include-ignored
 
       - name: TypeScript bindings are up to date
         run: |

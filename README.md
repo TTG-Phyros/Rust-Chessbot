@@ -6,7 +6,7 @@ Moteur d'échecs en Rust avec trois parties :
 2. **Entraînement** : self-play et entraînement d'un réseau NNUE avec [burn](https://burn.dev), sur GPU NVIDIA avec repli automatique sur le CPU.
 3. **Visualisation** : interface web (React + TypeScript) pour jouer, analyser et suivre l'entraînement.
 
-> **État : phase 3 sur 7.** Le moteur joue : génération de coups exacte (perft validé), recherche alpha-beta avec table de transposition et élagages, évaluation classique (matériel + tables pièce-case progressives), protocole UCI complet. Il est utilisable dans Cute Chess ou Arena. Voir [Feuille de route](#feuille-de-route).
+> **État : phase 4 sur 7.** Le moteur joue (perft exact, recherche alpha-beta, évaluation PeSTO, UCI complet) et l'interface web permet de jouer contre lui et d'analyser des parties en direct. L'entraînement NNUE arrive en phases 5 et 6. Voir [Feuille de route](#feuille-de-route).
 
 ## Démarrage rapide
 
@@ -75,9 +75,38 @@ Ordre de priorité : valeurs par défaut < fichier TOML (`chess-server.toml`, ou
 bind = "0.0.0.0:3000"
 data_dir = "data"
 log_format = "pretty"   # ou "json"
+max_searches = 8        # recherches simultanées (défaut : nombre de cœurs)
+engine_hash_mb = 16     # table de transposition de chaque recherche
 ```
 
 Le niveau de log se règle avec `RUST_LOG` (ex. `RUST_LOG=debug`).
+
+## Interface web
+
+<http://localhost:8080> (Docker) ou <http://localhost:5173> (`just web-dev`).
+
+- **Jouer** : échiquier en glisser-déposer ou clic-clic, choix de la couleur (blancs, noirs, aléatoire), niveau réglable en profondeur (1 à 20) ou en temps par coup (0,1 à 10 s), annulation de coup, import/export FEN et PGN.
+- **Analyse** : barre d'évaluation, score, ligne principale en SAN, flèche du meilleur coup, infos de recherche en direct (profondeur, nœuds, vitesse, remplissage de la table). L'analyse est relancée à chaque coup. On navigue dans la partie avec les flèches ← → (Origine et Fin pour aller au début ou à la fin), ou en cliquant dans la liste des coups.
+- **Entraînement** : en phase 6.
+
+Le front ne contient aucune règle d'échecs : chaque coup est validé par le moteur, qui renvoie aussi les coups légaux, le SAN et l'état de la partie.
+
+### API
+
+Documentation OpenAPI complète : `GET /api/openapi.json`.
+
+L'API est **sans état** : une partie est toujours envoyée sous la forme `{ "fen": "<départ, optionnel>", "moves": ["e2e4", ...] }`, et le serveur la rejoue et la valide (erreur 422 avec un message en cas de coup illégal).
+
+| Route | Rôle |
+| --- | --- |
+| `GET /api/health` | état et version du serveur |
+| `POST /api/position` | rejoue une partie : FEN, coups légaux (UCI + SAN), échec, statut, historique SAN |
+| `POST /api/engine/move` | coup du moteur, avec limites `depth`, `movetimeMs`, `nodes` (1 s par défaut) |
+| `POST /api/pgn/import` | première partie d'un PGN |
+| `POST /api/pgn/export` | partie au format PGN |
+| `GET /ws` | WebSocket : `analyze` puis un message `info` par profondeur et un `done` final ; `stop` interrompt l'analyse |
+
+Les scores renvoyés sont du point de vue des blancs. Les limites sont plafonnées côté serveur (profondeur 64, 60 s par coup, 10 min d'analyse), et le nombre de recherches simultanées est borné par `max_searches`.
 
 ## Utiliser le moteur dans une GUI (Cute Chess, Arena)
 
@@ -111,7 +140,7 @@ Le moteur peut aussi être piloté par script : `printf "position startpos\ngo d
 - [x] **Phase 1** : squelette du workspace et du front, CI, Docker (avec `gpu-check`), justfile
 - [x] **Phase 2** : `chess-core` complet (magic bitboards, coups légaux, make/unmake, Zobrist, FEN/SAN/UCI/PGN, fins de partie), perft exact
 - [x] **Phase 3** : `chess-search` (PVS, iterative deepening, TT, quiescence, null move, LMR, killers, history, MVV-LVA, gestion du temps), évaluation PeSTO, UCI complet
-- [ ] **Phase 4** : `chess-server` + front : modes jeu et analyse
+- [x] **Phase 4** : `chess-server` (API REST sans état, analyse en direct par WebSocket, OpenAPI) + front : modes jeu et analyse
 - [ ] **Phase 5** : `chess-train` : self-play, dataset, entraînement NNUE, export
 - [ ] **Phase 6** : NNUE dans `chess-eval`, mode entraînement de l'UI, matchs entre versions
 - [ ] **Phase 7** : optimisations (profiling, SIMD), README final

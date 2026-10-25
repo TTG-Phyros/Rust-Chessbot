@@ -76,3 +76,75 @@ fn exits_on_eof() {
     let out = run_session("isready\n");
     assert_eq!(out.trim(), "readyok");
 }
+
+#[test]
+fn finds_mate_and_reports_it() {
+    let back_rank = "6k1/5ppp/8/8/8/8/5PPP/3R2K1 w - - 0 1";
+    let out = run_session(&format!("position fen {back_rank}\ngo depth 4\n"));
+    assert!(out.lines().any(|l| l.contains("score mate 1")), "{out}");
+    assert!(out.lines().any(|l| l.starts_with("bestmove d1d8")), "{out}");
+}
+
+#[test]
+fn infinite_search_waits_for_stop_and_answers_isready() {
+    let out = run_session("position startpos\ngo infinite\nisready\nstop\nquit\n");
+    let lines: Vec<&str> = out.lines().collect();
+    let ready = lines.iter().position(|l| *l == "readyok").unwrap();
+    let best = lines
+        .iter()
+        .position(|l| l.starts_with("bestmove "))
+        .unwrap();
+    assert!(ready < best, "{out}");
+    assert_eq!(
+        lines.iter().filter(|l| l.starts_with("bestmove ")).count(),
+        1
+    );
+}
+
+#[test]
+fn movetime_is_respected() {
+    let start = std::time::Instant::now();
+    let out = run_session("position startpos\ngo movetime 300\n");
+    let elapsed = start.elapsed();
+    assert!(out.lines().any(|l| l.starts_with("bestmove ")));
+    assert!(
+        elapsed >= std::time::Duration::from_millis(250),
+        "{elapsed:?}"
+    );
+    assert!(
+        elapsed < std::time::Duration::from_millis(1500),
+        "{elapsed:?}"
+    );
+}
+
+#[test]
+fn clock_search_plays_quickly() {
+    let out = run_session("position startpos\ngo wtime 1000 btime 1000 winc 0 binc 0\n");
+    assert!(out.lines().any(|l| l.starts_with("bestmove ")));
+}
+
+#[test]
+fn bench_reports_nodes() {
+    let out = run_session("bench 5\n");
+    let nodes: u64 = out
+        .lines()
+        .find_map(|l| l.strip_prefix("Nodes searched: "))
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert!(nodes > 1_000);
+    // Deterministic: same count from the command line.
+    let output = Command::new(env!("CARGO_BIN_EXE_chess-uci"))
+        .args(["bench", "5"])
+        .output()
+        .unwrap();
+    let cli = String::from_utf8(output.stdout).unwrap();
+    assert!(cli.contains(&format!("Nodes searched: {nodes}")), "{cli}");
+}
+
+#[test]
+fn options() {
+    let out = run_session("setoption name Hash value 4\nsetoption name Clear Hash\nisready\n");
+    assert!(!out.contains("error"), "{out}");
+    assert!(out.lines().any(|l| l == "readyok"));
+}

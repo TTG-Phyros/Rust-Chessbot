@@ -104,7 +104,7 @@ Commandes de débogage :
 - `d` : affiche le plateau et la FEN ;
 - `bench [profondeur]` (ou `chess-uci bench [profondeur]` en ligne de commande) : recherche à profondeur fixe sur 12 positions. Le nombre de nœuds sert de signature : il change dès que la recherche ou l'évaluation change.
 
-Le moteur peut aussi être piloté par script : `echo "position startpos\ngo depth 10" | chess-uci` affiche le résultat complet avant de quitter.
+Le moteur peut aussi être piloté par script : `printf "position startpos\ngo depth 10\n" | chess-uci` affiche le résultat complet avant de quitter.
 
 ## Feuille de route
 

@@ -1,0 +1,82 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/chess-core",
+    "crates/chess-eval",
+    "crates/chess-search",
+    "crates/chess-uci",
+    "crates/chess-train",
+    "crates/chess-server",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[workspace.dependencies]
+# Internal crates
+chess-core = { path = "crates/chess-core" }
+chess-eval = { path = "crates/chess-eval", default-features = false }
+chess-search = { path = "crates/chess-search" }
+
+# Errors
+thiserror = "2.0.21"
+anyhow = "1.0.104"
+
+# Logging and configuration (binaries only)
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt", "json"] }
+figment = { version = "0.10.19", features = ["toml", "env"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+clap = { version = "4.6.7", features = ["derive", "env"] }
+
+# Parallelism
+rayon = "1.12.0"
+
+# Server
+tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread", "net", "signal", "sync", "time"] }
+axum = { version = "0.8.9", features = ["ws"] }
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.7.1", features = ["trace"] }
+futures-util = "0.3.34"
+utoipa = { version = "6.0.0", features = ["axum_extras"] }
+ts-rs = "12.0.1"
+tokio-tungstenite = "0.30.0"
+
+# Training
+burn = { version = "0.22.1", default-features = false, features = ["std", "autodiff", "flex", "rayon"] }
+# Same features as cubecl-cuda so cargo unifies them; used only to probe the GPU.
+cudarc = { version = "0.19.10", default-features = false, features = ["std", "driver", "nvrtc", "fallback-dynamic-loading", "cuda-version-from-build-system", "fallback-latest"] }
+
+# Dev
+criterion = { version = "0.8.2", features = ["html_reports"] }
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+missing_docs = "warn"
+rust_2018_idioms = { level = "warn", priority = -1 }
+unreachable_pub = "warn"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+dbg_macro = "warn"
+todo = "warn"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+
+[profile.bench]
+inherits = "release"
+debug = true
+
+# Movegen and search must be fast even in debug test runs (perft).
+[profile.dev.package.chess-core]
+opt-level = 3

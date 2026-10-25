@@ -1,0 +1,23 @@
+[package]
+name = "chess-uci"
+description = "UCI front-end of the engine (stdin/stdout), usable from Cute Chess or Arena."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "chess-uci"
+path = "src/main.rs"
+
+[dependencies]
+chess-core.workspace = true
+chess-eval = { workspace = true, features = ["classic"] }
+chess-search.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[lints]
+workspace = true

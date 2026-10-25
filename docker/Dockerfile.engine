@@ -1,0 +1,43 @@
+# syntax=docker/dockerfile:1.7
+#
+# chess-server (HTTP/WebSocket API) and chess-uci, multi-arch (amd64, arm64).
+#
+#   docker build -f docker/Dockerfile.engine -t chess-bot/server .
+#
+# cargo-chef compiles the dependencies in their own layer, so editing the
+# project's code does not rebuild axum, tokio & co.
+
+ARG RUST_VERSION=1.99.1
+
+FROM lukemathwalker/cargo-chef:latest-rust-${RUST_VERSION}-slim-trixie AS chef
+ARG RUST_VERSION
+# Pins the toolchain without the rustfmt/clippy components of rust-toolchain.toml.
+ENV RUSTUP_TOOLCHAIN=${RUST_VERSION}
+WORKDIR /app
+
+FROM chef AS planner
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM chef AS builder
+COPY --from=planner /app/recipe.json recipe.json
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    cargo chef cook --release --recipe-path recipe.json -p chess-server -p chess-uci
+COPY . .
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    cargo build --release --locked -p chess-server -p chess-uci \
+    && cp target/release/chess-server target/release/chess-uci /usr/local/bin/
+
+FROM debian:trixie-slim AS runtime
+ARG UID=10001
+RUN useradd --system --uid ${UID} --home-dir /data --shell /usr/sbin/nologin chess \
+    && mkdir -p /data && chown chess /data
+COPY --from=builder /usr/local/bin/chess-server /usr/local/bin/chess-uci /usr/local/bin/
+USER chess
+WORKDIR /data
+ENV CHESS_SERVER_BIND=0.0.0.0:3000 \
+    CHESS_SERVER_DATA_DIR=/data
+EXPOSE 3000
+HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
+    CMD ["chess-server", "--healthcheck"]
+ENTRYPOINT ["chess-server"]

@@ -1,0 +1,20 @@
+[package]
+name = "chess-search"
+description = "Alpha-beta search, generic over any `Evaluator`."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+chess-core.workspace = true
+# Trait only: `default-features = false` (set in the workspace) hides every
+# concrete evaluator. CI runs `cargo check -p chess-search` to enforce it.
+chess-eval.workspace = true
+
+[dev-dependencies]
+chess-eval = { workspace = true, features = ["classic"] }
+
+[lints]
+workspace = true

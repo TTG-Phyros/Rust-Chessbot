@@ -1,0 +1,104 @@
+# syntax=docker/dockerfile:1.7
+#
+# chess-train in two flavours, selected with --target:
+#
+#   runtime-cuda (default, linux/amd64 only): NVIDIA GPU via burn's CUDA backend,
+#                with automatic CPU fallback when no GPU is visible.
+#   runtime-cpu: no CUDA at all, for machines without an NVIDIA GPU (macOS, ...).
+#
+#   docker build -f docker/Dockerfile.train --target runtime-cuda -t chess-bot/train:cuda .
+#   docker build -f docker/Dockerfile.train --target runtime-cpu  -t chess-bot/train:cpu  .
+#
+# CUDA 12.9: supported by cudarc (burn's CUDA bindings) and by Ada GPUs
+# (RTX 40xx, compute capability 8.9); host drivers for CUDA 13.x run it too.
+
+ARG RUST_VERSION=1.99.1
+ARG CARGO_CHEF_VERSION=0.1.78
+ARG CUDA_VERSION=12.9.1
+ARG UBUNTU_VERSION=24.04
+# Flavour of the nvidia/cuda image the CUDA binary is built in. burn's CUDA
+# backend needs no toolkit at build time (the driver is loaded at runtime and
+# kernels are compiled by a bundled LLVM, downloaded by cubecl-llvm's build
+# script), so the 550 MB `base` image is enough; `devel` (several GB, ships
+# nvcc) works too: --build-arg CUDA_BUILD_FLAVOR=devel.
+ARG CUDA_BUILD_FLAVOR=base
+
+# ---------------------------------------------------------------- CPU build
+FROM lukemathwalker/cargo-chef:latest-rust-${RUST_VERSION}-slim-trixie AS chef-cpu
+ARG RUST_VERSION
+# Pins the toolchain without the rustfmt/clippy components of rust-toolchain.toml.
+ENV RUSTUP_TOOLCHAIN=${RUST_VERSION}
+WORKDIR /app
+
+FROM chef-cpu AS planner
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM chef-cpu AS builder-cpu
+COPY --from=planner /app/recipe.json recipe.json
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    cargo chef cook --release --recipe-path recipe.json -p chess-train
+COPY . .
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    cargo build --release --locked -p chess-train \
+    && cp target/release/chess-train /usr/local/bin/
+
+# --------------------------------------------------------------- CUDA build
+# Same Ubuntu (hence glibc) as runtime-cuda, so the binary runs there.
+FROM nvidia/cuda:${CUDA_VERSION}-${CUDA_BUILD_FLAVOR}-ubuntu${UBUNTU_VERSION} AS chef-cuda
+ARG RUST_VERSION
+ARG CARGO_CHEF_VERSION
+ARG CUDA_VERSION
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:$PATH \
+    RUSTUP_TOOLCHAIN=${RUST_VERSION}
+# cudarc binds the CUDA API of this version (12.9.1 -> 12090) instead of
+# probing for nvcc, which the `base` flavour does not have.
+RUN echo "${CUDA_VERSION}" | awk -F. '{ printf "%d0%d0", $1, $2 }' > /cudarc-cuda-version
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl build-essential pkg-config \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+       | sh -s -- -y --no-modify-path --profile minimal --default-toolchain ${RUST_VERSION} \
+    && cargo install cargo-chef --locked --version ${CARGO_CHEF_VERSION} \
+    && rm -rf /usr/local/cargo/registry
+WORKDIR /app
+
+FROM chef-cuda AS builder-cuda
+COPY --from=planner /app/recipe.json recipe.json
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    CUDARC_CUDA_VERSION=$(cat /cudarc-cuda-version) \
+    cargo chef cook --release --recipe-path recipe.json -p chess-train --features cuda
+COPY . .
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    CUDARC_CUDA_VERSION=$(cat /cudarc-cuda-version) \
+    cargo build --release --locked -p chess-train --features cuda \
+    && cp target/release/chess-train /usr/local/bin/
+
+# ----------------------------------------------------------------- runtimes
+FROM debian:trixie-slim AS runtime-cpu
+ARG UID=10001
+RUN useradd --system --uid ${UID} --home-dir /data --shell /usr/sbin/nologin chess \
+    && mkdir -p /data /datasets && chown chess /data /datasets
+COPY --from=builder-cpu /usr/local/bin/chess-train /usr/local/bin/
+USER chess
+WORKDIR /data
+ENV CHESS_TRAIN_DEVICE=cpu
+ENTRYPOINT ["chess-train"]
+CMD ["gpu-check"]
+
+# Last stage: what `docker build` produces without --target.
+# burn/cubecl JIT-compiles kernels in-process (LLVM -> PTX) and only needs the
+# driver (libcuda), which the NVIDIA Container Toolkit injects at `docker run`.
+FROM nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu${UBUNTU_VERSION} AS runtime-cuda
+ARG UID=10001
+RUN useradd --system --uid ${UID} --home-dir /data --shell /usr/sbin/nologin chess \
+    && mkdir -p /data /datasets && chown chess /data /datasets
+COPY --from=builder-cuda /usr/local/bin/chess-train /usr/local/bin/
+USER chess
+WORKDIR /data
+ENV CHESS_TRAIN_DEVICE=auto \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility
+ENTRYPOINT ["chess-train"]
+CMD ["gpu-check"]

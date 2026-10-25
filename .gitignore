@@ -1,0 +1,16 @@
+# Rust
+/target
+
+# Datasets, checkpoints, exported weights, metrics
+/data/*
+!/data/.gitkeep
+
+# Front
+web/node_modules
+web/dist
+*.tsbuildinfo
+
+# Misc
+*.log
+.env
+.DS_Store

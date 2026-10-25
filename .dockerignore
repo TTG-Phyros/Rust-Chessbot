@@ -1,0 +1,9 @@
+# Keep the build context small: Docker Desktop on Windows copies it through WSL.
+.git
+target
+data
+**/node_modules
+web/dist
+*.log
+.vscode
+.idea

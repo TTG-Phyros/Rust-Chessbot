@@ -68,12 +68,30 @@ fn check_backward(device: &Device) -> Result<()> {
     for (g, v) in grad.iter().zip(values) {
         ensure!((g - 2.0 * v).abs() < 1e-4, "wrong gradient: {grad:?}");
     }
+
+    // d/dx sum(σ(x)) = σ(x)(1 - σ(x)). The training loss uses the sigmoid,
+    // whose `exp` needs CUDA's libdevice on NVIDIA GPUs: check it here.
+    let x = Tensor::<1>::from_data(TensorData::new(values.to_vec(), [values.len()]), &device)
+        .require_grad();
+    let grads = burn::tensor::activation::sigmoid(x.clone())
+        .sum()
+        .backward();
+    let grad = to_vec(x.grad(&grads).context("no gradient for σ")?)
+        .context("sigmoid failed on this device (on CUDA: is libdevice installed?)")?;
+    for (g, v) in grad.iter().zip(values) {
+        let s = 1.0 / (1.0 + (-v).exp());
+        ensure!(
+            (g - s * (1.0 - s)).abs() < 1e-4,
+            "wrong sigmoid gradient: {grad:?}"
+        );
+    }
     Ok(())
 }
 
 fn to_vec<const D: usize>(tensor: Tensor<D>) -> Result<Vec<f32>> {
     tensor
-        .into_data()
+        .try_into_data()
+        .map_err(|err| anyhow::anyhow!("device error: {err:?}"))?
         .try_to_vec::<f32>()
         .map_err(|err| anyhow::anyhow!("cannot read tensor data: {err:?}"))
 }

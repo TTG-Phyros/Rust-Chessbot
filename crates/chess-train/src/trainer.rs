@@ -108,6 +108,8 @@ impl Trainer<'_> {
                 Some(Some(loaded)) => {
                     let (_, _, state) = &loaded;
                     tracing::info!(superbatch = state.superbatch, "resuming from checkpoint");
+                    let superbatch = state.superbatch;
+                    self.metrics.update(|status| status.superbatch = superbatch);
                     loaded
                 }
                 _ => (
@@ -156,7 +158,10 @@ impl Trainer<'_> {
                 let loss = (prediction - target).powi_scalar(2).mean();
                 // Reading the loss synchronizes with the GPU: sample it only.
                 if index % 16 == 0 {
-                    loss_sum += f64::from(loss.clone().into_scalar::<f32>());
+                    let value = loss.clone().try_into_scalar::<f32>().map_err(|err| {
+                        anyhow::anyhow!("training step failed on {}: {err:?}", self.device.info)
+                    })?;
+                    loss_sum += f64::from(value);
                     loss_samples += 1;
                 }
                 let grads = GradientsParams::from_grads(loss.backward(), &model);

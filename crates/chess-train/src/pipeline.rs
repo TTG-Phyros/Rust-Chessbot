@@ -82,15 +82,20 @@ pub(crate) fn run(
             config.run.clone(),
             config.min_positions,
         );
+        let mut last_report: Option<std::time::Instant> = None;
         let files = Box::new(move || {
             let files = dataset_files(&dir, Some(&run));
             let available: u64 = files.iter().map(|f| record_count(f)).sum();
             if available < min_positions {
-                tracing::info!(
-                    available,
-                    needed = min_positions,
-                    "waiting for self-play data"
-                );
+                // Called every second while waiting: report every 30 s only.
+                if last_report.is_none_or(|at| at.elapsed() >= Duration::from_secs(30)) {
+                    tracing::info!(
+                        available,
+                        needed = min_positions,
+                        "waiting for self-play data (positions count once a chunk file is complete)"
+                    );
+                    last_report = Some(std::time::Instant::now());
+                }
                 return Vec::new();
             }
             files
@@ -112,6 +117,10 @@ pub(crate) fn run(
             .join()
             .map_err(|_| anyhow::anyhow!("self-play panicked"))?;
         let _ = reporter.join();
+        metrics.update(|status| {
+            status.games = stats.games.load(Ordering::Relaxed);
+            status.positions = stats.positions.load(Ordering::Relaxed);
+        });
         produced?;
         trained
     })

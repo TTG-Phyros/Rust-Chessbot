@@ -12,6 +12,9 @@ mod classic;
 #[cfg(feature = "classic")]
 pub use classic::ClassicEval;
 
+#[cfg(feature = "nnue")]
+pub mod nnue;
+
 /// Score in centipawns.
 pub type Score = i32;
 

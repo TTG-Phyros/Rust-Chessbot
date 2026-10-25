@@ -8,12 +8,15 @@ license.workspace = true
 publish.workspace = true
 
 [features]
-default = ["classic"]
+default = ["classic", "nnue"]
 # Material + tapered piece-square tables.
 classic = []
+# Quantized neural network (weights loaded at runtime).
+nnue = ["dep:thiserror"]
 
 [dependencies]
 chess-core.workspace = true
+thiserror = { workspace = true, optional = true }
 
 [lints]
 workspace = true

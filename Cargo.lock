@@ -1272,6 +1272,7 @@ name = "chess-eval"
 version = "0.1.0"
 dependencies = [
  "chess-core",
+ "thiserror 2.0.21",
 ]
 
 [[package]]

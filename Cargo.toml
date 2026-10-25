@@ -77,6 +77,12 @@ panic = "abort"
 inherits = "release"
 debug = true
 
-# Movegen and search must be fast even in debug test runs (perft).
+# Movegen, evaluation and search must be fast even in debug test runs.
 [profile.dev.package.chess-core]
+opt-level = 3
+
+[profile.dev.package.chess-eval]
+opt-level = 3
+
+[profile.dev.package.chess-search]
 opt-level = 3

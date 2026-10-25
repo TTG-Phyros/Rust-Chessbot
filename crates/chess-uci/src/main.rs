@@ -95,24 +95,17 @@ impl Engine {
             return self.perft(depth, out);
         }
 
-        let info = self
+        let result = self
             .searcher
-            .search(&self.position, &SearchLimits::default(), |info| {
-                tracing::debug!(depth = info.depth, score = info.score, "search info");
+            .search(&self.position, &SearchLimits::depth(4), |info| {
+                tracing::debug!(depth = info.depth, score = %info.score, "search info");
             });
         writeln!(
             out,
-            "info depth {} score cp {} nodes {}",
-            info.depth, info.score, info.nodes
+            "info depth {} score {} nodes {}",
+            result.depth, result.score, result.nodes
         )?;
-        // Until the search lands (phase 3), play the first legal move.
-        let best = self
-            .position
-            .legal_moves()
-            .first()
-            .copied()
-            .unwrap_or_default();
-        writeln!(out, "bestmove {best}")?;
+        writeln!(out, "bestmove {}", result.best_move.unwrap_or_default())?;
         Ok(())
     }
 

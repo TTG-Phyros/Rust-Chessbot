@@ -4,6 +4,8 @@ const SERVER_MESSAGE_TYPES: ReadonlySet<string> = new Set<ServerMessage['type']>
   'hello',
   'pong',
   'error',
+  'info',
+  'done',
 ]);
 
 /**

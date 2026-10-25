@@ -1,14 +1,22 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { api } from './client';
+import { ApiError, api } from './client';
+import type { AnalysisInfo } from './generated/AnalysisInfo';
+import type { EngineLimits } from './generated/EngineLimits';
+import type { GameRequest } from './generated/GameRequest';
 import type { HealthResponse } from './generated/HealthResponse';
+import type { PositionView } from './generated/PositionView';
 import type { ServerMessage } from './generated/ServerMessage';
-import { connectServerSocket, type SocketStatus } from './socket';
+import { type ServerSocket, type SocketStatus, connectServerSocket } from './socket';
 
 export type HealthState =
   { kind: 'loading' } | { kind: 'ok'; health: HealthResponse } | { kind: 'error'; message: string };
 
 const HEALTH_POLL_MS = 5_000;
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'erreur inconnue';
+}
 
 /** Polls `GET /api/health`. */
 export function useHealth(): HealthState {
@@ -26,7 +34,7 @@ export function useHealth(): HealthState {
         })
         .catch((error: unknown) => {
           if (controller.signal.aborted) return;
-          setState({ kind: 'error', message: error instanceof Error ? error.message : 'unknown' });
+          setState({ kind: 'error', message: errorMessage(error) });
         });
     };
     poll();
@@ -41,8 +49,12 @@ export function useHealth(): HealthState {
 }
 
 /** Connects to `/ws` for the lifetime of the component and exposes its status. */
-export function useServerSocket(onMessage?: (message: ServerMessage) => void): SocketStatus {
+export function useServerSocket(onMessage?: (message: ServerMessage) => void): {
+  status: SocketStatus;
+  socket: ServerSocket | null;
+} {
   const [status, setStatus] = useState<SocketStatus>('connecting');
+  const [socket, setSocket] = useState<ServerSocket | null>(null);
   // Kept in a ref so a new callback identity does not reopen the socket.
   const onMessageRef = useRef(onMessage);
   useEffect(() => {
@@ -50,14 +62,119 @@ export function useServerSocket(onMessage?: (message: ServerMessage) => void): S
   }, [onMessage]);
 
   useEffect(() => {
-    const socket = connectServerSocket({
+    const connection = connectServerSocket({
       onStatus: setStatus,
       onMessage: (message) => onMessageRef.current?.(message),
     });
+    setSocket(connection);
     return () => {
-      socket.close();
+      connection.close();
+      setSocket(null);
     };
   }, []);
 
-  return status;
+  return { status, socket };
 }
+
+export type PositionState = {
+  /** Latest successfully loaded view (kept while the next one loads). */
+  view: PositionView | null;
+  /** Why the latest request failed (e.g. illegal move in an imported game). */
+  error: string | null;
+  loading: boolean;
+};
+
+/** Keeps the server's view of `game` up to date. */
+export function usePosition(game: GameRequest): PositionState {
+  const key = JSON.stringify(game);
+  // `key` records which request the stored result answers.
+  const [result, setResult] = useState<{
+    key: string;
+    view: PositionView | null;
+    error: string | null;
+  }>({ key: '', view: null, error: null });
+
+  useEffect(() => {
+    const controller = new AbortController();
+    api
+      .position(JSON.parse(key) as GameRequest, controller.signal)
+      .then((view) => {
+        setResult({ key, view, error: null });
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        setResult((previous) => ({ key, view: previous.view, error: errorMessage(error) }));
+      });
+    return () => {
+      controller.abort();
+    };
+  }, [key]);
+
+  const loading = result.key !== key;
+  return { view: result.view, error: loading ? null : result.error, loading };
+}
+
+export type AnalysisState = {
+  socket: SocketStatus;
+  /** Whether an analysis is running. */
+  running: boolean;
+  /** Latest completed depth of the current analysis. */
+  info: AnalysisInfo | null;
+  error: string | null;
+};
+
+/**
+ * Live analysis over the WebSocket. `analyze` replaces any analysis in
+ * progress; messages of replaced analyses are ignored thanks to their id.
+ */
+export function useAnalysis(): AnalysisState & {
+  analyze: (game: GameRequest, limits?: EngineLimits) => void;
+  stop: () => void;
+} {
+  const currentId = useRef(0);
+  const [state, setState] = useState<Omit<AnalysisState, 'socket'>>({
+    running: false,
+    info: null,
+    error: null,
+  });
+
+  const onMessage = useCallback((message: ServerMessage) => {
+    switch (message.type) {
+      case 'info':
+        if (message.info.id === currentId.current) {
+          setState((previous) => ({ ...previous, info: message.info }));
+        }
+        break;
+      case 'done':
+        if (message.id === currentId.current) {
+          setState((previous) => ({ ...previous, running: false }));
+        }
+        break;
+      case 'error':
+        setState((previous) => ({ ...previous, running: false, error: message.message }));
+        break;
+      default:
+        break;
+    }
+  }, []);
+
+  const { status, socket } = useServerSocket(onMessage);
+
+  const analyze = useCallback(
+    (game: GameRequest, limits: EngineLimits = {}) => {
+      if (!socket) return;
+      currentId.current += 1;
+      setState({ running: true, info: null, error: null });
+      socket.send({ type: 'analyze', id: currentId.current, game, limits });
+    },
+    [socket],
+  );
+
+  const stop = useCallback(() => {
+    socket?.send({ type: 'stop' });
+  }, [socket]);
+
+  return { ...state, socket: status, analyze, stop };
+}
+
+export { ApiError };

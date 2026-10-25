@@ -12,7 +12,7 @@ function Dot({ ok }: { ok: boolean }) {
 /** Shows whether the REST API and the WebSocket are reachable. */
 export function ServerStatus() {
   const health = useHealth();
-  const socket = useServerSocket();
+  const { status: socket } = useServerSocket();
 
   const apiLabel =
     health.kind === 'ok'

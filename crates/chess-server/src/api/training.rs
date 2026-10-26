@@ -1,19 +1,22 @@
-//! Training endpoints: progress from the metrics files written by
-//! `chess-train` (shared `data` volume), start/stop relayed to its control
-//! daemon.
+//! Training endpoints: networks and their progress, read from the files
+//! written by `chess-train` (shared `data` volume); commands relayed to its
+//! control daemon.
 
 use std::path::Path;
-use std::time::Duration;
 
 use axum::Json;
-use axum::extract::State;
+use axum::extract::{Path as UrlPath, Query, State};
 use axum::http::StatusCode;
+use reqwest::Method;
 use serde::Deserialize;
+use serde::de::DeserializeOwned;
+use utoipa::IntoParams;
 
+use super::daemon::{self, check_name};
 use super::error::ApiError;
 use super::types::{
-    ControllerState, ControllerView, EloPoint, EngineInfo, ErrorResponse, LossPoint,
-    StartTrainingRequest, TrainingStatus, TrainingView,
+    CreateNetworkRequest, EloPoint, EngineInfo, ErrorResponse, LossPoint, NetworkParams,
+    NetworkSummary, StartTrainingRequest, TrainingStatus, TrainingView,
 };
 use crate::AppState;
 
@@ -130,81 +133,93 @@ fn read_curves(metrics_dir: &Path, run: &str) -> (Vec<LossPoint>, Vec<EloPoint>)
     (loss, elo)
 }
 
-/// `GET /status` of the control daemon.
+/// `checkpoints/<name>/state.json`, as written by `chess-train`.
 #[derive(Debug, Deserialize)]
-struct DaemonStatus {
-    state: ControllerState,
-    run: String,
-    error: Option<String>,
+struct CheckpointState {
+    superbatch: u64,
 }
 
-const NOT_RUNNING: &str =
-    "training service not reachable: start it with `docker compose --profile train up`";
+fn read_json<T: DeserializeOwned>(path: &Path) -> Option<T> {
+    serde_json::from_slice(&std::fs::read(path).ok()?).ok()
+}
 
-async fn controller(state: &AppState) -> ControllerView {
-    let Some(url) = &state.trainer_url else {
-        return ControllerView {
-            state: ControllerState::Unavailable,
-            run: None,
-            error: Some("no training service configured (CHESS_SERVER_TRAINER_URL)".into()),
-        };
+/// Every network: with settings (`runs/`), a checkpoint or exported weights.
+fn read_networks(data_dir: &Path) -> Vec<NetworkSummary> {
+    let entries = |dir: &str| {
+        std::fs::read_dir(data_dir.join(dir))
+            .into_iter()
+            .flatten()
+            .filter_map(|entry| entry.ok().map(|e| e.path()))
     };
-    let response = state
-        .http
-        .get(format!("{url}/status"))
-        .timeout(Duration::from_secs(2))
-        .send()
-        .await;
-    match response {
-        Ok(response) => match response.json::<DaemonStatus>().await {
-            Ok(status) => ControllerView {
-                state: status.state,
-                run: Some(status.run),
-                error: status.error,
-            },
-            Err(err) => ControllerView {
-                state: ControllerState::Unavailable,
-                run: None,
-                error: Some(format!(
-                    "unexpected answer from the training service: {err}"
-                )),
-            },
-        },
-        Err(_) => ControllerView {
-            state: ControllerState::Unavailable,
-            run: None,
-            error: Some(NOT_RUNNING.into()),
-        },
-    }
+    let stem = |path: &Path| Some(path.file_stem()?.to_str()?.to_owned());
+    let mut names: Vec<String> = entries("runs")
+        .filter(|path| path.extension().is_some_and(|ext| ext == "json"))
+        .chain(entries("checkpoints").filter(|path| path.is_dir()))
+        .chain(entries("weights").filter(|path| path.extension().is_some_and(|ext| ext == "nnue")))
+        .filter_map(|path| stem(&path))
+        .filter(|name| check_name(name).is_ok())
+        .collect();
+    names.sort();
+    names.dedup();
+    names
+        .into_iter()
+        .map(|name| NetworkSummary {
+            params: read_json(&data_dir.join("runs").join(format!("{name}.json"))),
+            superbatch: read_json::<CheckpointState>(
+                &data_dir.join("checkpoints").join(&name).join("state.json"),
+            )
+            .map(|state| state.superbatch),
+            best: read_json(&data_dir.join("weights").join(&name).join("best.json"))
+                .unwrap_or_default(),
+            has_weights: data_dir
+                .join("weights")
+                .join(format!("{name}.nnue"))
+                .exists(),
+            name,
+        })
+        .collect()
 }
 
-/// Training progress: daemon state, run status, loss and Elo curves, and the
-/// evaluation the engine currently uses.
+#[derive(Debug, Deserialize, IntoParams)]
+pub(super) struct TrainingQuery {
+    /// Network to show (default: the one training, or the last trained).
+    network: Option<String>,
+}
+
+/// Training progress of a network: daemon state, status, loss and Elo
+/// curves, every network, and the evaluation the engine currently uses.
 #[utoipa::path(
     get,
     path = "/api/training",
     tag = "training",
+    params(TrainingQuery),
     responses((status = 200, description = "Training progress", body = TrainingView))
 )]
-pub(super) async fn training(State(state): State<AppState>) -> Json<TrainingView> {
-    let controller = controller(&state).await;
+pub(super) async fn training(
+    State(state): State<AppState>,
+    Query(query): Query<TrainingQuery>,
+) -> Json<TrainingView> {
+    let controller = daemon::controller(&state).await;
     let metrics_dir = state.data_dir.join("metrics");
     let status = read_status(&metrics_dir);
-    let run = controller
-        .run
-        .clone()
+    let network = query
+        .network
+        .filter(|name| check_name(name).is_ok())
+        .or_else(|| controller.run.clone())
         .or_else(|| status.as_ref().map(|s| s.run.clone()));
-    // Only show the status file if it belongs to the run being shown.
-    let status = status.filter(|s| run.as_deref() == Some(s.run.as_str()));
-    let (loss, elo) = run
+    // Only show the status file if it belongs to the network shown.
+    let status = status.filter(|s| network.as_deref() == Some(s.run.as_str()));
+    let (loss, elo) = network
         .as_deref()
-        .map(|run| read_curves(&metrics_dir, run))
+        .map(|network| read_curves(&metrics_dir, network))
         .unwrap_or_default();
     Json(TrainingView {
         controller,
+        network,
         status,
         loss,
         elo,
+        networks: read_networks(&state.data_dir),
         engine: state.engine.info(),
     })
 }
@@ -220,36 +235,7 @@ pub(super) async fn engine(State(state): State<AppState>) -> Json<EngineInfo> {
     Json(state.engine.info())
 }
 
-async fn relay(
-    state: &AppState,
-    path: &str,
-    body: Option<&StartTrainingRequest>,
-) -> Result<StatusCode, ApiError> {
-    let url = state
-        .trainer_url
-        .as_ref()
-        .ok_or_else(|| ApiError::unavailable("no training service configured"))?;
-    let mut request = state
-        .http
-        .post(format!("{url}{path}"))
-        .timeout(Duration::from_secs(5));
-    if let Some(body) = body {
-        request = request.json(body);
-    }
-    let response = request
-        .send()
-        .await
-        .map_err(|_| ApiError::unavailable(NOT_RUNNING))?;
-    match response.status().as_u16() {
-        200..=299 => Ok(StatusCode::ACCEPTED),
-        409 => Err(ApiError::conflict("a training run is already in progress")),
-        code => Err(ApiError::internal(format!(
-            "training service answered HTTP {code}"
-        ))),
-    }
-}
-
-/// Starts the self-play + training pipeline.
+/// Starts the self-play + training pipeline of a network.
 #[utoipa::path(
     post,
     path = "/api/training/start",
@@ -258,6 +244,7 @@ async fn relay(
     responses(
         (status = 202, description = "Run started"),
         (status = 409, description = "A run is already in progress", body = ErrorResponse),
+        (status = 422, description = "Invalid network name", body = ErrorResponse),
         (status = 503, description = "Training service not running", body = ErrorResponse),
     )
 )]
@@ -266,7 +253,11 @@ pub(super) async fn start(
     body: Option<Json<StartTrainingRequest>>,
 ) -> Result<StatusCode, ApiError> {
     let request = body.map(|Json(request)| request).unwrap_or_default();
-    relay(&state, "/start", Some(&request)).await
+    if let Some(network) = &request.network {
+        check_name(network)?;
+    }
+    daemon::send(&state, Method::POST, "/start", Some(&request)).await?;
+    Ok(StatusCode::ACCEPTED)
 }
 
 /// Stops the run (it finishes its step and writes a checkpoint first).
@@ -280,7 +271,77 @@ pub(super) async fn start(
     )
 )]
 pub(super) async fn stop(State(state): State<AppState>) -> Result<StatusCode, ApiError> {
-    relay(&state, "/stop", None).await
+    daemon::send(&state, Method::POST, "/stop", None::<&()>).await?;
+    Ok(StatusCode::ACCEPTED)
+}
+
+/// Hyperparameters of a new network (the training service's settings).
+#[utoipa::path(
+    get,
+    path = "/api/networks/defaults",
+    tag = "training",
+    responses(
+        (status = 200, description = "Default hyperparameters", body = NetworkParams),
+        (status = 503, description = "Training service not running", body = ErrorResponse),
+    )
+)]
+pub(super) async fn network_defaults(
+    State(state): State<AppState>,
+) -> Result<Json<NetworkParams>, ApiError> {
+    let body = daemon::send(&state, Method::GET, "/networks/defaults", None::<&()>).await?;
+    serde_json::from_value(body)
+        .map(Json)
+        .map_err(|err| ApiError::internal(format!("unexpected answer: {err}")))
+}
+
+/// Creates a network with its hyperparameters (it trains once started).
+#[utoipa::path(
+    post,
+    path = "/api/networks",
+    tag = "training",
+    request_body = CreateNetworkRequest,
+    responses(
+        (status = 201, description = "Network created"),
+        (status = 409, description = "The name is taken", body = ErrorResponse),
+        (status = 422, description = "Invalid name or hyperparameters", body = ErrorResponse),
+        (status = 503, description = "Training service not running", body = ErrorResponse),
+    )
+)]
+pub(super) async fn create_network(
+    State(state): State<AppState>,
+    Json(request): Json<CreateNetworkRequest>,
+) -> Result<StatusCode, ApiError> {
+    check_name(&request.name)?;
+    daemon::send(&state, Method::POST, "/networks", Some(&request)).await?;
+    Ok(StatusCode::CREATED)
+}
+
+/// Deletes a network: settings, checkpoint and weights (its games stay).
+#[utoipa::path(
+    delete,
+    path = "/api/networks/{name}",
+    tag = "training",
+    params(("name" = String, Path, description = "Network")),
+    responses(
+        (status = 204, description = "Network deleted"),
+        (status = 404, description = "No such network", body = ErrorResponse),
+        (status = 409, description = "The network is training", body = ErrorResponse),
+        (status = 503, description = "Training service not running", body = ErrorResponse),
+    )
+)]
+pub(super) async fn delete_network(
+    State(state): State<AppState>,
+    UrlPath(name): UrlPath<String>,
+) -> Result<StatusCode, ApiError> {
+    check_name(&name)?;
+    daemon::send(
+        &state,
+        Method::DELETE,
+        &format!("/networks/{name}"),
+        None::<&()>,
+    )
+    .await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[cfg(test)]

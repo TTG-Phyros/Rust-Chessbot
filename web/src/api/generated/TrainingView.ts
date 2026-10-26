@@ -3,6 +3,7 @@ import type { ControllerView } from "./ControllerView";
 import type { EloPoint } from "./EloPoint";
 import type { EngineInfo } from "./EngineInfo";
 import type { LossPoint } from "./LossPoint";
+import type { NetworkSummary } from "./NetworkSummary";
 import type { TrainingStatus } from "./TrainingStatus";
 
 /**
@@ -14,17 +15,25 @@ export type TrainingView = {
  */
 controller: ControllerView, 
 /**
- * Absent until a run has written its status.
+ * Network shown: the requested one, else the one training (or last trained).
+ */
+network?: string | null, 
+/**
+ * Status of the network shown, while it trains or after its last run.
  */
 status?: TrainingStatus | null, 
 /**
- * Loss curve of the current run.
+ * Loss curve of the network shown.
  */
 loss: Array<LossPoint>, 
 /**
- * Elo curve of the current run.
+ * Elo curve of the network shown.
  */
 elo: Array<EloPoint>, 
+/**
+ * Every network.
+ */
+networks: Array<NetworkSummary>, 
 /**
  * Evaluation used by the engine right now.
  */

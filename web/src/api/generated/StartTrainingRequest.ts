@@ -5,6 +5,10 @@
  */
 export type StartTrainingRequest = { 
 /**
+ * Network to train (default: the last one trained).
+ */
+network?: string | null, 
+/**
  * Start a new network instead of resuming the checkpoint.
  */
 fresh: boolean, 

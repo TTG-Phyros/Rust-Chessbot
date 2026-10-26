@@ -1,6 +1,8 @@
 //! HTTP routes, OpenAPI document and WebSocket endpoint.
 
+mod arena;
 mod convert;
+mod daemon;
 pub mod error;
 mod game;
 mod health;
@@ -8,7 +10,7 @@ mod training;
 pub mod types;
 mod ws;
 
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use tower_http::trace::TraceLayer;
 use utoipa::OpenApi;
@@ -22,12 +24,16 @@ use crate::AppState;
     paths(
         health::health, game::position, game::engine_move, game::pgn_import, game::pgn_export,
         training::training, training::engine, training::start, training::stop,
+        training::network_defaults, training::create_network, training::delete_network,
+        arena::arena, arena::save_bot, arena::delete_bot, arena::start_tournament,
+        arena::stop_tournament,
     ),
     tags(
         (name = "system", description = "Server status"),
         (name = "game", description = "Positions, legal moves and PGN"),
         (name = "engine", description = "Engine moves and evaluation"),
-        (name = "training", description = "NNUE training progress and control"),
+        (name = "training", description = "Networks: NNUE training progress and control"),
+        (name = "arena", description = "Bots and tournaments between them"),
     )
 )]
 pub struct ApiDoc;
@@ -51,6 +57,14 @@ pub fn router(state: AppState) -> Router {
         .route("/api/training", get(training::training))
         .route("/api/training/start", post(training::start))
         .route("/api/training/stop", post(training::stop))
+        .route("/api/networks", post(training::create_network))
+        .route("/api/networks/defaults", get(training::network_defaults))
+        .route("/api/networks/{name}", delete(training::delete_network))
+        .route("/api/arena", get(arena::arena))
+        .route("/api/bots", post(arena::save_bot))
+        .route("/api/bots/{name}", delete(arena::delete_bot))
+        .route("/api/tournaments", post(arena::start_tournament))
+        .route("/api/tournaments/stop", post(arena::stop_tournament))
         .route("/ws", get(ws::upgrade))
         .layer(TraceLayer::new_for_http())
         .with_state(state)

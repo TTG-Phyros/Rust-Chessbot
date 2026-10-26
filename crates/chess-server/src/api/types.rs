@@ -380,10 +380,12 @@ pub enum ControllerState {
 pub struct ControllerView {
     /// State of the daemon.
     pub state: ControllerState,
-    /// Name of the run it controls.
+    /// Network being trained, or the last one trained.
     pub run: Option<String>,
     /// Why the last run failed, or why the daemon is unreachable.
     pub error: Option<String>,
+    /// Id of the tournament being played.
+    pub tournament: Option<String>,
 }
 
 /// Latest state of a training run (from its `status.json`).
@@ -468,12 +470,16 @@ pub struct EloPoint {
 pub struct TrainingView {
     /// Training control daemon.
     pub controller: ControllerView,
-    /// Absent until a run has written its status.
+    /// Network shown: the requested one, else the one training (or last trained).
+    pub network: Option<String>,
+    /// Status of the network shown, while it trains or after its last run.
     pub status: Option<TrainingStatus>,
-    /// Loss curve of the current run.
+    /// Loss curve of the network shown.
     pub loss: Vec<LossPoint>,
-    /// Elo curve of the current run.
+    /// Elo curve of the network shown.
     pub elo: Vec<EloPoint>,
+    /// Every network.
+    pub networks: Vec<NetworkSummary>,
     /// Evaluation used by the engine right now.
     pub engine: EngineInfo,
 }
@@ -483,6 +489,8 @@ pub struct TrainingView {
 #[serde(rename_all = "camelCase")]
 #[ts(export, optional_fields = nullable)]
 pub struct StartTrainingRequest {
+    /// Network to train (default: the last one trained).
+    pub network: Option<String>,
     /// Start a new network instead of resuming the checkpoint.
     #[serde(default)]
     #[ts(optional = false)]
@@ -490,4 +498,250 @@ pub struct StartTrainingRequest {
     /// Stop after this many superbatches.
     #[ts(type = "number | null", optional = nullable)]
     pub superbatches: Option<u64>,
+}
+
+/// Hyperparameters of a network (`data/runs/<name>.json`, written by
+/// `chess-train`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct NetworkParams {
+    /// Nodes per move in self-play: stronger games, generated more slowly.
+    #[ts(type = "number")]
+    pub selfplay_nodes: u64,
+    /// AdamW learning rate.
+    pub learning_rate: f64,
+    /// The learning rate is multiplied by `lr_drop_factor` every this many superbatches.
+    #[ts(type = "number")]
+    pub lr_drop_every: u64,
+    /// Learning rate multiplier.
+    pub lr_drop_factor: f64,
+    /// Weight of the game result in the target (the rest is the search score).
+    pub wdl: f64,
+    /// Positions per optimizer step.
+    #[ts(type = "number")]
+    pub batch_size: u64,
+    /// Steps per superbatch.
+    #[ts(type = "number")]
+    pub batches_per_superbatch: u64,
+    /// Superbatches to train; 0 = until stopped.
+    #[ts(type = "number")]
+    pub superbatches: u64,
+    /// Export (and measure) the network every this many superbatches.
+    #[ts(type = "number")]
+    pub export_every: u64,
+    /// Positions to generate before training starts.
+    #[ts(type = "number")]
+    pub min_positions: u64,
+    /// Most times each position is trained on, on average (0 = no limit).
+    #[ts(type = "number")]
+    pub max_reuse: u64,
+    /// Games of each measurement against the classical evaluation.
+    pub eval_games: u32,
+    /// Other networks whose self-play games this one also trains on.
+    pub datasets_from: Vec<String>,
+}
+
+/// A measured snapshot, among the best of its network.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct RankedSnapshot {
+    /// Superbatch of the snapshot.
+    #[ts(type = "number")]
+    pub superbatch: u64,
+    /// Elo against the classical evaluation.
+    pub elo: f64,
+    /// Half-width of the 95 % interval of `elo`.
+    pub elo_error: f64,
+    /// Games of the measurement.
+    pub games: u32,
+    /// Unix seconds.
+    #[ts(type = "number")]
+    pub measured_at: u64,
+}
+
+/// A network and where its training stands.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
+pub struct NetworkSummary {
+    /// Name of the network.
+    pub name: String,
+    /// Its hyperparameters (absent for a network never started from the daemon).
+    pub params: Option<NetworkParams>,
+    /// Superbatches of its checkpoint.
+    #[ts(type = "number | null", optional = nullable)]
+    pub superbatch: Option<u64>,
+    /// Its best snapshots, best first.
+    pub best: Vec<RankedSnapshot>,
+    /// Whether it has exported a network yet.
+    pub has_weights: bool,
+}
+
+/// Request of `POST /api/networks`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct CreateNetworkRequest {
+    /// 1 to 32 letters, digits, `-` or `_`.
+    pub name: String,
+    /// Hyperparameters.
+    pub params: NetworkParams,
+}
+
+/// A saved network, ready to play tournaments (`data/bots/<name>.json`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
+pub struct BotInfo {
+    /// Name of the bot.
+    pub name: String,
+    /// Network it was saved from.
+    pub network: String,
+    /// Snapshot saved; absent: the latest export at the time.
+    #[ts(type = "number | null", optional = nullable)]
+    pub superbatch: Option<u64>,
+    /// Elo of the snapshot against the classical evaluation, if measured.
+    pub elo: Option<f64>,
+    /// Half-width of the 95 % interval of `elo`.
+    pub elo_error: Option<f64>,
+    /// Hyperparameters of the network it comes from.
+    pub params: Option<NetworkParams>,
+    /// Unix seconds.
+    #[ts(type = "number")]
+    pub created_at: u64,
+}
+
+/// Request of `POST /api/bots`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
+pub struct SaveBotRequest {
+    /// Name of the new bot.
+    pub name: String,
+    /// Network to save.
+    pub network: String,
+    /// Snapshot to save (one of the best); absent: the latest export.
+    #[ts(type = "number | null", optional = nullable)]
+    pub superbatch: Option<u64>,
+}
+
+/// Request of `POST /api/tournaments`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct TournamentRequest {
+    /// Bots taking part; `classic` is the classical evaluation (PeSTO).
+    pub bots: Vec<String>,
+    /// Games of each pairing (colors alternate).
+    pub games_per_pair: u32,
+    /// Nodes per move, the same for every bot.
+    #[ts(type = "number")]
+    pub nodes: u64,
+    /// Worker threads; 0 = all cores.
+    pub threads: u32,
+}
+
+/// Answer of `POST /api/tournaments`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
+#[ts(export)]
+pub struct TournamentStarted {
+    /// Id of the new tournament.
+    pub id: String,
+}
+
+/// State of a tournament.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum TournamentState {
+    /// Being played.
+    Running,
+    /// Every pairing played.
+    Finished,
+    /// Stopped before the end (on request, or the training service stopped).
+    Stopped,
+    /// Ended by an error.
+    Failed,
+}
+
+/// Result of bot `a` against bot `b`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Pairing {
+    /// First bot.
+    pub a: String,
+    /// Second bot.
+    pub b: String,
+    /// Games won by `a`.
+    pub wins: u32,
+    /// Draws.
+    pub draws: u32,
+    /// Games lost by `a`.
+    pub losses: u32,
+    /// Elo of `a` over `b`.
+    pub elo: f64,
+    /// Half-width of the 95 % interval of `elo`.
+    pub elo_error: f64,
+}
+
+/// A line of the tournament table.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Standing {
+    /// Bot.
+    pub bot: String,
+    /// Games played.
+    pub games: u32,
+    /// 1 per win, ½ per draw.
+    pub points: f64,
+    /// Elo fitted on every game: relative to `classic` when it takes part,
+    /// to the field's average otherwise.
+    pub elo: f64,
+}
+
+/// A round-robin tournament between bots (`data/tournaments/<id>.json`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
+pub struct Tournament {
+    /// Id of the tournament.
+    pub id: String,
+    /// Where it stands.
+    pub state: TournamentState,
+    /// Why it failed.
+    pub error: Option<String>,
+    /// Unix seconds.
+    #[ts(type = "number")]
+    pub created_at: u64,
+    /// Unix seconds.
+    #[ts(type = "number")]
+    pub updated_at: u64,
+    /// Bots taking part.
+    pub bots: Vec<String>,
+    /// Games of each pairing.
+    pub games_per_pair: u32,
+    /// Nodes per move.
+    #[ts(type = "number")]
+    pub nodes: u64,
+    /// Every pairing, in playing order.
+    pub pairings: Vec<Pairing>,
+    /// Best first.
+    pub standings: Vec<Standing>,
+}
+
+/// Response of `GET /api/arena`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ArenaView {
+    /// Training control daemon (which plays the tournaments).
+    pub controller: ControllerView,
+    /// Saved bots, newest first.
+    pub bots: Vec<BotInfo>,
+    /// Latest tournaments, newest first.
+    pub tournaments: Vec<Tournament>,
 }

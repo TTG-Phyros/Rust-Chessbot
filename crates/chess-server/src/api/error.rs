@@ -23,6 +23,14 @@ impl ApiError {
         }
     }
 
+    /// What the request designates does not exist: 404.
+    pub fn not_found(message: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::NOT_FOUND,
+            message: message.into(),
+        }
+    }
+
     /// The request clashes with the current state: 409.
     pub fn conflict(message: impl Into<String>) -> Self {
         Self {

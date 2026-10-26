@@ -10,10 +10,14 @@ export type ControllerView = {
  */
 state: ControllerState, 
 /**
- * Name of the run it controls.
+ * Network being trained, or the last one trained.
  */
 run?: string | null, 
 /**
  * Why the last run failed, or why the daemon is unreachable.
  */
-error?: string | null, };
+error?: string | null, 
+/**
+ * Id of the tournament being played.
+ */
+tournament?: string | null, };

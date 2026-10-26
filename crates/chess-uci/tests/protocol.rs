@@ -148,3 +148,41 @@ fn options() {
     assert!(!out.contains("error"), "{out}");
     assert!(out.lines().any(|l| l == "readyok"));
 }
+
+#[test]
+fn eval_file_loads_a_network_or_falls_back() {
+    let dir = std::env::temp_dir().join(format!("chess-uci-evalfile-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let net = dir.join("zeros.nnue");
+    std::fs::write(&net, chess_eval::nnue::NnueWeights::zeros().to_bytes()).unwrap();
+    let net = net.display().to_string();
+
+    let out = run_session(&format!(
+        "uci\nsetoption name EvalFile value {net}\nd\ngo depth 3\n"
+    ));
+    assert!(
+        out.lines()
+            .any(|l| l == "option name EvalFile type string default <empty>")
+    );
+    assert!(
+        out.lines()
+            .any(|l| l == format!("info string evaluation: nnue ({net})")),
+        "{out}"
+    );
+    assert!(out.lines().any(|l| l.starts_with("Evaluation: nnue")));
+    // A zero network evaluates everything as equal.
+    assert!(out.lines().any(|l| l.contains("score cp 0")), "{out}");
+    assert!(out.lines().any(|l| l.starts_with("bestmove ")));
+
+    let out = run_session("setoption name EvalFile value /no/such/file.nnue\nd\n");
+    assert!(
+        out.lines().any(|l| l == "info string evaluation: classic"),
+        "{out}"
+    );
+    assert!(
+        out.lines()
+            .any(|l| l.starts_with("info string error: cannot read")),
+        "{out}"
+    );
+    assert!(out.lines().any(|l| l == "Evaluation: classic"));
+}

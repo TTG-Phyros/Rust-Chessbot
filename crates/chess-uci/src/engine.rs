@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
 use chess_core::{Position, perft_divide};
-use chess_eval::ClassicEval;
+use chess_eval::EngineEval;
 use chess_search::{
     DEFAULT_HASH_MB, MAX_HASH_MB, SearchInfo, SearchResult, Searcher, StopFlag, bench,
 };
@@ -41,7 +41,9 @@ pub(crate) fn send(out: &Output, line: &str) {
 pub(crate) struct Engine {
     out: Output,
     position: Position,
-    searcher: Arc<Mutex<Searcher<ClassicEval>>>,
+    searcher: Arc<Mutex<Searcher<EngineEval>>>,
+    /// Value of the `EvalFile` option.
+    eval_file: String,
     stop: StopFlag,
     worker: Option<JoinHandle<()>>,
     /// Whether the search in progress is `go infinite` (it never ends by itself).
@@ -55,7 +57,11 @@ impl Engine {
         Self {
             out,
             position: Position::startpos(),
-            searcher: Arc::new(Mutex::new(Searcher::new(ClassicEval, stop.clone()))),
+            searcher: Arc::new(Mutex::new(Searcher::new(
+                EngineEval::default(),
+                stop.clone(),
+            ))),
+            eval_file: String::new(),
             stop,
             worker: None,
             infinite: false,
@@ -95,6 +101,7 @@ impl Engine {
             }
             "d" => {
                 self.send(&self.position.to_string());
+                self.send(&format!("Evaluation: {}", self.evaluation()));
                 Ok(())
             }
             "bench" => self.bench(args),
@@ -127,6 +134,7 @@ impl Engine {
             "option name Move Overhead type spin default {DEFAULT_MOVE_OVERHEAD_MS} min 0 max {MAX_MOVE_OVERHEAD_MS}"
         ));
         self.send("option name Clear Hash type button");
+        self.send("option name EvalFile type string default <empty>");
         self.send("uciok");
     }
 
@@ -149,9 +157,48 @@ impl Engine {
                     Duration::from_millis(number(value)?.min(MAX_MOVE_OVERHEAD_MS));
             }
             "clear hash" => lock(&self.searcher).clear(),
+            "evalfile" => {
+                let loaded = self.load_eval_file(value.as_deref().unwrap_or_default());
+                self.send(&format!("info string evaluation: {}", self.evaluation()));
+                loaded?;
+            }
             _ => bail!("unknown option {name:?}"),
         }
         Ok(())
+    }
+
+    /// Loads a network for the `EvalFile` option (also set from the
+    /// `CHESS_EVAL_FILE` variable at startup). An empty value (or `<empty>`)
+    /// selects the classical evaluation; an unreadable or invalid file falls
+    /// back to it too, and the error is returned.
+    pub(crate) fn load_eval_file(&mut self, path: &str) -> Result<()> {
+        let path = path.trim();
+        self.finish_search();
+        let loaded = if path.is_empty() || path == "<empty>" {
+            Ok(None)
+        } else {
+            std::fs::read(path)
+                .with_context(|| format!("cannot read {path}"))
+                .and_then(|bytes| EngineEval::from_nnue_bytes(&bytes).context("invalid network"))
+                .map(Some)
+        };
+        let (eval, file, result) = match loaded {
+            Ok(Some(eval)) => (eval, path.to_owned(), Ok(())),
+            Ok(None) => (EngineEval::default(), String::new(), Ok(())),
+            Err(err) => (EngineEval::default(), String::new(), Err(err)),
+        };
+        lock(&self.searcher).set_evaluator(eval);
+        self.eval_file = file;
+        result
+    }
+
+    /// `nnue (<file>)` or `classic`.
+    fn evaluation(&self) -> String {
+        if self.eval_file.is_empty() {
+            "classic".into()
+        } else {
+            format!("nnue ({})", self.eval_file)
+        }
     }
 
     fn go(&mut self, args: &str) -> Result<()> {

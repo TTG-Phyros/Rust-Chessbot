@@ -13,7 +13,7 @@ path = "src/main.rs"
 
 [dependencies]
 chess-core.workspace = true
-chess-eval = { workspace = true, features = ["classic"] }
+chess-eval = { workspace = true, features = ["classic", "nnue"] }
 chess-search.workspace = true
 anyhow.workspace = true
 tracing.workspace = true

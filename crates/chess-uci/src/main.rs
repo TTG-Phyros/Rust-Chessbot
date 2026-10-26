@@ -26,6 +26,13 @@ fn main() -> Result<()> {
 
     let out: Output = Arc::new(Mutex::new(io::stdout()));
     let mut engine = Engine::new(out);
+    // Default network, e.g. for GUIs that cannot set string options.
+    if let Ok(path) = std::env::var("CHESS_EVAL_FILE")
+        && !path.trim().is_empty()
+        && let Err(err) = engine.load_eval_file(&path)
+    {
+        tracing::warn!(error = %format!("{err:#}"), "CHESS_EVAL_FILE ignored, using the classical evaluation");
+    }
 
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.first().map(String::as_str) == Some("bench") {

@@ -61,8 +61,9 @@ pub(crate) fn record_count(path: &Path) -> u64 {
         .unwrap_or(0)
 }
 
-/// Finished dataset files of `dir` (sorted), optionally restricted to names
-/// starting with `prefix`.
+/// Finished dataset files of `dir` (sorted), optionally restricted to the
+/// chunks of one run (`<prefix>-<number>`: run `main` does not pick up the
+/// files of run `main-2`).
 pub(crate) fn dataset_files(dir: &Path, prefix: Option<&str>) -> Vec<PathBuf> {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return Vec::new();
@@ -72,9 +73,10 @@ pub(crate) fn dataset_files(dir: &Path, prefix: Option<&str>) -> Vec<PathBuf> {
         .filter(|path| path.extension().is_some_and(|ext| ext == EXTENSION))
         .filter(|path| {
             prefix.is_none_or(|prefix| {
-                path.file_name()
+                path.file_stem()
                     .and_then(|n| n.to_str())
-                    .is_some_and(|n| n.starts_with(prefix))
+                    .and_then(|n| n.strip_prefix(prefix)?.strip_prefix('-'))
+                    .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
             })
         })
         .collect();
@@ -117,6 +119,29 @@ mod tests {
         read.extend(reader.read_chunk(10).unwrap());
         assert_eq!(read, expected);
         assert!(reader.read_chunk(10).unwrap().is_empty());
+    }
+
+    #[test]
+    fn files_of_a_run_exclude_runs_sharing_its_prefix() {
+        let dir = test_dir("dataset-prefix");
+        for name in [
+            "main-0000",
+            "main-0001",
+            "main-2-0000",
+            "mainline-0000",
+            "main-x",
+        ] {
+            std::fs::write(dir.join(format!("{name}.{EXTENSION}")), b"").unwrap();
+        }
+        let names = |prefix| {
+            dataset_files(&dir, Some(prefix))
+                .iter()
+                .filter_map(|p| Some(p.file_stem()?.to_str()?.to_owned()))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(names("main"), ["main-0000", "main-0001"]);
+        assert_eq!(names("main-2"), ["main-2-0000"]);
+        assert_eq!(dataset_files(&dir, None).len(), 5);
     }
 
     #[test]

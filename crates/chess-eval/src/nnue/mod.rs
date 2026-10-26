@@ -45,6 +45,10 @@ use thiserror::Error;
 
 use crate::{Evaluator, Score};
 
+mod simd;
+
+use simd::Row;
+
 /// Number of input features per perspective.
 pub const INPUTS: usize = 768;
 /// Width of the feature transformer (per perspective).
@@ -302,59 +306,49 @@ impl NnueEval {
 /// Feature transformer outputs of one position, for both perspectives
 /// (indexed by `Color::index`).
 #[derive(Clone)]
-pub struct Accumulator([[i16; HIDDEN]; 2]);
+pub struct Accumulator([Row; 2]);
 
-/// Accumulators along the line being searched; the last one is the current position's.
+/// Accumulators along the line being searched, root first. Slots past `ply`
+/// belong to lines already left: they are overwritten, never reallocated.
 #[derive(Clone)]
 pub struct NnueState {
     stack: Vec<Accumulator>,
+    ply: usize,
 }
 
 impl NnueState {
     fn top(&self) -> Option<&Accumulator> {
-        self.stack.last()
+        self.stack.get(self.ply)
     }
 }
 
 impl NnueWeights {
-    fn row(&self, feature: usize) -> &[i16] {
-        &self.ft_weights[feature * HIDDEN..(feature + 1) * HIDDEN]
+    fn row(&self, feature: usize) -> &Row {
+        &self.ft_weights.as_chunks::<HIDDEN>().0[feature]
     }
 
     /// Accumulators of `pos`, computed from scratch.
     fn refresh(&self, pos: &Position) -> Accumulator {
-        let mut acc = [[0_i16; HIDDEN]; 2];
+        let bias = self.ft_bias.as_chunks::<HIDDEN>().0[0];
+        let mut acc = Accumulator([bias; 2]);
         for perspective in Color::ALL {
-            let values = &mut acc[perspective.index()];
-            values.copy_from_slice(&self.ft_bias);
-            for feature in active_features(pos, perspective) {
-                for (a, &w) in values.iter_mut().zip(self.row(feature)) {
-                    *a = a.wrapping_add(w);
-                }
-            }
+            let rows: Vec<&Row> = active_features(pos, perspective)
+                .map(|feature| self.row(feature))
+                .collect();
+            simd::update(&mut acc.0[perspective.index()], &bias, &rows, &[]);
         }
-        Accumulator(acc)
+        acc
     }
 
-    /// Output layer on accumulators, for `side_to_move`.
+    /// Output layer on accumulators, for `side_to_move`. Same arithmetic as
+    /// [`evaluate`](Self::evaluate): each half is exact in an `i32`.
     fn output(&self, acc: &Accumulator, side_to_move: Color) -> Score {
-        let halves = [
-            &acc.0[side_to_move.index()],
-            &acc.0[(!side_to_move).index()],
-        ];
-        // Same arithmetic as `evaluate`: each half fits an i32, the total an i64.
-        let mut sum = i64::from(self.out_bias);
-        for (half, weights) in halves
-            .into_iter()
-            .zip(self.out_weights.as_chunks::<HIDDEN>().0)
-        {
-            sum += i64::from(
-                half.iter()
-                    .zip(weights)
-                    .map(|(&a, &w)| i32::from(a).clamp(0, QA) * i32::from(w))
-                    .sum::<i32>(),
-            );
-        }
+        let [us, them] = &self.out_weights.as_chunks::<HIDDEN>().0[..2] else {
+            return 0;
+        };
+        let sum = i64::from(self.out_bias)
+            + i64::from(simd::crelu_dot(&acc.0[side_to_move.index()], us))
+            + i64::from(simd::crelu_dot(&acc.0[(!side_to_move).index()], them));
         (sum * i64::from(SCALE) / i64::from(QA * QB)) as Score
     }
 }
@@ -439,40 +433,45 @@ impl Evaluator for NnueEval {
     fn new_state(&self, pos: &Position) -> NnueState {
         let mut stack = Vec::with_capacity(256);
         stack.push(self.weights.refresh(pos));
-        NnueState { stack }
+        NnueState { stack, ply: 0 }
     }
 
     fn on_make(&self, state: &mut NnueState, before: &Position, mv: Move) {
-        let Some(mut acc) = state.top().cloned() else {
-            state.stack.push(self.weights.refresh(before));
-            return;
-        };
-        if !mv.is_null() {
-            let delta = move_delta(before, mv);
-            for perspective in Color::ALL {
-                let values = &mut acc.0[perspective.index()];
-                for &(piece, square) in delta.removed() {
-                    let row = self.weights.row(feature_index(perspective, piece, square));
-                    for (a, &w) in values.iter_mut().zip(row) {
-                        *a = a.wrapping_sub(w);
-                    }
-                }
-                for &(piece, square) in delta.added() {
-                    let row = self.weights.row(feature_index(perspective, piece, square));
-                    for (a, &w) in values.iter_mut().zip(row) {
-                        *a = a.wrapping_add(w);
-                    }
-                }
-            }
+        let ply = state.ply;
+        if state.stack.len() <= ply + 1 {
+            state.stack.push(Accumulator([[0; HIDDEN]; 2]));
         }
-        state.stack.push(acc);
+        state.ply = ply + 1;
+        // `ply < stack.len() - 1`: the parent and the child slot both exist.
+        let (line, next) = state.stack.split_at_mut(ply + 1);
+        let (parent, child) = (&line[ply], &mut next[0]);
+        if mv.is_null() {
+            child.clone_from(parent);
+            return;
+        }
+        let delta = move_delta(before, mv);
+        for perspective in Color::ALL {
+            let rows = |pieces: &[(Piece, Square)]| {
+                let mut rows = [self.weights.row(0); 2];
+                for (row, &(piece, square)) in rows.iter_mut().zip(pieces) {
+                    *row = self.weights.row(feature_index(perspective, piece, square));
+                }
+                rows
+            };
+            let (added, removed) = (rows(delta.added()), rows(delta.removed()));
+            let p = perspective.index();
+            simd::update(
+                &mut child.0[p],
+                &parent.0[p],
+                &added[..delta.n_added],
+                &removed[..delta.n_removed],
+            );
+        }
     }
 
     fn on_unmake(&self, state: &mut NnueState) {
-        // The root accumulator is never popped by a balanced search.
-        if state.stack.len() > 1 {
-            state.stack.pop();
-        }
+        // The root accumulator is never left by a balanced search.
+        state.ply = state.ply.saturating_sub(1);
     }
 
     fn evaluate_incremental(&self, state: &NnueState, pos: &Position) -> Score {
@@ -650,7 +649,7 @@ mod tests {
             let mut pos = Position::from_fen(fen).unwrap();
             let mut state = eval.new_state(&pos);
             check_incremental(&eval, &mut state, &mut pos, 3, &mut 42);
-            assert_eq!(state.stack.len(), 1, "unbalanced stack after {fen}");
+            assert_eq!(state.ply, 0, "unbalanced stack after {fen}");
         }
     }
 

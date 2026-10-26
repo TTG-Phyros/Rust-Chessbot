@@ -13,6 +13,8 @@ import type { PgnExportRequest } from './generated/PgnExportRequest';
 import type { PgnExportResponse } from './generated/PgnExportResponse';
 import type { PgnImportResponse } from './generated/PgnImportResponse';
 import type { PositionView } from './generated/PositionView';
+import type { StartTrainingRequest } from './generated/StartTrainingRequest';
+import type { TrainingView } from './generated/TrainingView';
 
 /** Error raised when the server answers with a non-2xx status. */
 export class ApiError extends Error {
@@ -67,4 +69,30 @@ export const api = {
 
   /** A game as PGN text. */
   exportPgn: (body: PgnExportRequest) => post<PgnExportResponse>('/pgn/export', body),
+
+  /** Training progress: daemon state, run status, loss and Elo curves. */
+  training: (signal?: AbortSignal) =>
+    request<TrainingView>('/training', { signal: signal ?? null }),
+
+  /** Starts the self-play + training pipeline (409 if already running). */
+  startTraining: (body: StartTrainingRequest) => command('/training/start', body),
+
+  /** Stops the pipeline after its current step (it checkpoints first). */
+  stopTraining: () => command('/training/stop', {}),
 };
+
+/** POST answered with an empty body (202 Accepted). */
+async function command(path: string, body: unknown): Promise<void> {
+  const response = await fetch(`/api${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const error: unknown = await response.json().catch(() => null);
+    throw new ApiError(
+      response.status,
+      isErrorResponse(error) ? error.error : `HTTP ${response.status}`,
+    );
+  }
+}

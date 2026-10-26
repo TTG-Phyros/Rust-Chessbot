@@ -7,6 +7,7 @@ import type { GameRequest } from './generated/GameRequest';
 import type { HealthResponse } from './generated/HealthResponse';
 import type { PositionView } from './generated/PositionView';
 import type { ServerMessage } from './generated/ServerMessage';
+import type { TrainingView } from './generated/TrainingView';
 import { type ServerSocket, type SocketStatus, connectServerSocket } from './socket';
 
 export type HealthState =
@@ -178,3 +179,47 @@ export function useAnalysis(): AnalysisState & {
 }
 
 export { ApiError };
+
+const TRAINING_POLL_MS = 3_000;
+
+export type TrainingState = {
+  view: TrainingView | null;
+  error: string | null;
+  /** Fetches again right away (after start/stop). */
+  refresh: () => void;
+};
+
+/** Polls `GET /api/training`. */
+export function useTraining(): TrainingState {
+  const [state, setState] = useState<{ view: TrainingView | null; error: string | null }>({
+    view: null,
+    error: null,
+  });
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const poll = () => {
+      api
+        .training(controller.signal)
+        .then((view) => {
+          setState({ view, error: null });
+        })
+        .catch((error: unknown) => {
+          if (controller.signal.aborted) return;
+          setState((previous) => ({ ...previous, error: errorMessage(error) }));
+        });
+    };
+    poll();
+    const timer = setInterval(poll, TRAINING_POLL_MS);
+    return () => {
+      clearInterval(timer);
+      controller.abort();
+    };
+  }, [tick]);
+
+  const refresh = useCallback(() => {
+    setTick((value) => value + 1);
+  }, []);
+  return { ...state, refresh };
+}

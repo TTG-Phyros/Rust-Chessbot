@@ -20,3 +20,11 @@ thiserror = { workspace = true, optional = true }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+
+[[bench]]
+name = "nnue"
+harness = false
+required-features = ["nnue"]

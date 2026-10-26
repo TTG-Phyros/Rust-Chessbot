@@ -11,6 +11,8 @@ import {
   formatParam,
   nameError,
   paramError,
+  randomName,
+  randomParams,
 } from './params';
 
 type Drafts = Record<NumericParam, string>;
@@ -94,6 +96,12 @@ export function NetworkForm({
     !name || nameProblem !== null || taken || Object.values(fieldErrors).some((e) => e !== null);
   const sources = networks.filter((network) => network.name !== name);
 
+  // Draws from the current values (valid or not, the drawn ones replace them).
+  const randomize = () => {
+    setDrafts(toDrafts(randomParams({ ...values, datasetsFrom })));
+    if (!name) setName(randomName());
+  };
+
   const submit = async (start: boolean) => {
     setBusy(true);
     setError(null);
@@ -164,6 +172,14 @@ export function NetworkForm({
               ))}
           </select>
         </label>
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button onClick={randomize}>Hyperparamètres aléatoires</Button>
+        <span className="text-xs text-slate-500">
+          Tire au hasard les nœuds de self-play, le taux d’apprentissage et sa décroissance, le
+          poids du résultat, la taille de batch et la réutilisation, dans des plages raisonnables ;
+          la durée et la mesure ne changent pas.
+        </span>
       </div>
 
       {PARAM_GROUPS.map((group) => (

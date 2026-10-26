@@ -42,6 +42,7 @@ impl Default for EvaluationConfig {
 pub(crate) fn run(
     exports: Receiver<(PathBuf, u64)>,
     config: &EvaluationConfig,
+    run: &str,
     metrics: &Metrics,
     stop: &StopFlag,
 ) {
@@ -84,7 +85,7 @@ pub(crate) fn run(
         metrics.event(
             "match",
             json!({
-                "superbatch": superbatch, "opponent": "classic", "file": path,
+                "run": run, "superbatch": superbatch, "opponent": "classic", "file": path,
                 "games": result.games(), "wins": result.wins, "draws": result.draws,
                 "losses": result.losses, "elo": elo, "elo_error": error,
             }),
@@ -121,7 +122,7 @@ mod tests {
             threads: 1,
             enabled: true,
         };
-        run(rx, &config, &metrics, &StopFlag::new());
+        run(rx, &config, "test", &metrics, &StopFlag::new());
 
         // Only the latest export (superbatch 2) was measured.
         let status = metrics.status();

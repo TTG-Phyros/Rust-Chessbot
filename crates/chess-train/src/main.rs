@@ -364,8 +364,9 @@ fn run_train(config: &Config, preference: DevicePreference, resume: bool) -> Res
     };
     let state = std::thread::scope(|scope| {
         let (metrics, stop) = (&metrics, &stop);
-        let evaluator =
-            scope.spawn(move || evaluation::run(exports_rx, &config.evaluation, metrics, stop));
+        let evaluator = scope.spawn(move || {
+            evaluation::run(exports_rx, &config.evaluation, &config.run, metrics, stop)
+        });
         let state = trainer.train(Box::new(move || files.clone()), resume);
         drop(trainer);
         let _ = evaluator.join();

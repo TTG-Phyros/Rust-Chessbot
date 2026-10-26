@@ -48,7 +48,9 @@ pub(crate) fn run(
         // Measure each export against the classical evaluation.
         let evaluator = {
             let stop = stop.clone();
-            scope.spawn(move || evaluation::run(exports_rx, &config.evaluation, metrics, &stop))
+            scope.spawn(move || {
+                evaluation::run(exports_rx, &config.evaluation, &config.run, metrics, &stop)
+            })
         };
 
         let producer = {

@@ -1,19 +1,70 @@
 # chess-bot
 
-Moteur d'échecs en Rust avec trois parties :
+Moteur d'échecs en Rust qui apprend en jouant contre lui-même :
 
-1. **Moteur** : bitboards, recherche alpha-beta, compatible UCI.
+1. **Moteur** : bitboards, recherche alpha-beta (PVS), évaluation NNUE incrémentale (AVX2), compatible UCI.
 2. **Entraînement** : self-play et entraînement d'un réseau NNUE avec [burn](https://burn.dev), sur GPU NVIDIA avec repli automatique sur le CPU.
-3. **Visualisation** : interface web (React + TypeScript) pour jouer, analyser et suivre l'entraînement.
+3. **Visualisation** : interface web (React + TypeScript) pour jouer, analyser et piloter l'entraînement.
 
-> **État : phase 6 sur 7.** Le moteur joue avec un réseau NNUE entraîné par self-play (repli sur PeSTO sans réseau) : génération de coups exacte, recherche alpha-beta, UCI complet. L'interface web permet de jouer, d'analyser, et de piloter et suivre l'entraînement (perte, Elo entre checkpoints). Voir [Feuille de route](#feuille-de-route).
+| Jouer | Analyser | Entraîner |
+| --- | --- | --- |
+| [![Jouer](docs/screenshots/play.png)](docs/screenshots/play.png) | [![Analyser](docs/screenshots/analysis.png)](docs/screenshots/analysis.png) | [![Entraîner](docs/screenshots/training.png)](docs/screenshots/training.png) |
 
-## Démarrage rapide
+## Sommaire
+
+- [Guide de démarrage](#guide-de-démarrage)
+- [Prérequis](#prérequis)
+- [Commandes](#commandes)
+- [Architecture](#architecture)
+- [Interface web et API](#interface-web)
+- [Entraînement (NNUE)](#entraînement-nnue)
+- [Performances](#performances)
+- [Utiliser le moteur dans une GUI](#utiliser-le-moteur-dans-une-gui-cute-chess-arena)
+- [Dépannage](#dépannage)
+
+## Guide de démarrage
+
+Seul Docker est nécessaire (voir [Prérequis](#prérequis) selon l'OS).
+
+**1. Lancer l'interface.**
 
 ```sh
-docker compose up --build        # UI + API sur http://localhost:8080
-just gpu-check                   # vérifie que le GPU est visible depuis Docker
+git clone <ce dépôt> chess-bot && cd chess-bot
+docker compose up --build
 ```
+
+Le premier build compile le workspace Rust et le front : il prend plusieurs minutes, les suivants réutilisent le cache. Ouvrez ensuite <http://localhost:8080>.
+
+**2. Jouer et analyser.** Sur la page **Jouer**, choisissez la couleur et le niveau, puis jouez en glisser-déposer ou clic-clic. La page **Analyse** importe une FEN ou un PGN et montre en direct l'évaluation, la ligne principale et le meilleur coup. Tant qu'aucun réseau n'a été entraîné, le moteur évalue avec PeSTO (tables pièce-case classiques).
+
+**3. Vérifier le GPU** (facultatif, NVIDIA seulement).
+
+```sh
+just gpu-check      # ou : docker compose --profile train run --rm --build train gpu-check
+```
+
+La commande affiche `nvidia-smi`, puis fait calculer burn sur le GPU et compare au CPU. Sans GPU, passez à l'étape suivante avec `train-cpu`.
+
+**4. Entraîner le réseau.** Arrêtez la pile (Ctrl+C), puis relancez-la avec le profil d'entraînement :
+
+```sh
+docker compose --profile train up --build        # GPU NVIDIA (repli CPU si aucun GPU visible)
+docker compose --profile train-cpu up --build    # sans CUDA (macOS, machines sans NVIDIA)
+```
+
+Le pipeline démarre seul :
+
+- le self-play produit des positions sur les cœurs CPU ;
+- l'entraînement commence après 2 millions de positions, soit quelques minutes ;
+- chaque export du réseau est mesuré contre PeSTO.
+
+La page **Entraînement** affiche la progression : perte, vitesse, VRAM, Elo. Elle permet aussi d'arrêter, de reprendre ou de repartir d'un réseau vierge.
+
+**5. Jouer contre le réseau.** Rien à faire : le serveur recharge `data/weights/main.nnue` à chaque export, et la tuile « Évaluation du moteur » passe de PeSTO à NNUE. La courbe d'Elo suit sa force par rapport à PeSTO. Sur la machine de référence, le réseau est au niveau de PeSTO dès les premiers exports et mesure +100 ± 83 Elo après 35 superbatchs, soit environ 30 minutes ; la capture ci-dessus vient de ce run. Avec 64 parties par mesure, l'intervalle reste large : `chess-train match` donne une mesure plus précise.
+
+**6. Arrêter et reprendre.** `docker compose --profile train stop` (ou le bouton « Arrêter ») termine l'étape en cours et écrit un checkpoint. Un `docker compose --profile train up` ultérieur reprend exactement où l'entraînement s'était arrêté. Tout ce qui compte se trouve dans `./data` (poids, checkpoints, métriques) et dans le volume Docker `datasets`.
+
+Le réseau entraîné est un fichier ordinaire : `data/weights/main.nnue` s'utilise aussi dans Cute Chess ou Arena (voir [Utiliser le moteur dans une GUI](#utiliser-le-moteur-dans-une-gui-cute-chess-arena)).
 
 ## Prérequis
 
@@ -37,14 +88,16 @@ Sous Windows : `winget install Rustlang.Rustup Casey.Just OpenJS.NodeJS.LTS`, pl
 | Commande | Effet |
 | --- | --- |
 | `docker compose up` / `just up` | serveur + UI sur <http://localhost:8080> |
-| `docker compose --profile train up` / `just train` | entraînement sur GPU (image CUDA) |
-| `docker compose --profile train-cpu up` / `just train-cpu` | entraînement sur CPU (image sans CUDA) |
-| `just gpu-check` | lance `nvidia-smi` dans un conteneur, puis un matmul et une rétropropagation burn sur le GPU, comparés au CPU |
+| `docker compose --profile train up` / `just train` | UI + entraînement sur GPU (image CUDA) |
+| `docker compose --profile train-cpu up` / `just train-cpu` | UI + entraînement sur CPU (image sans CUDA) |
+| `just train-run <commande>` | une commande `chess-train` ponctuelle dans l'image CUDA (`match`, `export`…) |
+| `just gpu-check` | `nvidia-smi` dans un conteneur, puis un matmul et une rétropropagation burn sur le GPU, comparés au CPU |
 | `just web-dev` | Vite (rechargement à chaud) + `chess-server` natif, sans reconstruire d'image |
-| `just test` / `just lint` | tests et vérifications de la CI (rustfmt, clippy `-D warnings`, ESLint, tsc, Prettier) |
+| `just test` / `just lint` / `just ci` | tests, vérifications de la CI (rustfmt, clippy `-D warnings`, ESLint, tsc, Prettier), ou les deux |
 | `just perft` | perft profond en release (positions CPW + cas limites, ~760M nœuds, quelques secondes) |
-| `just play` | moteur UCI sur stdin/stdout |
+| `just bench` | benchmarks criterion : génération de coups, recherche, inférence NNUE |
 | `just engine-bench` | signature et vitesse (nœuds/s) du moteur, via `chess-uci bench` |
+| `just play` | moteur UCI sur stdin/stdout |
 | `just gen-types` | régénère les types TypeScript depuis les structs Rust |
 
 ## Architecture
@@ -52,17 +105,38 @@ Sous Windows : `winget install Rustlang.Rustup Casey.Just OpenJS.NodeJS.LTS`, pl
 ```
 crates/
   chess-core/    plateau, bitboards, coups, FEN/PGN, Zobrist (aucune I/O, aucune dépendance projet)
-  chess-eval/    trait Evaluator + évaluation classique + inférence NNUE (CPU/SIMD)
+  chess-eval/    trait Evaluator + évaluation classique (PeSTO) + inférence NNUE (AVX2 / portable)
   chess-search/  alpha-beta générique sur Evaluator (ne voit que le trait)
   chess-uci/     binaire UCI
-  chess-train/   binaire : self-play, entraînement burn (CUDA ou CPU), export des poids
+  chess-train/   binaire : self-play, entraînement burn (CUDA ou CPU), matchs, démon de contrôle
   chess-server/  binaire : API REST (OpenAPI) + WebSocket (axum)
 web/             React + TypeScript + Vite + Tailwind
 docker/          Dockerfiles (engine, train, web) + nginx.conf
 data/            poids, checkpoints, métriques (ignoré par git)
 ```
 
+```mermaid
+flowchart LR
+  subgraph train["conteneur train (profil train / train-cpu)"]
+    SP["self-play<br/>(cœurs CPU)"] -->|datasets CBDS| DS[("volume datasets")]
+    DS --> TR["entraînement burn<br/>(GPU ou CPU)"]
+    TR -->|export CBNN| W[("data/weights/main.nnue")]
+    W --> SP
+    W --> EV["match contre PeSTO"]
+    CTL["démon de contrôle :4000"]
+  end
+  W --> SRV
+  subgraph stack["docker compose up"]
+    WEB["nginx + UI React :8080"] -->|"/api, /ws"| SRV["chess-server :3000"]
+  end
+  SRV -->|start / stop| CTL
+  SRV -->|lit| M[("data/metrics")]
+  TR --> M
+  EV --> M
+```
+
 - **Règles de dépendance.** `chess-search` dépend de `chess-eval` avec `default-features = false` et ne voit donc que le trait `Evaluator`. La CI lance `cargo check -p chess-search` seul pour le garantir. Seuls les binaires font de l'I/O, du logging et de la configuration.
+- **Évaluation incrémentale.** Le trait `Evaluator` porte un état propre à chaque recherche, mis à jour à chaque make/unmake. Pour le NNUE, c'est une pile d'accumulateurs `i16` : chaque coup écrit l'accumulateur de l'enfant à partir de celui du parent, en ajoutant et retirant les lignes de poids des pièces déplacées. Les noyaux AVX2 sont choisis à l'exécution ; une version portable, découpée de la même façon, est vectorisée par le compilateur (SSE2, NEON). Les deux donnent des résultats identiques au bit près, ce que vérifient les tests.
 - **Types partagés.** Les structs de l'API dérivent `ts_rs::TS`. `cargo test` écrit leur équivalent TypeScript dans `web/src/api/generated/`, et la CI échoue si ces fichiers ne sont pas à jour.
 - **Une seule origine.** Nginx (Docker) ou Vite (dev) sert l'UI et proxifie `/api` et `/ws` vers `chess-server`. Il n'y a donc pas de CORS.
 - **GPU.** `chess-train` est compilé avec la feature `cuda` dans l'image GPU. Au démarrage, il cherche le pilote CUDA sans risquer de panic, puis utilise le GPU, ou le CPU (backend burn `flex`) s'il n'en trouve pas. Le device retenu est toujours affiché. cubecl compile les kernels lui-même (LLVM → PTX) : ni nvcc ni NVRTC ne sont nécessaires, et le build CUDA se fait dans l'image `nvidia/cuda:*-base`. L'image `devel` reste possible avec `--build-arg CUDA_BUILD_FLAVOR=devel`.
@@ -128,11 +202,11 @@ Le service `train` lance le **démon de contrôle** (`chess-train serve --autost
 
 1. **Self-play.** Le moteur joue contre lui-même (rayon, un searcher par thread) après 6 à 10 coups aléatoires, à 5 000 nœuds par coup, **avec le dernier réseau exporté**. Il le recharge dès qu'un nouvel export paraît, et utilise PeSTO tant qu'il n'y en a pas. On ne garde que les positions calmes : pas d'échec, meilleur coup non tactique. Une partie s'arrête par adjudication quand les deux camps s'accordent sur le résultat.
 2. **Dataset.** Chaque position est un enregistrement fixe de 32 octets (format `CBDS` v1, décrit dans `crates/chess-train/src/dataset/mod.rs`), écrit par fichiers d'un million de positions publiés de façon atomique. Les datasets vivent dans le volume Docker `datasets`.
-3. **Entraînement.** Les fichiers sont **lus en continu depuis le disque**, par blocs mélangés, sans jamais tenir entièrement en mémoire. Batchs de 16 384 positions (environ 1,4 Go de VRAM sur la RTX 4060), optimiseur AdamW, perte `(σ(sortie) − cible)²` où la cible mélange le score de recherche et le résultat de la partie.
+3. **Entraînement.** Les fichiers sont **lus en continu depuis le disque**, par blocs mélangés, sans jamais tenir entièrement en mémoire. Les batchs de 16 384 positions arrivent sous forme **creuse** : 32 indices de features par position, au lieu de 768 flottants. Les entrées one-hot sont reconstruites sur le GPU par un scatter. Optimiseur AdamW, perte `(σ(sortie) − cible)²`, où la cible mélange le score de recherche et le résultat de la partie. Les poids restent bornés pour que la quantification ne puisse pas déborder. L'entraînement va bien plus vite que le self-play (environ 1,5 M positions/s contre 10 000/s). Le pipeline borne donc la réutilisation : chaque position sert en moyenne au plus 30 fois (`max_reuse`), et au-delà l'entraînement attend de nouvelles parties au lieu de sur-apprendre les anciennes.
 4. **Checkpoints.** À chaque superbatch (200 pas), `data/checkpoints/<run>/` reçoit les poids flottants avec leurs identifiants de paramètres, l'état AdamW et la progression. La reprise est exacte et se fait par défaut ; l'option `--fresh` (ou le bouton « Nouveau réseau ») repart de zéro.
 5. **Export.** Les poids quantifiés au format `CBNN` v1 attendu par `chess-eval` (décrit dans `crates/chess-eval/src/nnue/mod.rs`) vont dans `data/weights/<run>.nnue`, avec un instantané `data/weights/<run>/sbNNNNN.nnue` tous les 5 superbatchs. **Le serveur recharge ce fichier automatiquement** : dès le premier export, on joue et on analyse contre le réseau.
 6. **Elo.** Chaque export est mesuré contre l'évaluation classique (PeSTO), en 64 parties jouées par paires couleurs inversées, sur 2 threads. On obtient la courbe d'Elo entre checkpoints.
-7. **Métriques.** `data/metrics/events.jsonl` reçoit une ligne par événement (perte, vitesse, VRAM, checkpoints, exports, matchs) et `data/metrics/status.json` donne l'état courant. La page Entraînement les affiche : courbes de perte et d'Elo, parties générées, device, VRAM.
+7. **Métriques.** `data/metrics/events.jsonl` reçoit une ligne par événement (perte, vitesse, VRAM, checkpoints, exports, matchs) et `data/metrics/status.json` donne l'état courant. La page Entraînement les affiche.
 
 Les étapes sont aussi disponibles séparément, en Docker (`just train-run <commande>`) ou en natif :
 
@@ -149,10 +223,28 @@ chess-train serve --port 4000                  # démon de contrôle (GET /statu
 
 La configuration se fait par `chess-train.toml` (voir [`chess-train.example.toml`](chess-train.example.toml)), par les variables `CHESS_TRAIN_*` (`CHESS_TRAIN_SELFPLAY__NODES=8000`) ou par les options de la ligne de commande. `CHESS_TRAIN_RUN` sépare plusieurs expériences ; le serveur suit alors `data/weights/<run>.nnue`.
 
-**Ordres de grandeur sur la machine de référence (8 cœurs, RTX 4060).**
-- Self-play : environ 136 parties/s avec PeSTO, moins avec le NNUE.
-- Entraînement : environ 580 000 positions/s sur GPU seul, environ 330 000/s quand le self-play tourne en parallèle, contre environ 100 000/s sur CPU.
-- Recherche : environ 5,8M nœuds/s avec PeSTO, environ 3M nœuds/s avec le NNUE (sans SIMD explicite pour l'instant).
+## Performances
+
+Mesures sur la machine de référence : Intel i7-9700KF (8 cœurs, AVX2), RTX 4060 8 Go, Windows 11 + Docker Desktop.
+
+| Mesure | Valeur |
+| --- | --- |
+| Génération de coups (perft, release) | ~150M nœuds/s (perft 6 depuis la position initiale : 119M nœuds en 0,8 s) |
+| Recherche avec PeSTO (`chess-uci bench 10`) | 5,5M nœuds/s |
+| Recherche avec le NNUE | 4,2M nœuds/s (2,5M avant la vectorisation explicite) |
+| Inférence NNUE : couche de sortie / mise à jour d'un coup calme | 21 ns / 43 ns (79 ns / 74 ns en scalaire) |
+| Self-play seul (PeSTO, 5 000 nœuds par coup, 8 cœurs) | ~136 parties/s, ~10 000 positions/s ; ~67 parties/s dans le pipeline, qui partage la machine avec l'entraînement et les matchs |
+| Entraînement GPU seul (batchs de 16 384) | ~1,5M positions/s (~530 000 avec les entrées denses) |
+| Entraînement CPU (`train-cpu`) | ~100 000 positions/s |
+
+Ce qui a compté, dans l'ordre :
+
+1. Couche de sortie en AVX2 (`madd` sur les accumulateurs bornés).
+2. Mise à jour des accumulateurs par tuiles de 8 registres. La première version AVX2 bouclait sur les lignes pour chaque registre : elle était limitée par les branches et ne gagnait presque rien.
+3. Accumulateur enfant écrit directement depuis le parent, sans copie préalable.
+4. Entrées creuses à l'entraînement : environ 4 Mo transférés par batch au lieu d'environ 100 Mo.
+
+`just bench` reproduit les mesures criterion. `just engine-bench` donne la vitesse et la signature de la recherche : le nombre de nœuds ne change pas avec les optimisations de l'évaluation, qui sont exactes.
 
 ## Utiliser le moteur dans une GUI (Cute Chess, Arena)
 
@@ -161,7 +253,7 @@ cargo build --release -p chess-uci
 # binaire : target/release/chess-uci (chess-uci.exe sous Windows)
 ```
 
-- **Cute Chess** : *Tools → Settings → Engines → +*. Mettre le chemin du binaire dans *Command* et choisir le protocole *UCI*. Toutes les cadences sont gérées : temps + incrément, nombre de coups (`movestogo`), temps fixe par coup, profondeur ou nombre de nœuds fixes.
+- **Cute Chess** : *Tools → Settings → Engines → +*. Mettre le chemin du binaire dans *Command* et choisir le protocole *UCI*. Toutes les cadences sont gérées : temps + incrément, nombre de coups (`movestogo`), temps fixe par coup, profondeur ou nombre de nœuds fixes. Pour jouer avec le réseau entraîné, régler l'option `EvalFile` sur `data/weights/main.nnue` (chemin absolu).
 - **Arena** : *Engines → Install New Engine*, sélectionner le binaire, choisir *UCI*.
 
 Options UCI :
@@ -177,10 +269,21 @@ La recherche tourne dans un thread séparé : `stop` et `isready` répondent pen
 
 Commandes de débogage :
 - `go perft <n>` : nombre de nœuds par coup puis total (format Stockfish) ;
-- `d` : affiche le plateau et la FEN ;
+- `d` : affiche le plateau, la FEN et l'évaluation active ;
 - `bench [profondeur]` (ou `chess-uci bench [profondeur]` en ligne de commande) : recherche à profondeur fixe sur 12 positions. Le nombre de nœuds sert de signature : il change dès que la recherche ou l'évaluation change.
 
 Le moteur peut aussi être piloté par script : `printf "position startpos\ngo depth 10\n" | chess-uci` affiche le résultat complet avant de quitter.
+
+## Dépannage
+
+| Symptôme | Cause et solution |
+| --- | --- |
+| La page Entraînement indique « Service arrêté » | La pile tourne sans le profil d'entraînement : relancer avec `docker compose --profile train up` (ou `train-cpu`). |
+| `device: CPU` alors qu'un GPU NVIDIA est présent | Docker ne voit pas le GPU. `docker run --rm --gpus all nvidia/cuda:12.9.1-base-ubuntu24.04 nvidia-smi` doit afficher la carte. Sinon : pilote Windows à jour et backend WSL2 (Docker Desktop), ou NVIDIA Container Toolkit (Linux). |
+| Build interrompu par `tls: bad record MAC`, `unexpected EOF` ou un téléchargement GitHub échoué | Réseau instable sur un gros téléchargement. Relancer la commande : les images et les dépendances déjà téléchargées restent en cache, et le LLVM de cubecl est récupéré avec reprise. Une image de base récalcitrante se télécharge à part avec `docker pull`. |
+| Port 8080 déjà utilisé | `CHESS_WEB_PORT=8081 docker compose up`. |
+| Fichiers de `./data` appartenant à un autre utilisateur (Linux) | `export CHESS_UID=$(id -u) CHESS_GID=$(id -g)` avant `docker compose`. |
+| Repartir de zéro | Bouton « Nouveau réseau » (garde les datasets), ou `docker compose down`, puis `docker volume rm chess-bot_datasets` et suppression de `data/checkpoints`, `data/weights` et `data/metrics`. |
 
 ## Feuille de route
 
@@ -190,7 +293,9 @@ Le moteur peut aussi être piloté par script : `printf "position startpos\ngo d
 - [x] **Phase 4** : `chess-server` (API REST sans état, analyse en direct par WebSocket, OpenAPI) + front : modes jeu et analyse
 - [x] **Phase 5** : `chess-train` : self-play multithread, dataset binaire en streaming, entraînement NNUE (burn, GPU + repli CPU), checkpoints et reprise, export quantifié, métriques, pipeline producteur/consommateur
 - [x] **Phase 6** : NNUE incrémental dans `chess-eval` (chargé au runtime, repli PeSTO), mode Entraînement de l'UI (démon de contrôle, courbes), matchs entre versions avec SPRT et suivi de l'Elo
-- [ ] **Phase 7** : optimisations (profiling, SIMD), README final
+- [x] **Phase 7** : profiling et benchmarks NNUE, noyaux AVX2 (repli portable), entrées creuses à l'entraînement, guide de démarrage et captures
+
+Pistes au-delà : buckets de rois et couche cachée supplémentaire, recherche multithread (Lazy SMP), tablebases de finales.
 
 ## Licence
 

@@ -163,12 +163,12 @@ Le niveau de log se règle avec `RUST_LOG` (ex. `RUST_LOG=debug`).
 
 - **Jouer** : échiquier en glisser-déposer ou clic-clic, choix de la couleur (blancs, noirs, aléatoire), niveau réglable en profondeur (1 à 20) ou en temps par coup (0,1 à 10 s), annulation de coup, import/export FEN et PGN.
 - **Analyse** : barre d'évaluation, score, ligne principale en SAN, flèche du meilleur coup, infos de recherche en direct (profondeur, nœuds, vitesse, remplissage de la table). L'analyse est relancée à chaque coup. On navigue dans la partie avec les flèches ← → (Origine et Fin pour aller au début ou à la fin), ou en cliquant dans la liste des coups.
-- **Entraînement** : liste des réseaux de neurones, avec leurs hyperparamètres et leur meilleur Elo. « Nouveau réseau » ouvre un formulaire : nom, hyperparamètres (pré-remplis avec les valeurs par défaut ou celles d'un autre réseau) et réseaux dont on réutilise les parties. Pour le réseau sélectionné, on trouve :
+- **Entraînement** : liste des réseaux de neurones, avec leurs hyperparamètres et leur meilleur Elo. « Nouveau réseau » ouvre un formulaire : nom, hyperparamètres (pré-remplis avec les valeurs par défaut ou celles d'un autre réseau, ou **tirés au hasard** avec « Hyperparamètres aléatoires ») et réseaux dont on réutilise les parties. Pour le réseau sélectionné, on trouve :
   - son état (device, phase, parties, positions, superbatchs, perte, vitesse, VRAM) ;
   - son **top 5** des snapshots, chacun sauvegardable comme bot ;
   - ses courbes de perte et d'Elo contre PeSTO ;
   - les boutons « Démarrer / reprendre », « Arrêter », « Repartir de zéro » et « Supprimer ».
-- **Arène** : les bots sauvegardés (plus PeSTO, toujours disponible) et les **tournois** toutes-rondes entre eux : choix des participants, des parties par paire et des nœuds par coup. Un tournoi affiche sa progression en direct, un classement Elo, une table croisée et l'historique des tournois.
+- **Arène** : les bots sauvegardés, plus PeSTO et **Stockfish niveaux 1 à 10**, et les **tournois** toutes-rondes entre eux : choix des participants, des parties par paire et des nœuds par coup. Un tournoi affiche sa progression en direct, un classement Elo, une table croisée et l'historique des tournois.
 
 Les boutons de ces deux pages passent par le démon de contrôle : il faut le profil `train` ou `train-cpu`. Sans lui, réseaux, bots et résultats restent consultables.
 
@@ -228,10 +228,11 @@ chess-train selfplay --games 10000             # génère un dataset (--network 
 chess-train train --superbatches 50            # entraîne sur tout le dossier de datasets
 chess-train export --out net.nnue              # quantifie le dernier checkpoint
 chess-train match new.nnue old.nnue --games 400 --sprt --elo0 0 --elo1 10
+chess-train match data/weights/main.nnue stockfish-5 --games 100
 chess-train serve --port 4000                  # démon de contrôle (GET /status, POST /start, POST /stop)
 ```
 
-`match` joue des paires de parties sur la même ouverture aléatoire, couleurs inversées, à nombre de nœuds fixe. Il affiche l'Elo avec son intervalle à 95 % et la LOS. Avec `--sprt`, il s'arrête dès que le test conclut (approximation normale du modèle trinomial, comme fishtest ; α = β = 0,05 par défaut). `classic` désigne l'évaluation PeSTO.
+`match` joue des paires de parties sur la même ouverture aléatoire, couleurs inversées, à nombre de nœuds fixe. Il affiche l'Elo avec son intervalle à 95 % et la LOS. Avec `--sprt`, il s'arrête dès que le test conclut (approximation normale du modèle trinomial, comme fishtest ; α = β = 0,05 par défaut). `classic` désigne l'évaluation PeSTO, et `stockfish-1` à `stockfish-10` les niveaux de Stockfish.
 
 La configuration se fait par `chess-train.toml` (voir [`chess-train.example.toml`](chess-train.example.toml)), par les variables `CHESS_TRAIN_*` (`CHESS_TRAIN_SELFPLAY__NODES=8000`) ou par les options de la ligne de commande.
 
@@ -244,6 +245,16 @@ La configuration se fait par `chess-train.toml` (voir [`chess-train.example.toml
   - **Réutiliser les parties de** : le nouveau réseau s'entraîne aussi sur les parties d'autres réseaux. Il démarre ainsi sans attendre 2 M positions de son propre self-play, ce qui est pratique pour comparer des hyperparamètres d'entraînement sur les mêmes données.
 - **Bot.** Un bot est un snapshot copié dans `data/bots/<nom>.nnue`, avec sa description (`<nom>.json` : réseau d'origine, superbatch, Elo mesuré, hyperparamètres). Il ne bouge plus, même si le réseau continue de s'entraîner ou est supprimé.
 - **Tournoi.** Chaque paire de bots joue les mêmes ouvertures aléatoires avec les deux couleurs, au même nombre de nœuds par coup : seule l'évaluation les distingue. Le classement ajuste un Elo sur toutes les parties (modèle de Bradley-Terry), avec PeSTO à 0 quand il participe. Les résultats sont écrits au fil des parties dans `data/tournaments/<id>.json`. Un tournoi peut tourner pendant un entraînement : il prend alors du CPU au self-play (réglable avec « Threads »).
+- **Hyperparamètres aléatoires.** Le bouton tire au hasard des valeurs dans des plages raisonnables : nœuds de self-play entre 2 000 et 20 000 et taux d'apprentissage entre 1e-4 et 3e-3 (tous deux en échelle log), décroissance du taux, poids du résultat, taille de batch et réutilisation. La durée, le seuil de démarrage et la mesure ne changent pas. On peut ainsi lancer plusieurs réseaux différents, sauvegarder leurs meilleurs snapshots et les départager en tournoi.
+- **Stockfish 1 à 10.** Stockfish 19 (inclus dans les images Docker) joue à un niveau bridé, à la manière de lichess. Il ne joue pas aux nœuds du tournoi, mais avec un niveau de jeu (`Skill Level`, qui choisit parfois exprès un coup plus faible), une profondeur et un temps par coup qui augmentent ensemble. Les niveaux 1 à 8 cherchent aussi profond et aussi longtemps que les 8 niveaux de lichess ; 9 et 10 vont au-delà. Hors Docker, il faut indiquer le binaire avec `[arena] stockfish` (ou `CHESS_TRAIN_ARENA__STOCKFISH`) ; sans lui, les niveaux sont grisés.
+
+  | Niveau | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+  | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+  | Skill Level (0–20) | 0 | 2 | 4 | 6 | 8 | 10 | 13 | 16 | 18 | 20 |
+  | Profondeur max | 1 | 1 | 2 | 3 | 5 | 8 | 13 | 22 | 26 | 30 |
+  | Temps par coup | 50 ms | 100 ms | 150 ms | 200 ms | 300 ms | 400 ms | 500 ms | 1 s | 1,5 s | 2 s |
+
+  Comme repère, sur la machine de référence, `main` (sb305, 5 000 nœuds par coup) s'est classé entre Stockfish 3 et Stockfish 5 : environ +45 Elo, contre +105 pour le niveau 5 et +243 pour le niveau 7, PeSTO étant à 0. Ce n'est qu'une estimation sur 8 parties par paire.
 
 Au premier démarrage du démon, le top 5 des réseaux entraînés avant cette fonctionnalité est **reconstruit depuis l'historique des matchs**, et leurs autres snapshots mesurés sont supprimés. Pour tous les garder, il faut copier `data/weights/<run>/` ailleurs avant de mettre à jour.
 

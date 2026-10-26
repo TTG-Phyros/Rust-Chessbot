@@ -36,6 +36,12 @@ pub struct ServerConfig {
     pub max_searches: usize,
     /// Transposition table size of each search, in MiB.
     pub engine_hash_mb: usize,
+    /// Network used by the engine (reloaded when it changes); classical
+    /// evaluation while the file does not exist.
+    pub eval_file: PathBuf,
+    /// Base URL of the training control daemon (`chess-train serve`), e.g.
+    /// `http://trainer:4000`; training cannot be started from the UI without it.
+    pub trainer_url: Option<String>,
 }
 
 impl Default for ServerConfig {
@@ -46,6 +52,8 @@ impl Default for ServerConfig {
             log_format: LogFormat::Pretty,
             max_searches: std::thread::available_parallelism().map_or(2, std::num::NonZero::get),
             engine_hash_mb: 16,
+            eval_file: PathBuf::from("data/weights/main.nnue"),
+            trainer_url: None,
         }
     }
 }

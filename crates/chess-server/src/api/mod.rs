@@ -4,6 +4,7 @@ mod convert;
 pub mod error;
 mod game;
 mod health;
+mod training;
 pub mod types;
 mod ws;
 
@@ -18,11 +19,15 @@ use crate::AppState;
 #[derive(OpenApi)]
 #[openapi(
     info(title = "chess-bot API", description = "Play, analyse and monitor training."),
-    paths(health::health, game::position, game::engine_move, game::pgn_import, game::pgn_export),
+    paths(
+        health::health, game::position, game::engine_move, game::pgn_import, game::pgn_export,
+        training::training, training::engine, training::start, training::stop,
+    ),
     tags(
         (name = "system", description = "Server status"),
         (name = "game", description = "Positions, legal moves and PGN"),
-        (name = "engine", description = "Engine moves"),
+        (name = "engine", description = "Engine moves and evaluation"),
+        (name = "training", description = "NNUE training progress and control"),
     )
 )]
 pub struct ApiDoc;
@@ -42,6 +47,10 @@ pub fn router(state: AppState) -> Router {
         .route("/api/engine/move", post(game::engine_move))
         .route("/api/pgn/import", post(game::pgn_import))
         .route("/api/pgn/export", post(game::pgn_export))
+        .route("/api/engine", get(training::engine))
+        .route("/api/training", get(training::training))
+        .route("/api/training/start", post(training::start))
+        .route("/api/training/stop", post(training::stop))
         .route("/ws", get(ws::upgrade))
         .layer(TraceLayer::new_for_http())
         .with_state(state)

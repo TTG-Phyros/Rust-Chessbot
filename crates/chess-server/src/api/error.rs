@@ -23,6 +23,14 @@ impl ApiError {
         }
     }
 
+    /// The request clashes with the current state: 409.
+    pub fn conflict(message: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::CONFLICT,
+            message: message.into(),
+        }
+    }
+
     /// The server is too busy or shutting down: 503.
     pub fn unavailable(message: impl Into<String>) -> Self {
         Self {

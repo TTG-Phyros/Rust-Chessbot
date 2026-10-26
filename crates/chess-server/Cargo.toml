@@ -13,12 +13,13 @@ path = "src/main.rs"
 
 [dependencies]
 chess-core.workspace = true
-chess-eval = { workspace = true, features = ["classic"] }
+chess-eval = { workspace = true, features = ["classic", "nnue"] }
 chess-search.workspace = true
 anyhow.workspace = true
 axum.workspace = true
 figment.workspace = true
 futures-util.workspace = true
+reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

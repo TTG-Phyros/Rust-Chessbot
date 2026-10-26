@@ -8,6 +8,8 @@ use figment::Figment;
 use figment::providers::{Env, Format, Serialized, Toml};
 use serde::{Deserialize, Serialize};
 
+use crate::arena::ArenaConfig;
+use crate::evaluation::EvaluationConfig;
 use crate::selfplay::SelfplayConfig;
 use crate::trainer::TrainConfig;
 
@@ -29,6 +31,8 @@ pub(crate) struct Config {
     pub(crate) min_positions: u64,
     pub(crate) selfplay: SelfplayConfig,
     pub(crate) train: TrainConfig,
+    pub(crate) evaluation: EvaluationConfig,
+    pub(crate) arena: ArenaConfig,
 }
 
 impl Default for Config {
@@ -40,6 +44,8 @@ impl Default for Config {
             min_positions: 2_000_000,
             selfplay: SelfplayConfig::default(),
             train: TrainConfig::default(),
+            evaluation: EvaluationConfig::default(),
+            arena: ArenaConfig::default(),
         }
     }
 }

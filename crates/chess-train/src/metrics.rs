@@ -39,6 +39,10 @@ pub(crate) struct Status {
     pub(crate) positions_per_second: Option<f64>,
     pub(crate) vram_used_mb: Option<u64>,
     pub(crate) latest_weights: Option<String>,
+    /// Elo of the latest measured network against the classical evaluation.
+    pub(crate) elo: Option<f64>,
+    pub(crate) elo_error: Option<f64>,
+    pub(crate) elo_superbatch: Option<u64>,
 }
 
 pub(crate) struct Metrics {

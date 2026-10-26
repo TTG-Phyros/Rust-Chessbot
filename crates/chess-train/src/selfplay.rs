@@ -8,7 +8,7 @@ use std::time::Instant;
 
 use anyhow::{Context, Result};
 use chess_core::{Color, GameStatus, Position};
-use chess_eval::{ClassicEval, Evaluator};
+use chess_eval::{EngineEval, Evaluator};
 use chess_search::{Score, SearchLimits, Searcher, StopFlag};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -37,6 +37,10 @@ pub(crate) struct SelfplayConfig {
     pub(crate) chunk_positions: u64,
     /// Base seed; game `i` uses `seed + i`.
     pub(crate) seed: u64,
+    /// Network playing the games, reloaded whenever the file changes (the
+    /// pipeline points it at the latest export). Absent or unreadable: the
+    /// classical evaluation plays.
+    pub(crate) network: Option<PathBuf>,
 }
 
 impl Default for SelfplayConfig {
@@ -51,6 +55,7 @@ impl Default for SelfplayConfig {
             hash_mb: 4,
             chunk_positions: 1_000_000,
             seed: 0x5EED,
+            network: None,
         }
     }
 }
@@ -202,13 +207,16 @@ pub(crate) fn run(
         let _ = pool.install(|| {
             (0..games).into_par_iter().try_for_each_init(
                 || {
-                    let mut searcher = Searcher::new(ClassicEval, StopFlag::new());
+                    let mut searcher = Searcher::new(EngineEval::default(), StopFlag::new());
                     searcher.set_hash_size(hash_mb);
-                    searcher
+                    (searcher, None)
                 },
-                |searcher, index| {
+                |(searcher, loaded), index| {
                     if stop.is_stopped() {
                         return Err(());
+                    }
+                    if let Some(network) = &config.network {
+                        refresh_network(searcher, loaded, network);
                     }
                     let records = play_game(searcher, config, config.seed.wrapping_add(index));
                     let played = stats.games.fetch_add(1, Ordering::Relaxed) + 1;
@@ -235,6 +243,31 @@ pub(crate) fn run(
         "self-play finished"
     );
     Ok(())
+}
+
+/// Loads `path` into `searcher` if the file changed since `loaded` (its
+/// modification time). A missing or invalid file keeps the current evaluator.
+fn refresh_network(
+    searcher: &mut Searcher<EngineEval>,
+    loaded: &mut Option<std::time::SystemTime>,
+    path: &Path,
+) {
+    let Ok(modified) = std::fs::metadata(path).and_then(|meta| meta.modified()) else {
+        return;
+    };
+    if *loaded == Some(modified) {
+        return;
+    }
+    match std::fs::read(path).map(|bytes| EngineEval::from_nnue_bytes(&bytes)) {
+        Ok(Ok(eval)) => {
+            searcher.set_evaluator(eval);
+            *loaded = Some(modified);
+            tracing::debug!(file = %path.display(), "self-play network reloaded");
+        }
+        // Possibly a file being replaced: try again next game.
+        Ok(Err(err)) => tracing::debug!(%err, "self-play network not loadable yet"),
+        Err(err) => tracing::debug!(%err, "self-play network not readable yet"),
+    }
 }
 
 /// First unused chunk number for `prefix` in `dir`, so that runs append.
@@ -310,7 +343,7 @@ mod tests {
 
     #[test]
     fn games_produce_consistent_records() {
-        let mut searcher = Searcher::new(ClassicEval, StopFlag::new());
+        let mut searcher = Searcher::new(chess_eval::ClassicEval, StopFlag::new());
         let records = play_game(&mut searcher, &small(), 1);
         assert!(!records.is_empty());
         let outcome = records[0].outcome;

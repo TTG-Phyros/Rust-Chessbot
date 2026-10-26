@@ -84,6 +84,8 @@ pub(crate) struct Trainer<'a> {
     pub(crate) device: &'a SelectedDevice,
     pub(crate) metrics: &'a Metrics,
     pub(crate) stop: StopFlag,
+    /// Receives every quantized export (file, superbatch), e.g. to measure it.
+    pub(crate) exports: Option<std::sync::mpsc::Sender<(PathBuf, u64)>>,
 }
 
 const WEIGHTS_FILE: &str = "weights.cbfw";
@@ -287,6 +289,10 @@ impl Trainer<'_> {
         );
         self.metrics
             .update(|status| status.latest_weights = Some(latest.display().to_string()));
+        if let Some(exports) = &self.exports {
+            // A closed receiver only means nobody measures the exports.
+            let _ = exports.send((snapshot, superbatch));
+        }
         Ok(())
     }
 }
@@ -384,6 +390,7 @@ mod tests {
             device: &device,
             metrics: &metrics,
             stop: StopFlag::new(),
+            exports: None,
         };
         let files = || -> FileSource {
             let dataset = dataset.clone();

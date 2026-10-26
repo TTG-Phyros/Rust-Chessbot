@@ -13,6 +13,7 @@ use serde_json::json;
 use crate::config::Config;
 use crate::dataset::{dataset_files, record_count};
 use crate::device::SelectedDevice;
+use crate::evaluation;
 use crate::metrics::Metrics;
 use crate::selfplay::{self, SelfplayConfig, SelfplayStats};
 use crate::trainer::{TrainState, Trainer};
@@ -37,10 +38,19 @@ pub(crate) fn run(
             config.selfplay.threads
         },
         games: 0,
+        // The games improve with the network: play with the latest export.
+        network: Some(config.weights_dir().join(format!("{}.nnue", config.run))),
         ..config.selfplay.clone()
     };
+    let (exports_tx, exports_rx) = std::sync::mpsc::channel();
 
     std::thread::scope(|scope| {
+        // Measure each export against the classical evaluation.
+        let evaluator = {
+            let stop = stop.clone();
+            scope.spawn(move || evaluation::run(exports_rx, &config.evaluation, metrics, &stop))
+        };
+
         let producer = {
             let stats = Arc::clone(&stats);
             let stop = selfplay_stop.clone();
@@ -108,8 +118,12 @@ pub(crate) fn run(
             device,
             metrics,
             stop: stop.clone(),
+            exports: Some(exports_tx),
         };
         let trained = trainer.train(files, resume);
+        // Closes the export channel: the evaluator finishes its last match.
+        drop(trainer);
+        let _ = evaluator.join();
 
         // Training ended (limit reached or stop requested): stop producing.
         selfplay_stop.stop();

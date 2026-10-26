@@ -11,10 +11,12 @@
 //!
 //! Settings come from `chess-train.toml`, `CHESS_TRAIN_*` variables and flags.
 
+mod arena;
 mod batch;
 mod config;
 mod dataset;
 mod device;
+mod evaluation;
 mod gpu_check;
 mod metrics;
 mod model;
@@ -79,6 +81,9 @@ enum Command {
         /// Worker threads (0 = all cores).
         #[arg(long)]
         threads: Option<usize>,
+        /// Network playing the games (reloaded when the file changes); default: classical.
+        #[arg(long)]
+        network: Option<PathBuf>,
     },
     /// Trains the network on the dataset directory.
     Train {
@@ -107,8 +112,31 @@ enum Command {
         #[arg(long)]
         out: Option<PathBuf>,
     },
-    /// Plays a match between two networks to estimate the Elo gain (phase 6).
-    Match,
+    /// Plays engine A against engine B to measure their Elo difference.
+    Match {
+        /// Engine A: `classic` or a `.nnue` file.
+        a: String,
+        /// Engine B: `classic` or a `.nnue` file.
+        b: String,
+        /// Maximum number of games.
+        #[arg(long)]
+        games: Option<u32>,
+        /// Nodes per move.
+        #[arg(long)]
+        nodes: Option<u64>,
+        /// Worker threads (0 = all cores).
+        #[arg(long)]
+        threads: Option<usize>,
+        /// Stop as soon as the SPRT (elo0 vs elo1) concludes.
+        #[arg(long)]
+        sprt: bool,
+        /// SPRT null hypothesis: A is this many Elo stronger.
+        #[arg(long, allow_negative_numbers = true)]
+        elo0: Option<f64>,
+        /// SPRT alternative hypothesis.
+        #[arg(long, allow_negative_numbers = true)]
+        elo1: Option<f64>,
+    },
 }
 
 fn main() -> Result<()> {
@@ -134,7 +162,11 @@ fn main() -> Result<()> {
             games,
             nodes,
             threads,
+            network,
         } => {
+            if network.is_some() {
+                config.selfplay.network = network;
+            }
             if let Some(games) = games {
                 config.selfplay.games = games;
             }
@@ -175,8 +207,73 @@ fn main() -> Result<()> {
             println!("exported {}", out.display());
             Ok(())
         }
-        Command::Match => bail!("`match` arrives in phase 6"),
+        Command::Match {
+            a,
+            b,
+            games,
+            nodes,
+            threads,
+            sprt,
+            elo0,
+            elo1,
+        } => {
+            let arena = &mut config.arena;
+            arena.games = games.unwrap_or(arena.games);
+            arena.nodes = nodes.unwrap_or(arena.nodes);
+            arena.threads = threads.unwrap_or(arena.threads);
+            arena.sprt |= sprt;
+            arena.elo0 = elo0.unwrap_or(arena.elo0);
+            arena.elo1 = elo1.unwrap_or(arena.elo1);
+            run_match(&a, &b, &config.arena)
+        }
     }
+}
+
+fn run_match(a: &str, b: &str, config: &arena::ArenaConfig) -> Result<()> {
+    let stop = stop_on_signal()?;
+    let engine_a = arena::load_evaluator(a)?;
+    let engine_b = arena::load_evaluator(b)?;
+    println!(
+        "{a} ({}) vs {b} ({}), {} nodes per move",
+        engine_a.name(),
+        engine_b.name(),
+        config.nodes
+    );
+    let report = |result: arena::MatchResult| {
+        let mut line = format!(
+            "games {:>4}  +{} ={} -{}  score {:.1}%  elo {:+.1} ± {:.1}  LOS {:.1}%",
+            result.games(),
+            result.wins,
+            result.draws,
+            result.losses,
+            100.0 * result.score(),
+            result.elo(),
+            result.elo_error(),
+            100.0 * result.los(),
+        );
+        if config.sprt {
+            line.push_str(&format!(
+                "  LLR {:.2} [{:.2}, {:.2}]",
+                result.llr(config.elo0, config.elo1),
+                (config.beta / (1.0 - config.alpha)).ln(),
+                ((1.0 - config.beta) / config.alpha).ln()
+            ));
+        }
+        line
+    };
+    let result = arena::play_match(&engine_a, &engine_b, config, &stop, |r| {
+        println!("{}", report(r))
+    })?;
+    println!("final: {}", report(result));
+    if config.sprt {
+        let verdict = match result.verdict(config) {
+            arena::Verdict::Pass => "H1 accepted: A is stronger",
+            arena::Verdict::Fail => "H0 accepted: A is not stronger",
+            arena::Verdict::Inconclusive => "inconclusive (more games needed)",
+        };
+        println!("SPRT elo0={} elo1={}: {verdict}", config.elo0, config.elo1);
+    }
+    Ok(())
 }
 
 /// A flag raised by Ctrl+C or SIGTERM (`docker stop`), for a clean shutdown
@@ -243,6 +340,7 @@ fn run_train(config: &Config, preference: DevicePreference, resume: bool) -> Res
     }
     let positions: u64 = files.iter().map(|f| dataset::record_count(f)).sum();
     tracing::info!(files = files.len(), positions, "dataset found");
+    let (exports_tx, exports_rx) = std::sync::mpsc::channel();
     let trainer = trainer::Trainer {
         config: config.train.clone(),
         run: config.run.clone(),
@@ -250,9 +348,18 @@ fn run_train(config: &Config, preference: DevicePreference, resume: bool) -> Res
         weights_dir: config.weights_dir(),
         device: &selected,
         metrics: &metrics,
-        stop,
+        stop: stop.clone(),
+        exports: Some(exports_tx),
     };
-    let state = trainer.train(Box::new(move || files.clone()), resume)?;
+    let state = std::thread::scope(|scope| {
+        let (metrics, stop) = (&metrics, &stop);
+        let evaluator =
+            scope.spawn(move || evaluation::run(exports_rx, &config.evaluation, metrics, stop));
+        let state = trainer.train(Box::new(move || files.clone()), resume);
+        drop(trainer);
+        let _ = evaluator.join();
+        state
+    })?;
     metrics.update(|status| status.phase = "finished".into());
     println!(
         "trained {} superbatches ({} positions)",

@@ -11,6 +11,9 @@ use chess_eval::nnue::{HIDDEN, INPUTS, NnueWeights, QA, QB};
 /// most NNUE inference code stores them in 8 bits).
 pub(crate) const MAX_OUTPUT_WEIGHT: f32 = 127.0 / QB as f32;
 
+/// Bound on feature transformer weights and biases: 33 · 3.0 · QA < 32 767.
+pub(crate) const MAX_FT_VALUE: f32 = 3.0;
+
 #[derive(Module, Debug)]
 pub(crate) struct Network {
     /// Feature transformer, shared by both perspectives: `[INPUTS, HIDDEN]`.
@@ -35,16 +38,20 @@ impl Network {
         self.out.forward(Tensor::cat(vec![us, them], 1))
     }
 
-    /// Keeps output weights within the quantizable range (called after each step).
+    /// Keeps weights within the quantizable range (called after each step):
+    /// output weights fit 8 bits, and feature transformer values can never
+    /// overflow the `i16` accumulators of `chess-eval` (32 pieces + bias).
     pub(crate) fn clip(mut self) -> Self {
-        let id = self.out.weight.id;
-        let clipped = self
-            .out
-            .weight
-            .val()
-            .clamp(-MAX_OUTPUT_WEIGHT, MAX_OUTPUT_WEIGHT)
-            .detach();
-        self.out.weight = param(id.val(), clipped);
+        let clamp = |param: &Param<Tensor<2>>, limit: f32| {
+            let clipped = param.val().clamp(-limit, limit).detach();
+            self::param(param.id.val(), clipped)
+        };
+        self.out.weight = clamp(&self.out.weight, MAX_OUTPUT_WEIGHT);
+        self.ft.weight = clamp(&self.ft.weight, MAX_FT_VALUE);
+        if let Some(bias) = &self.ft.bias {
+            let clipped = bias.val().clamp(-MAX_FT_VALUE, MAX_FT_VALUE).detach();
+            self.ft.bias = Some(param(bias.id.val(), clipped));
+        }
         self
     }
 

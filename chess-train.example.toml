@@ -5,7 +5,8 @@
 
 # Name of the run: prefixes dataset files, names checkpoints and weights.
 run = "main"
-# Weights (`weights/`), checkpoints (`checkpoints/`) and metrics (`metrics/`).
+# Weights (`weights/`), checkpoints (`checkpoints/`), metrics (`metrics/`),
+# network settings (`runs/`), saved bots (`bots/`) and tournaments (`tournaments/`).
 data_dir = "data"
 # Dataset files, streamed during training: keep them on a fast disk.
 dataset_dir = "data/datasets"
@@ -15,6 +16,9 @@ min_positions = 2000000
 # Training is much faster than self-play: beyond this, it waits for new games
 # instead of overfitting the existing ones. 0 = no limit.
 max_reuse = 30
+# Pipeline only: other runs whose self-play games this run also trains on,
+# e.g. ["main"] to start a new network from games already played.
+datasets_from = []
 
 [selfplay]
 # Games to play; 0 = until stopped.
@@ -53,3 +57,16 @@ shuffle_records = 2000000
 # Export quantized weights every this many superbatches.
 export_every = 5
 seed = 31249
+
+[evaluation]
+# Pipeline: every export plays a short match against the classical evaluation
+# (PeSTO); the Elo charts the progress and ranks the run's snapshots.
+enabled = true
+# Games per measurement (more: a narrower Elo interval, slower).
+games = 64
+nodes = 2000
+# Threads taken from self-play while measuring.
+threads = 2
+# Measured snapshots kept per run (`weights/<run>/best.json`), the best first:
+# the others are deleted.
+keep_best = 5

@@ -32,6 +32,9 @@ pub(crate) struct Config {
     /// Pipeline: most times each generated position is trained on, on
     /// average; training waits for self-play beyond it (0 = no limit).
     pub(crate) max_reuse: u64,
+    /// Pipeline: other runs whose self-play games this run also trains on
+    /// (its own games are always used).
+    pub(crate) datasets_from: Vec<String>,
     pub(crate) selfplay: SelfplayConfig,
     pub(crate) train: TrainConfig,
     pub(crate) evaluation: EvaluationConfig,
@@ -46,6 +49,7 @@ impl Default for Config {
             dataset_dir: PathBuf::from("data/datasets"),
             min_positions: 2_000_000,
             max_reuse: 30,
+            datasets_from: Vec::new(),
             selfplay: SelfplayConfig::default(),
             train: TrainConfig::default(),
             evaluation: EvaluationConfig::default(),
@@ -79,6 +83,20 @@ impl Config {
 
     pub(crate) fn weights_dir(&self) -> PathBuf {
         self.data_dir.join("weights")
+    }
+
+    /// Hyperparameters of each network (`<run>.json`).
+    pub(crate) fn runs_dir(&self) -> PathBuf {
+        self.data_dir.join("runs")
+    }
+
+    /// Saved networks, opponents of the tournaments.
+    pub(crate) fn bots_dir(&self) -> PathBuf {
+        self.data_dir.join("bots")
+    }
+
+    pub(crate) fn tournaments_dir(&self) -> PathBuf {
+        self.data_dir.join("tournaments")
     }
 }
 

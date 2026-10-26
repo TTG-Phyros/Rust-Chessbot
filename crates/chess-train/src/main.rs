@@ -13,6 +13,7 @@
 
 mod arena;
 mod batch;
+mod bots;
 mod config;
 mod control;
 mod dataset;
@@ -21,9 +22,12 @@ mod evaluation;
 mod gpu_check;
 mod metrics;
 mod model;
+mod network;
 mod pipeline;
+mod ranking;
 mod rng;
 mod selfplay;
+mod tournament;
 mod trainer;
 
 use std::path::PathBuf;

@@ -10,7 +10,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::arena::{self, ArenaConfig};
-use crate::metrics::Metrics;
+use crate::metrics::{Metrics, now};
+use crate::ranking::{self, Ranked};
 
 /// Checkpoint matches (`[evaluation]` section of the configuration).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -24,6 +25,8 @@ pub(crate) struct EvaluationConfig {
     pub(crate) nodes: u64,
     /// Threads taken from self-play while measuring.
     pub(crate) threads: usize,
+    /// Measured snapshots kept per run, the best first (the others are deleted).
+    pub(crate) keep_best: usize,
 }
 
 impl Default for EvaluationConfig {
@@ -33,6 +36,7 @@ impl Default for EvaluationConfig {
             games: 64,
             nodes: 2_000,
             threads: 2,
+            keep_best: 5,
         }
     }
 }
@@ -95,6 +99,22 @@ pub(crate) fn run(
             status.elo_error = Some(error);
             status.elo_superbatch = Some(superbatch);
         });
+        let Some(dir) = path.parent() else { continue };
+        let entry = Ranked {
+            superbatch,
+            elo,
+            elo_error: error,
+            games: result.games(),
+            measured_at: now(),
+        };
+        match ranking::record(dir, entry, config.keep_best) {
+            Ok(ranking) => {
+                if let Some(rank) = ranking.iter().position(|r| r.superbatch == superbatch) {
+                    tracing::info!(superbatch, rank = rank + 1, "snapshot among the best");
+                }
+            }
+            Err(err) => tracing::warn!(error = %format!("{err:#}"), "cannot rank the snapshot"),
+        }
     }
 }
 
@@ -121,6 +141,7 @@ mod tests {
             nodes: 100,
             threads: 1,
             enabled: true,
+            keep_best: 5,
         };
         run(rx, &config, "test", &metrics, &StopFlag::new());
 
@@ -136,5 +157,9 @@ mod tests {
                 .count(),
             1
         );
+        // ...and ranked.
+        let ranking = ranking::load(&dir).unwrap();
+        assert_eq!(ranking.len(), 1);
+        assert_eq!((ranking[0].superbatch, ranking[0].games), (2, 2));
     }
 }

@@ -114,11 +114,18 @@ impl Trainer<'_> {
                     self.metrics.update(|status| status.superbatch = superbatch);
                     loaded
                 }
-                _ => (
-                    Network::new(&device),
-                    AdamWConfig::new().init(),
-                    TrainState::default(),
-                ),
+                _ => {
+                    // Superbatches restart from 1: the old snapshots would be overwritten.
+                    let snapshots = self.weights_dir.join(&self.run);
+                    if let Err(err) = crate::ranking::reset(&snapshots) {
+                        tracing::warn!(error = %err, "cannot clear the previous snapshots");
+                    }
+                    (
+                        Network::new(&device),
+                        AdamWConfig::new().init(),
+                        TrainState::default(),
+                    )
+                }
             };
 
         let config = &self.config;
@@ -281,7 +288,7 @@ impl Trainer<'_> {
         let snapshot = self
             .weights_dir
             .join(&self.run)
-            .join(format!("sb{superbatch:05}.nnue"));
+            .join(crate::ranking::snapshot_name(superbatch));
         write_atomically(&snapshot, &bytes)?;
         let latest = self.latest_weights_path();
         write_atomically(&latest, &bytes)?;
@@ -311,11 +318,16 @@ pub(crate) fn export_checkpoint(checkpoint_dir: &Path, run: &str, out: &Path) ->
     )
 }
 
-fn write_atomically(path: &Path, bytes: &[u8]) -> Result<()> {
+/// Writes `bytes` to `path` through a temporary file, so that readers never
+/// see a half-written file.
+pub(crate) fn write_atomically(path: &Path, bytes: &[u8]) -> Result<()> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    let temp = path.with_extension("tmp");
+    // `x.nnue.tmp`, not `x.tmp`: `x.nnue` and `x.json` may be written together.
+    let mut temp = path.as_os_str().to_owned();
+    temp.push(".tmp");
+    let temp = PathBuf::from(temp);
     std::fs::write(&temp, bytes).with_context(|| format!("cannot write {}", temp.display()))?;
     std::fs::rename(&temp, path).with_context(|| format!("cannot write {}", path.display()))?;
     Ok(())

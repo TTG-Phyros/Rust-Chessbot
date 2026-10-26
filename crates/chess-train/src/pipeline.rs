@@ -15,6 +15,7 @@ use crate::dataset::{dataset_files, record_count};
 use crate::device::SelectedDevice;
 use crate::evaluation;
 use crate::metrics::Metrics;
+use crate::ranking;
 use crate::selfplay::{self, SelfplayConfig, SelfplayStats};
 use crate::trainer::{TrainState, Trainer};
 
@@ -84,6 +85,15 @@ pub(crate) fn run(
         ..config.selfplay.clone()
     };
     let (exports_tx, exports_rx) = std::sync::mpsc::channel();
+    // A network trained before rankings existed keeps its best snapshots.
+    if let Err(err) = ranking::seed_from_events(
+        &config.weights_dir().join(&config.run),
+        &config.data_dir.join("metrics").join("events.jsonl"),
+        &config.run,
+        config.evaluation.keep_best,
+    ) {
+        tracing::warn!(error = %format!("{err:#}"), "cannot rebuild the snapshot ranking");
+    }
 
     std::thread::scope(|scope| {
         // Measure each export against the classical evaluation.
@@ -129,12 +139,23 @@ pub(crate) fn run(
             })
         };
 
-        // Train on this run's files once enough positions exist.
-        let (dir, run) = (config.dataset_dir.clone(), config.run.clone());
+        // Train on this run's files (and those it borrows) once enough positions exist.
+        let dir = config.dataset_dir.clone();
+        let mut runs = vec![config.run.clone()];
+        runs.extend(
+            config
+                .datasets_from
+                .iter()
+                .filter(|run| **run != config.run)
+                .cloned(),
+        );
         let mut gate = DataGate::new(config.min_positions, config.max_reuse);
         let mut last_report: Option<std::time::Instant> = None;
         let files = Box::new(move || {
-            let files = dataset_files(&dir, Some(&run));
+            let files: Vec<_> = runs
+                .iter()
+                .flat_map(|run| dataset_files(&dir, Some(run)))
+                .collect();
             let available: u64 = files.iter().map(|f| record_count(f)).sum();
             match gate.admit(available) {
                 Gate::Open => files,

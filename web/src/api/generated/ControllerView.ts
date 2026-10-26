@@ -20,4 +20,9 @@ error?: string | null,
 /**
  * Id of the tournament being played.
  */
-tournament?: string | null, };
+tournament?: string | null, 
+/**
+ * Stockfish the daemon found for the `stockfish-1` to `stockfish-10`
+ * bots (`Stockfish 19`), absent if none.
+ */
+stockfish?: string | null, };

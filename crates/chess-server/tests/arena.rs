@@ -41,7 +41,7 @@ async fn fake_daemon() -> String {
     let app = Router::new()
         .route(
             "/status",
-            get(|| async { r#"{"state":"idle","run":"main","error":null,"tournament":"t2"}"# }),
+            get(|| async { r#"{"state":"idle","run":"main","error":null,"tournament":"t2","stockfish":"Stockfish 19"}"# }),
         )
         .route(
             "/networks/defaults",
@@ -199,6 +199,7 @@ async fn networks_bots_and_tournaments() {
     let arena: ArenaView = serde_json::from_value(arena).unwrap();
     assert_eq!(arena.bots.len(), 1);
     assert_eq!(arena.controller.tournament.as_deref(), Some("t2"));
+    assert_eq!(arena.controller.stockfish.as_deref(), Some("Stockfish 19"));
     let states: Vec<_> = arena
         .tournaments
         .iter()

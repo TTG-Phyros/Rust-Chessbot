@@ -10,11 +10,10 @@ import { useArena } from '../../api/hooks';
 import { Button, ErrorText, Panel, Stat } from '../../components/ui';
 import { formatDate, formatElo, formatPoints } from '../training/format';
 import { formatParam } from '../training/params';
+import { STOCKFISH_LEVELS, botLabel, describeLevel, stockfishBot } from './stockfish';
 
 /** Name of the classical evaluation in tournaments. */
 const CLASSIC = 'classic';
-
-const botLabel = (name: string) => (name === CLASSIC ? 'PeSTO' : name);
 
 const STATE_LABEL: Record<TournamentState, string> = {
   running: 'En cours',
@@ -35,10 +34,13 @@ const INPUT =
 
 function BotList({
   bots,
+  stockfish,
   canDelete,
   onDelete,
 }: {
   bots: readonly BotInfo[];
+  /** Version of Stockfish, if the training service has one. */
+  stockfish: string | null;
   canDelete: boolean;
   onDelete: (name: string) => void;
 }) {
@@ -64,6 +66,25 @@ function BotList({
             </td>
             <td />
           </tr>
+          <tr className="border-t border-slate-800 text-slate-400">
+            <td className="py-2 pr-3 font-medium whitespace-nowrap text-slate-200">
+              Stockfish 1 à 10
+            </td>
+            <td className="py-2" colSpan={5}>
+              {stockfish ? (
+                <>
+                  {stockfish}, bridé en 10 niveaux comme sur lichess (niveau de jeu, profondeur et
+                  temps par coup croissants) ; il joue à son niveau, pas aux nœuds du tournoi.
+                </>
+              ) : (
+                <span className="text-amber-300">
+                  Indisponible : le service d’entraînement ne trouve pas Stockfish (inclus dans les
+                  images Docker, sinon réglage <code>[arena] stockfish</code>).
+                </span>
+              )}
+            </td>
+            <td />
+          </tr>
           {bots.map((bot) => (
             <tr key={bot.name} className="border-t border-slate-800">
               <td className="py-2 pr-3 font-medium whitespace-nowrap text-slate-100">{bot.name}</td>
@@ -76,7 +97,7 @@ function BotList({
                 </Link>
                 {bot.superbatch != null ? ` · sb ${bot.superbatch}` : ' · dernière version'}
               </td>
-              <td className="py-2 text-right font-mono">
+              <td className="py-2 text-right font-mono whitespace-nowrap">
                 {bot.elo != null ? formatElo(bot.elo, bot.eloError ?? 0) : '—'}
               </td>
               <td className="py-2 text-right font-mono">
@@ -119,10 +140,12 @@ function BotList({
 
 function TournamentForm({
   bots,
+  stockfish,
   disabled,
   onStart,
 }: {
   bots: readonly BotInfo[];
+  stockfish: string | null;
   disabled: boolean;
   onStart: (request: {
     bots: string[];
@@ -136,7 +159,13 @@ function TournamentForm({
   const [nodes, setNodes] = useState('5000');
   const [threads, setThreads] = useState('0');
   const names = [CLASSIC, ...bots.map((bot) => bot.name)];
-  const participants = names.filter((name) => chosen.includes(name));
+  const levels = STOCKFISH_LEVELS.map((level) => stockfishBot(level.level));
+  const participants = [...names, ...(stockfish ? levels : [])].filter((name) =>
+    chosen.includes(name),
+  );
+  const toggle = (name: string, on: boolean) => {
+    setChosen(on ? [...chosen, name] : chosen.filter((n) => n !== name));
+  };
   const pairings = (participants.length * (participants.length - 1)) / 2;
   const gamesPerPair = Math.ceil(Number(games) / 2) * 2;
   const valid =
@@ -174,15 +203,39 @@ function TournamentForm({
                 type="checkbox"
                 checked={chosen.includes(name)}
                 onChange={(event) => {
-                  setChosen(
-                    event.target.checked ? [...chosen, name] : chosen.filter((n) => n !== name),
-                  );
+                  toggle(name, event.target.checked);
                 }}
                 className="size-4 accent-emerald-500"
               />
               {botLabel(name)}
             </label>
           ))}
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 text-sm text-slate-400">Stockfish</span>
+          {STOCKFISH_LEVELS.map((level) => {
+            const name = stockfishBot(level.level);
+            const on = chosen.includes(name);
+            return (
+              <button
+                key={name}
+                type="button"
+                aria-pressed={on}
+                disabled={!stockfish}
+                title={describeLevel(level)}
+                onClick={() => {
+                  toggle(name, !on);
+                }}
+                className={`min-w-8 rounded-md px-2 py-1 font-mono text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                  on
+                    ? 'bg-emerald-600 text-white hover:bg-emerald-500'
+                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                }`}
+              >
+                {level.level}
+              </button>
+            );
+          })}
         </div>
       </fieldset>
       <div className="grid gap-3 sm:grid-cols-3">
@@ -205,9 +258,9 @@ function TournamentForm({
         </label>
         <label
           className="block text-sm"
-          title="Recherche de chaque coup, identique pour tous les bots : seule l’évaluation les distingue."
+          title="Recherche de chaque coup de nos bots, identique pour tous : seule l’évaluation les distingue. Stockfish joue à son niveau."
         >
-          <span className="text-slate-300">Nœuds par coup</span>
+          <span className="text-slate-300">Nœuds par coup (nos bots)</span>
           <input
             type="number"
             min={100}
@@ -472,6 +525,7 @@ function ArenaContent({ view, refresh }: { view: ArenaView; refresh: () => void 
         <Panel title={`Bots (${view.bots.length + 1})`}>
           <BotList
             bots={view.bots}
+            stockfish={view.controller.stockfish ?? null}
             canDelete={available && !playing && !busy}
             onDelete={(name) => void act(() => api.deleteBot(name))}
           />
@@ -479,6 +533,7 @@ function ArenaContent({ view, refresh }: { view: ArenaView; refresh: () => void 
         <Panel title="Nouveau tournoi">
           <TournamentForm
             bots={view.bots}
+            stockfish={view.controller.stockfish ?? null}
             disabled={!available || playing !== null || busy}
             onStart={(request) =>
               void act(async () => {

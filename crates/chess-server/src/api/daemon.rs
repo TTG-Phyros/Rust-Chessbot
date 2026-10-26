@@ -20,6 +20,8 @@ struct DaemonStatus {
     error: Option<String>,
     #[serde(default)]
     tournament: Option<String>,
+    #[serde(default)]
+    stockfish: Option<String>,
 }
 
 const NOT_RUNNING: &str =
@@ -31,6 +33,7 @@ fn unavailable(error: impl Into<String>) -> ControllerView {
         run: None,
         error: Some(error.into()),
         tournament: None,
+        stockfish: None,
     }
 }
 
@@ -52,6 +55,7 @@ pub(super) async fn controller(state: &AppState) -> ControllerView {
                 run: Some(status.run),
                 error: status.error,
                 tournament: status.tournament,
+                stockfish: status.stockfish,
             },
             Err(err) => unavailable(format!(
                 "unexpected answer from the training service: {err}"

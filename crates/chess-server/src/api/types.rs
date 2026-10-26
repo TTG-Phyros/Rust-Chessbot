@@ -386,6 +386,9 @@ pub struct ControllerView {
     pub error: Option<String>,
     /// Id of the tournament being played.
     pub tournament: Option<String>,
+    /// Stockfish the daemon found for the `stockfish-1` to `stockfish-10`
+    /// bots (`Stockfish 19`), absent if none.
+    pub stockfish: Option<String>,
 }
 
 /// Latest state of a training run (from its `status.json`).

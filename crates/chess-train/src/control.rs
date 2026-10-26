@@ -33,6 +33,7 @@ use crate::config::Config;
 use crate::device::DevicePreference;
 use crate::network::{self, NetworkParams};
 use crate::ranking;
+use crate::stockfish;
 use crate::tournament::{self, TournamentRequest};
 
 /// State of the pipeline as seen by the daemon.
@@ -53,6 +54,8 @@ pub(crate) struct ControlStatus {
     pub(crate) error: Option<String>,
     /// Id of the tournament being played.
     pub(crate) tournament: Option<String>,
+    /// Stockfish found for the `stockfish-N` bots (`id name`), if any.
+    pub(crate) stockfish: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -142,6 +145,8 @@ pub(crate) struct Controller {
     training: Option<Job>,
     error: Arc<Mutex<Option<String>>>,
     tournament: Option<Job>,
+    /// Version of the configured Stockfish, probed at startup.
+    stockfish: Option<String>,
 }
 
 type Shared = Arc<Mutex<Controller>>;
@@ -156,7 +161,18 @@ fn valid_name(name: &str) -> Result<(), ControlError> {
 
 impl Controller {
     pub(crate) fn new(config: Config, device: DevicePreference) -> Self {
+        let stockfish = stockfish::probe(&config.arena.stockfish);
+        match &stockfish {
+            Some(version) => {
+                tracing::info!(%version, "Stockfish found: stockfish-1 to 10 can play")
+            }
+            None => tracing::warn!(
+                binary = %config.arena.stockfish.display(),
+                "Stockfish not found: no Stockfish bots (set [arena] stockfish)"
+            ),
+        }
         Self {
+            stockfish,
             run: config.run.clone(),
             config,
             device,
@@ -179,6 +195,7 @@ impl Controller {
             run: self.run.clone(),
             error: lock(&self.error).clone(),
             tournament: self.tournament.as_ref().map(|job| job.name.clone()),
+            stockfish: self.stockfish.clone(),
         }
     }
 
@@ -302,11 +319,22 @@ impl Controller {
             ));
         }
         request.validate().map_err(ControlError::invalid)?;
+        if self.stockfish.is_none()
+            && request
+                .bots
+                .iter()
+                .any(|bot| stockfish::level_of(bot).is_some())
+        {
+            return Err(ControlError::not_found(format!(
+                "Stockfish is not installed ({} not found): set [arena] stockfish",
+                self.config.arena.stockfish.display()
+            )));
+        }
         let engines = request
             .bots
             .iter()
             .map(|bot| {
-                bots::evaluator(&self.config, bot)
+                bots::contestant(&self.config, bot)
                     .map_err(|err| ControlError::not_found(format!("bot {bot}: {err:#}")))
             })
             .collect::<Result<Vec<_>, _>>()?;

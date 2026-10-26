@@ -70,3 +70,11 @@ threads = 2
 # Measured snapshots kept per run (`weights/<run>/best.json`), the best first:
 # the others are deleted.
 keep_best = 5
+
+[arena]
+# Matches (`chess-train match`) and tournaments. Our engine searches `nodes`
+# per move; the stockfish-1 to stockfish-10 bots play at their level.
+nodes = 3000
+# Stockfish binary of the stockfish-N bots (the Docker images ship Stockfish
+# 19 as /usr/local/bin/stockfish). Not found: no Stockfish bots.
+stockfish = "stockfish"

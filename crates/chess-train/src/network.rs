@@ -154,6 +154,9 @@ pub(crate) fn validate_name(name: &str) -> Result<(), String> {
             "{CLASSIC:?} is reserved for the classical evaluation"
         ));
     }
+    if name.to_ascii_lowercase().starts_with("stockfish") {
+        return Err("names starting with \"stockfish\" are reserved for the Stockfish bots".into());
+    }
     Ok(())
 }
 
@@ -259,6 +262,8 @@ mod tests {
             "a b",
             "classic",
             "Classic",
+            "stockfish-3",
+            "Stockfish2",
             &"x".repeat(33),
         ] {
             assert!(validate_name(name).is_err(), "{name}");

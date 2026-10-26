@@ -94,12 +94,39 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     cargo build --release --locked -p chess-train --features cuda \
     && cp target/release/chess-train /usr/local/bin/
 
+# ---------------------------------------------------------------- Stockfish
+# Opponent of the arena's `stockfish-1` to `stockfish-10` bots: the official
+# "universal" build (picks the best code for the CPU at runtime, glibc only).
+# Downloaded with retries and resume; the archive lives in a cache mount.
+FROM debian:trixie-slim AS stockfish
+ARG TARGETARCH
+ARG STOCKFISH_VERSION=19
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
+RUN --mount=type=cache,target=/root/.cache/stockfish,sharing=locked \
+    case "${TARGETARCH}" in \
+      amd64) arch=x86-64 ;; \
+      arm64) arch=arm64 ;; \
+      *) echo "no Stockfish build for ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+    && archive=/root/.cache/stockfish/stockfish-${STOCKFISH_VERSION}-linux-${arch}.tar.gz \
+    && if [ ! -f "$archive" ]; then \
+         curl -fL --retry 10 --retry-all-errors --retry-delay 2 -C - -o "$archive.part" \
+           "https://github.com/official-stockfish/Stockfish/releases/download/sf_${STOCKFISH_VERSION}/stockfish-linux-${arch}-universal.tar.gz" \
+         && mv "$archive.part" "$archive"; \
+       fi \
+    && tar -xzf "$archive" -C /tmp "stockfish/stockfish-linux-${arch}-universal" \
+    && install -m 755 "/tmp/stockfish/stockfish-linux-${arch}-universal" /usr/local/bin/stockfish \
+    && printf 'uci\nquit\n' | stockfish | grep -q '^uciok'
+
 # ----------------------------------------------------------------- runtimes
 FROM debian:trixie-slim AS runtime-cpu
 ARG UID=10001
 RUN useradd --system --uid ${UID} --home-dir /data --shell /usr/sbin/nologin chess \
     && mkdir -p /data /datasets && chown chess /data /datasets
 COPY --from=builder-cpu /usr/local/bin/chess-train /usr/local/bin/
+COPY --from=stockfish /usr/local/bin/stockfish /usr/local/bin/
 USER chess
 WORKDIR /data
 ENV CHESS_TRAIN_DEVICE=cpu \
@@ -126,6 +153,7 @@ RUN apt-get update \
     && mkdir -p /data /datasets && chown chess /data /datasets
 ENV CUDA_PATH=/usr/local/cuda
 COPY --from=builder-cuda /usr/local/bin/chess-train /usr/local/bin/
+COPY --from=stockfish /usr/local/bin/stockfish /usr/local/bin/
 USER chess
 WORKDIR /data
 ENV CHESS_TRAIN_DEVICE=auto \

@@ -8,11 +8,12 @@ use anyhow::{Context, Result, bail};
 use chess_eval::EngineEval;
 use serde::{Deserialize, Serialize};
 
-use crate::arena;
+use crate::arena::{self, Contestant};
 use crate::config::Config;
 use crate::metrics::now;
 use crate::network::{self, CLASSIC, NetworkParams};
 use crate::ranking::{self, snapshot_name};
+use crate::stockfish;
 use crate::trainer::write_atomically;
 
 /// Description of a bot. Written in camelCase: `chess-server` reads it as it is.
@@ -112,12 +113,16 @@ pub(crate) fn delete(config: &Config, name: &str) -> Result<()> {
     Ok(())
 }
 
-/// The evaluation of a bot: [`CLASSIC`] or a saved network.
-pub(crate) fn evaluator(config: &Config, name: &str) -> Result<EngineEval> {
+/// A bot ready to play: [`CLASSIC`], a Stockfish level (`stockfish-N`) or
+/// a saved network.
+pub(crate) fn contestant(config: &Config, name: &str) -> Result<Contestant> {
     if name.eq_ignore_ascii_case(CLASSIC) {
-        return Ok(EngineEval::default());
+        return Ok(Contestant::Engine(EngineEval::default()));
     }
-    arena::load_evaluator(&weights_path(config, name).display().to_string())
+    if stockfish::level_of(name).is_some() {
+        return Contestant::load(name, &config.arena);
+    }
+    arena::load_evaluator(&weights_path(config, name).display().to_string()).map(Contestant::Engine)
 }
 
 #[cfg(test)]
@@ -163,8 +168,12 @@ mod tests {
         assert_eq!((info.elo, info.superbatch), (Some(42.0), Some(10)));
         assert_eq!(info.params, Some(NetworkParams::default()));
         assert!(exists(&config, "best"));
-        assert_eq!(evaluator(&config, "best").unwrap().name(), "nnue");
-        assert_eq!(evaluator(&config, "classic").unwrap().name(), "classic");
+        assert_eq!(contestant(&config, "best").unwrap().name(), "nnue");
+        assert_eq!(contestant(&config, "classic").unwrap().name(), "classic");
+        assert_eq!(
+            contestant(&config, "stockfish-3").unwrap().name(),
+            "stockfish-3"
+        );
 
         let latest = SaveBotRequest {
             name: "latest".into(),
@@ -181,6 +190,6 @@ mod tests {
 
         delete(&config, "best").unwrap();
         assert!(!exists(&config, "best"));
-        assert!(evaluator(&config, "best").is_err());
+        assert!(contestant(&config, "best").is_err());
     }
 }

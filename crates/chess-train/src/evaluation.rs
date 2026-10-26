@@ -9,7 +9,7 @@ use chess_search::StopFlag;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::arena::{self, ArenaConfig};
+use crate::arena::{self, ArenaConfig, Contestant};
 use crate::metrics::{Metrics, now};
 use crate::ranking::{self, Ranked};
 
@@ -56,7 +56,7 @@ pub(crate) fn run(
         threads: config.threads.max(1),
         ..ArenaConfig::default()
     };
-    let baseline = EngineEval::default();
+    let baseline = Contestant::Engine(EngineEval::default());
     while let Ok(mut export) = exports.recv() {
         while let Ok(newer) = exports.try_recv() {
             export = newer;
@@ -66,7 +66,7 @@ pub(crate) fn run(
         }
         let (path, superbatch) = export;
         let network = match arena::load_evaluator(&path.display().to_string()) {
-            Ok(network) => network,
+            Ok(network) => Contestant::Engine(network),
             Err(err) => {
                 tracing::warn!(error = %format!("{err:#}"), "cannot evaluate the export");
                 continue;

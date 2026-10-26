@@ -7,25 +7,25 @@
 
 use std::path::PathBuf;
 
-use anyhow::Result;
-use chess_eval::EngineEval;
 use chess_search::StopFlag;
 use serde::{Deserialize, Serialize};
 
-use crate::arena::{self, ArenaConfig, MatchResult};
+use crate::arena::{self, ArenaConfig, Contestant, MatchResult};
 use crate::config::Config;
 use crate::metrics::now;
 use crate::network::{self, CLASSIC};
+use crate::stockfish;
 use crate::trainer::write_atomically;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct TournamentRequest {
-    /// Bot names; [`CLASSIC`] is the classical evaluation.
+    /// Bot names; [`CLASSIC`] is the classical evaluation, `stockfish-1` to
+    /// `stockfish-10` the Stockfish levels.
     pub(crate) bots: Vec<String>,
     /// Games of each pairing (rounded up to an even number).
     pub(crate) games_per_pair: u32,
-    /// Nodes per move, the same for every bot.
+    /// Nodes per move of our engine (Stockfish plays at its level).
     pub(crate) nodes: u64,
     /// Worker threads; 0 = all cores.
     #[serde(default)]
@@ -38,7 +38,7 @@ impl TournamentRequest {
             return Err("a tournament needs 2 to 16 bots".into());
         }
         for (i, bot) in self.bots.iter().enumerate() {
-            if !bot.eq_ignore_ascii_case(CLASSIC) {
+            if !bot.eq_ignore_ascii_case(CLASSIC) && stockfish::level_of(bot).is_none() {
                 network::validate_name(bot)?;
             }
             if self.bots[..i]
@@ -268,7 +268,7 @@ pub(crate) fn play(
     config: &Config,
     id: String,
     request: &TournamentRequest,
-    engines: &[EngineEval],
+    engines: &[Contestant],
     stop: &StopFlag,
 ) -> Tournament {
     let mut tournament = Tournament::new(id, request);
@@ -336,7 +336,7 @@ mod tests {
     #[test]
     fn requests_are_validated() {
         let ok = TournamentRequest {
-            bots: vec!["classic".into(), "best".into()],
+            bots: vec!["classic".into(), "best".into(), "stockfish-10".into()],
             games_per_pair: 20,
             nodes: 2_000,
             threads: 0,
@@ -357,6 +357,10 @@ mod tests {
             },
             TournamentRequest {
                 games_per_pair: 0,
+                ..ok.clone()
+            },
+            TournamentRequest {
+                bots: vec!["best".into(), "stockfish-11".into()],
                 ..ok.clone()
             },
             TournamentRequest { nodes: 1, ..ok },
@@ -425,7 +429,7 @@ mod tests {
             nodes: 100,
             threads: 2,
         };
-        let engines = vec![EngineEval::default(); 3];
+        let engines = vec![Contestant::Engine(chess_eval::EngineEval::default()); 3];
         let id = new_id(&config);
         let tournament = play(&config, id.clone(), &request, &engines, &StopFlag::new());
         assert_eq!(tournament.state, TournamentState::Finished);

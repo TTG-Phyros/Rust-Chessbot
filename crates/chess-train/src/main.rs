@@ -27,6 +27,7 @@ mod pipeline;
 mod ranking;
 mod rng;
 mod selfplay;
+mod stockfish;
 mod tournament;
 mod trainer;
 
@@ -128,9 +129,9 @@ enum Command {
     },
     /// Plays engine A against engine B to measure their Elo difference.
     Match {
-        /// Engine A: `classic` or a `.nnue` file.
+        /// Engine A: `classic`, `stockfish-1` to `stockfish-10`, or a `.nnue` file.
         a: String,
-        /// Engine B: `classic` or a `.nnue` file.
+        /// Engine B: `classic`, `stockfish-1` to `stockfish-10`, or a `.nnue` file.
         b: String,
         /// Maximum number of games.
         #[arg(long)]
@@ -246,8 +247,8 @@ fn main() -> Result<()> {
 
 fn run_match(a: &str, b: &str, config: &arena::ArenaConfig) -> Result<()> {
     let stop = stop_on_signal()?;
-    let engine_a = arena::load_evaluator(a)?;
-    let engine_b = arena::load_evaluator(b)?;
+    let engine_a = arena::Contestant::load(a, config)?;
+    let engine_b = arena::Contestant::load(b, config)?;
     println!(
         "{a} ({}) vs {b} ({}), {} nodes per move",
         engine_a.name(),

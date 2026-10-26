@@ -3,6 +3,7 @@
 //! with a sequential probability ratio test (SPRT) that stops as soon as
 //! the result is clear.
 
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use anyhow::{Context, Result};
@@ -14,6 +15,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::dataset::Outcome;
 use crate::rng::Rng;
+use crate::stockfish::{self, Stockfish, UciScore};
 
 /// Match parameters (`[arena]` section of the configuration).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -31,6 +33,8 @@ pub(crate) struct ArenaConfig {
     pub(crate) seed: u64,
     /// Stop early when the SPRT concludes.
     pub(crate) sprt: bool,
+    /// Stockfish binary, for the `stockfish-N` contestants.
+    pub(crate) stockfish: PathBuf,
     /// SPRT hypotheses (Elo of A over B) and error rates.
     pub(crate) elo0: f64,
     pub(crate) elo1: f64,
@@ -49,6 +53,7 @@ impl Default for ArenaConfig {
             max_plies: 300,
             seed: 0xA4E7A,
             sprt: false,
+            stockfish: PathBuf::from("stockfish"),
             elo0: 0.0,
             elo1: 10.0,
             alpha: 0.05,
@@ -184,19 +189,118 @@ pub(crate) fn load_evaluator(spec: &str) -> Result<EngineEval> {
     EngineEval::from_nnue_bytes(&bytes).with_context(|| format!("{spec} is not a valid network"))
 }
 
-/// Plays one game; `white` and `black` search with the same node budget.
+/// A player of a match.
+#[derive(Debug, Clone)]
+pub(crate) enum Contestant {
+    /// Our engine with this evaluation, at the match's nodes per move.
+    Engine(EngineEval),
+    /// Stockfish at a level (its own depth and time per move).
+    Stockfish { binary: PathBuf, level: u8 },
+}
+
+impl Contestant {
+    /// `classic`, `stockfish-N` (with the Stockfish of `config`), or a `.nnue` file.
+    pub(crate) fn load(spec: &str, config: &ArenaConfig) -> Result<Self> {
+        match stockfish::level_of(spec) {
+            Some(level) => Ok(Self::Stockfish {
+                binary: config.stockfish.clone(),
+                level,
+            }),
+            None => load_evaluator(spec).map(Self::Engine),
+        }
+    }
+
+    pub(crate) fn name(&self) -> String {
+        match self {
+            Self::Engine(eval) => eval.name().to_owned(),
+            Self::Stockfish { level, .. } => stockfish::bot_name(*level),
+        }
+    }
+
+    fn seat(&self) -> Result<Seat> {
+        Ok(match self {
+            Self::Engine(eval) => {
+                Seat::Engine(Box::new(Searcher::new(eval.clone(), StopFlag::new())))
+            }
+            Self::Stockfish { binary, level } => Seat::Stockfish(Stockfish::spawn(binary, *level)?),
+        })
+    }
+}
+
+/// A contestant ready to play, kept by a worker thread from game to game.
+enum Seat {
+    Engine(Box<Searcher<EngineEval>>),
+    Stockfish(Stockfish),
+}
+
+/// Score of a decided game, in centipawns.
+const MATE_SCORE: i32 = 30_000;
+
+impl Seat {
+    fn new_game(&mut self) -> Result<()> {
+        match self {
+            Self::Engine(searcher) => {
+                searcher.clear();
+                Ok(())
+            }
+            Self::Stockfish(stockfish) => stockfish.new_game(),
+        }
+    }
+
+    /// Best move in `pos` (reached by the UCI `moves` from the starting
+    /// position) and its score for the side to move; `None` if there is none.
+    fn play(
+        &mut self,
+        pos: &Position,
+        moves: &[String],
+        limits: &SearchLimits,
+    ) -> Result<Option<(chess_core::Move, i32)>> {
+        match self {
+            Self::Engine(searcher) => {
+                let result = searcher.search(pos, limits, |_| {});
+                let score = match result.score {
+                    Score::Centipawns(cp) => cp,
+                    Score::Mate(moves) if moves > 0 => MATE_SCORE,
+                    Score::Mate(_) => -MATE_SCORE,
+                };
+                Ok(result.best_move.map(|best| (best, score)))
+            }
+            Self::Stockfish(stockfish) => {
+                let (best, score) = stockfish.best_move(moves)?;
+                if best == "(none)" {
+                    return Ok(None);
+                }
+                let mv = pos
+                    .parse_uci_move(&best)
+                    .map_err(|err| anyhow::anyhow!("Stockfish played {best}: {err}"))?;
+                let score = match score {
+                    Some(UciScore::Centipawns(cp)) => cp,
+                    Some(UciScore::Mate(moves)) if moves > 0 => MATE_SCORE,
+                    Some(UciScore::Mate(_)) => -MATE_SCORE,
+                    None => 0,
+                };
+                Ok(Some((mv, score)))
+            }
+        }
+    }
+}
+
+/// Plays one game. Our engine searches `config.nodes` per move; Stockfish
+/// plays at its level.
 fn play_game(
-    white: &mut Searcher<EngineEval>,
-    black: &mut Searcher<EngineEval>,
+    white: &mut Seat,
+    black: &mut Seat,
     config: &ArenaConfig,
     opening: &[chess_core::Move],
-) -> Outcome {
+) -> Result<Outcome> {
     let mut pos = Position::startpos();
+    let mut moves = Vec::with_capacity(160);
     for &mv in opening {
         pos.make_move(mv);
+        moves.push(mv.to_string());
     }
-    white.clear();
-    black.clear();
+    white.new_game()?;
+    black.new_game()?;
     let limits = SearchLimits::nodes(config.nodes.max(1));
     let mut decisive = 0;
     let mut quiet = 0;
@@ -205,29 +309,23 @@ fn play_game(
             GameStatus::Ongoing => {}
             GameStatus::Checkmate {
                 winner: Color::White,
-            } => return Outcome::WhiteWins,
+            } => return Ok(Outcome::WhiteWins),
             GameStatus::Checkmate {
                 winner: Color::Black,
-            } => return Outcome::BlackWins,
-            GameStatus::Stalemate | GameStatus::Draw(_) => return Outcome::Draw,
+            } => return Ok(Outcome::BlackWins),
+            GameStatus::Stalemate | GameStatus::Draw(_) => return Ok(Outcome::Draw),
         }
         if pos.ply() >= config.max_plies as usize {
-            return Outcome::Draw;
+            return Ok(Outcome::Draw);
         }
         let side = pos.side_to_move();
-        let searcher = if side == Color::White {
+        let seat = if side == Color::White {
             &mut *white
         } else {
             &mut *black
         };
-        let result = searcher.search(&pos, &limits, |_| {});
-        let Some(best) = result.best_move else {
-            return Outcome::Draw;
-        };
-        let score = match result.score {
-            Score::Centipawns(cp) => cp,
-            Score::Mate(moves) if moves > 0 => 30_000,
-            Score::Mate(_) => -30_000,
+        let Some((best, score)) = seat.play(&pos, &moves, &limits)? else {
+            return Ok(Outcome::Draw);
         };
         // Adjudicate once both engines agree for a few moves.
         decisive = if score.abs() >= 1_000 {
@@ -238,16 +336,17 @@ fn play_game(
         quiet = if score.abs() <= 10 { quiet + 1 } else { 0 };
         if decisive >= 6 {
             let white_wins = score * side.sign() > 0;
-            return if white_wins {
+            return Ok(if white_wins {
                 Outcome::WhiteWins
             } else {
                 Outcome::BlackWins
-            };
+            });
         }
         if quiet >= 10 && pos.ply() >= 80 {
-            return Outcome::Draw;
+            return Ok(Outcome::Draw);
         }
         pos.make_move(best);
+        moves.push(best.to_string());
     }
 }
 
@@ -275,8 +374,8 @@ fn opening(config: &ArenaConfig, index: u64) -> Vec<chess_core::Move> {
 /// Plays A against B. With `config.sprt`, stops as soon as the SPRT concludes.
 /// `on_progress` receives the running result after each batch of pairs.
 pub(crate) fn play_match(
-    a: &EngineEval,
-    b: &EngineEval,
+    a: &Contestant,
+    b: &Contestant,
     config: &ArenaConfig,
     stop: &StopFlag,
     mut on_progress: impl FnMut(MatchResult),
@@ -298,30 +397,26 @@ pub(crate) fn play_match(
     while !stop.is_stopped() && next_pair.load(Ordering::Relaxed) < pairs {
         let start = next_pair.fetch_add(threads as u32, Ordering::Relaxed);
         let end = (start + threads as u32).min(pairs);
-        let batch: Vec<MatchResult> = pool.install(|| {
+        let batch: Vec<Result<MatchResult>> = pool.install(|| {
             (start..end)
                 .into_par_iter()
                 .map_init(
-                    || {
-                        (
-                            Searcher::new(a.clone(), StopFlag::new()),
-                            Searcher::new(b.clone(), StopFlag::new()),
-                        )
-                    },
-                    |(engine_a, engine_b), pair| {
+                    || Ok((a.seat()?, b.seat()?)),
+                    |seats: &mut Result<(Seat, Seat)>, pair| {
+                        let (seat_a, seat_b) =
+                            seats.as_mut().map_err(|err| anyhow::anyhow!("{err:#}"))?;
                         let moves = opening(config, u64::from(pair));
                         let mut pair_result = MatchResult::default();
                         // Same opening, colors swapped.
-                        pair_result
-                            .add(play_game(engine_a, engine_b, config, &moves), Color::White);
-                        pair_result
-                            .add(play_game(engine_b, engine_a, config, &moves), Color::Black);
-                        pair_result
+                        pair_result.add(play_game(seat_a, seat_b, config, &moves)?, Color::White);
+                        pair_result.add(play_game(seat_b, seat_a, config, &moves)?, Color::Black);
+                        Ok(pair_result)
                     },
                 )
                 .collect()
         });
         for pair in batch {
+            let pair = pair?;
             result.wins += pair.wins;
             result.draws += pair.draws;
             result.losses += pair.losses;
@@ -405,7 +500,7 @@ mod tests {
             ..ArenaConfig::default()
         };
         assert_eq!(opening(&config, 3), opening(&config, 3));
-        let classic = EngineEval::default();
+        let classic = Contestant::Engine(EngineEval::default());
         let mut progress = 0;
         let result = play_match(&classic, &classic, &config, &StopFlag::new(), |_| {
             progress += 1
@@ -421,5 +516,50 @@ mod tests {
     fn loads_evaluators() {
         assert_eq!(load_evaluator("classic").unwrap().name(), "classic");
         assert!(load_evaluator("/no/such/net.nnue").is_err());
+        let config = ArenaConfig::default();
+        assert_eq!(
+            Contestant::load("classic", &config).unwrap().name(),
+            "classic"
+        );
+        assert_eq!(
+            Contestant::load("stockfish-4", &config).unwrap().name(),
+            "stockfish-4"
+        );
+        assert!(Contestant::load("stockfish-11", &config).is_err());
+    }
+
+    #[test]
+    fn a_missing_stockfish_fails_the_match() {
+        let config = ArenaConfig {
+            games: 2,
+            threads: 1,
+            stockfish: PathBuf::from("/no/such/stockfish"),
+            ..ArenaConfig::default()
+        };
+        let stockfish = Contestant::load("stockfish-1", &config).unwrap();
+        let classic = Contestant::Engine(EngineEval::default());
+        let result = play_match(&classic, &stockfish, &config, &StopFlag::new(), |_| {});
+        assert!(result.is_err());
+    }
+
+    /// Plays real games against Stockfish when one is installed (set
+    /// `CHESS_TRAIN_TEST_STOCKFISH` to its path; skipped otherwise).
+    #[test]
+    fn plays_stockfish_when_available() {
+        let Ok(binary) = std::env::var("CHESS_TRAIN_TEST_STOCKFISH") else {
+            return;
+        };
+        let config = ArenaConfig {
+            games: 2,
+            nodes: 500,
+            threads: 2,
+            max_plies: 200,
+            stockfish: PathBuf::from(binary),
+            ..ArenaConfig::default()
+        };
+        let stockfish = Contestant::load("stockfish-1", &config).unwrap();
+        let classic = Contestant::Engine(EngineEval::default());
+        let result = play_match(&classic, &stockfish, &config, &StopFlag::new(), |_| {}).unwrap();
+        assert_eq!(result.games(), 2);
     }
 }

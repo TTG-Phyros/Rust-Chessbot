@@ -9,6 +9,19 @@ describe('move limits', () => {
     }
   });
 
+  it('step on round values from their minimum', () => {
+    // The input's arrows go min + k × step: the defaults and the round
+    // values users type (300 ms, 5 000 nodes) must be on that grid.
+    for (const option of LIMIT_OPTIONS) {
+      expect(option.min % option.step, option.kind).toBe(0);
+      expect(option.initial % option.step, option.kind).toBe(0);
+    }
+    expect(limitError('time', 300)).toBeNull();
+    expect(limitError('time', 333)).toBeNull();
+    expect(limitError('nodes', 5_000)).toBeNull();
+    expect(limitError('nodes', 12_345)).toBeNull();
+  });
+
   it('follow the service bounds', () => {
     expect(limitError('nodes', 50)).not.toBeNull();
     expect(limitError('depth', 31)).not.toBeNull();

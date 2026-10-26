@@ -192,7 +192,10 @@ function TournamentForm({
     Number(threads) >= 0;
 
   return (
+    // noValidate: the browser would only accept min + k × step; the form
+    // checks the service's bounds itself.
     <form
+      noValidate
       className="space-y-4"
       onSubmit={(event) => {
         event.preventDefault();

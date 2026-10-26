@@ -128,7 +128,9 @@ export function NetworkForm({
   };
 
   return (
+    // noValidate: the fields are checked against the service's bounds below.
     <form
+      noValidate
       className="space-y-5"
       onSubmit={(event) => {
         event.preventDefault();

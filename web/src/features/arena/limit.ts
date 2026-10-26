@@ -11,6 +11,10 @@ export type LimitOption = {
   /** Bounds checked by the training service. */
   min: number;
   max: number;
+  /**
+   * Increment of the input's arrows. `min` is a multiple of it: the browser
+   * steps from `min`, so a misaligned step would make round values odd.
+   */
   step: number;
   initial: number;
   help: string;
@@ -23,7 +27,7 @@ export const LIMIT_OPTIONS: readonly LimitOption[] = [
     field: 'Nœuds par coup',
     min: 100,
     max: 10_000_000,
-    step: 500,
+    step: 100,
     initial: 5000,
     help: 'Chaque bot examine ce nombre de positions avant de jouer : même effort pour tous, résultats reproductibles quelle que soit la charge de la machine. Environ 4 M nœuds/s par thread.',
   },
@@ -43,7 +47,7 @@ export const LIMIT_OPTIONS: readonly LimitOption[] = [
     field: 'Temps par coup (ms)',
     min: 10,
     max: 60_000,
-    step: 50,
+    step: 10,
     initial: 100,
     help: 'Chaque bot réfléchit ce temps : une évaluation plus rapide cherche plus loin. Dépend de la charge de la machine (un entraînement en parallèle ralentit tout le monde).',
   },

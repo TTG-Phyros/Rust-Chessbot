@@ -6,7 +6,7 @@ Moteur d'échecs en Rust avec trois parties :
 2. **Entraînement** : self-play et entraînement d'un réseau NNUE avec [burn](https://burn.dev), sur GPU NVIDIA avec repli automatique sur le CPU.
 3. **Visualisation** : interface web (React + TypeScript) pour jouer, analyser et suivre l'entraînement.
 
-> **État : phase 5 sur 7.** Le moteur joue (perft exact, recherche alpha-beta, évaluation PeSTO, UCI complet), l'interface web permet de jouer et d'analyser, et le pipeline d'entraînement NNUE (self-play, dataset en streaming, entraînement GPU avec repli CPU, export quantifié) fonctionne. Le moteur utilisera le réseau entraîné en phase 6. Voir [Feuille de route](#feuille-de-route).
+> **État : phase 6 sur 7.** Le moteur joue avec un réseau NNUE entraîné par self-play (repli sur PeSTO sans réseau) : génération de coups exacte, recherche alpha-beta, UCI complet. L'interface web permet de jouer, d'analyser, et de piloter et suivre l'entraînement (perte, Elo entre checkpoints). Voir [Feuille de route](#feuille-de-route).
 
 ## Démarrage rapide
 
@@ -77,6 +77,8 @@ data_dir = "data"
 log_format = "pretty"   # ou "json"
 max_searches = 8        # recherches simultanées (défaut : nombre de cœurs)
 engine_hash_mb = 16     # table de transposition de chaque recherche
+eval_file = "data/weights/main.nnue"   # réseau utilisé dès qu'il existe (rechargé à chaque export)
+# trainer_url = "http://trainer:4000"  # démon de contrôle de l'entraînement (défini en Docker)
 ```
 
 Le niveau de log se règle avec `RUST_LOG` (ex. `RUST_LOG=debug`).
@@ -87,7 +89,7 @@ Le niveau de log se règle avec `RUST_LOG` (ex. `RUST_LOG=debug`).
 
 - **Jouer** : échiquier en glisser-déposer ou clic-clic, choix de la couleur (blancs, noirs, aléatoire), niveau réglable en profondeur (1 à 20) ou en temps par coup (0,1 à 10 s), annulation de coup, import/export FEN et PGN.
 - **Analyse** : barre d'évaluation, score, ligne principale en SAN, flèche du meilleur coup, infos de recherche en direct (profondeur, nœuds, vitesse, remplissage de la table). L'analyse est relancée à chaque coup. On navigue dans la partie avec les flèches ← → (Origine et Fin pour aller au début ou à la fin), ou en cliquant dans la liste des coups.
-- **Entraînement** : en phase 6.
+- **Entraînement** : état du run (device, phase, parties, positions, superbatchs, perte, vitesse, VRAM), courbes de perte et d'Elo contre PeSTO, évaluation utilisée par le moteur. Boutons « Démarrer / reprendre », « Nouveau réseau » et « Arrêter », qui nécessitent le profil `train` ou `train-cpu`.
 
 Le front ne contient aucune règle d'échecs : chaque coup est validé par le moteur, qui renvoie aussi les coups légaux, le SAN et l'état de la partie.
 
@@ -104,6 +106,10 @@ L'API est **sans état** : une partie est toujours envoyée sous la forme `{ "fe
 | `POST /api/engine/move` | coup du moteur, avec limites `depth`, `movetimeMs`, `nodes` (1 s par défaut) |
 | `POST /api/pgn/import` | première partie d'un PGN |
 | `POST /api/pgn/export` | partie au format PGN |
+| `GET /api/engine` | évaluation utilisée par le moteur (`nnue` ou `classic`, fichier de poids) |
+| `GET /api/training` | état du démon, statut du run, courbes de perte et d'Elo |
+| `POST /api/training/start` | démarre ou reprend le pipeline (`{"fresh": true}` pour un réseau vierge) ; 409 si déjà en cours |
+| `POST /api/training/stop` | arrête le pipeline après l'étape en cours (checkpoint écrit) |
 | `GET /ws` | WebSocket : `analyze` puis un message `info` par profondeur et un `done` final ; `stop` interrompt l'analyse |
 
 Les scores renvoyés sont du point de vue des blancs. Les limites sont plafonnées côté serveur (profondeur 64, 60 s par coup, 10 min d'analyse), et le nombre de recherches simultanées est borné par `max_searches`.
@@ -113,34 +119,40 @@ Les scores renvoyés sont du point de vue des blancs. Les limites sont plafonné
 Le réseau suit l'architecture `768 → 256 ×2 → 1` en perspective. Les entrées sont 768 features binaires (couleur relative × pièce × case), et un feature transformer commun alimente deux moitiés : celle du camp au trait et celle de l'adversaire. Les deux passent par un ReLU borné (CReLU) avant la couche de sortie.
 
 ```sh
-docker compose --profile train up        # pipeline sur GPU (repli CPU si aucun GPU)
+docker compose --profile train up        # UI + API + entraînement GPU (repli CPU si aucun GPU)
 docker compose --profile train-cpu up    # même chose sans CUDA
 docker compose --profile train stop      # arrêt propre : l'étape en cours se termine, checkpoint écrit
 ```
 
-La commande par défaut est `pipeline`. Elle fait tourner **le self-play sur les cœurs CPU** (producteur) et **l'entraînement sur le GPU** (consommateur) en même temps :
+Le service `train` lance le **démon de contrôle** (`chess-train serve --autostart`). Celui-ci démarre aussitôt le pipeline ; ensuite, la page **Entraînement** de l'UI l'arrête, le reprend ou repart d'un réseau vierge, via `chess-server`. Le pipeline fait tourner **le self-play sur les cœurs CPU** (producteur) et **l'entraînement sur le GPU** (consommateur) en même temps :
 
-1. **Self-play.** Le moteur joue contre lui-même (rayon, un searcher par thread) après 6 à 10 coups aléatoires, à 5 000 nœuds par coup. On ne garde que les positions calmes : pas d'échec, meilleur coup non tactique. Une partie s'arrête par adjudication quand les deux camps s'accordent sur le résultat.
+1. **Self-play.** Le moteur joue contre lui-même (rayon, un searcher par thread) après 6 à 10 coups aléatoires, à 5 000 nœuds par coup, **avec le dernier réseau exporté**. Il le recharge dès qu'un nouvel export paraît, et utilise PeSTO tant qu'il n'y en a pas. On ne garde que les positions calmes : pas d'échec, meilleur coup non tactique. Une partie s'arrête par adjudication quand les deux camps s'accordent sur le résultat.
 2. **Dataset.** Chaque position est un enregistrement fixe de 32 octets (format `CBDS` v1, décrit dans `crates/chess-train/src/dataset/mod.rs`), écrit par fichiers d'un million de positions publiés de façon atomique. Les datasets vivent dans le volume Docker `datasets`.
 3. **Entraînement.** Les fichiers sont **lus en continu depuis le disque**, par blocs mélangés, sans jamais tenir entièrement en mémoire. Batchs de 16 384 positions (environ 1,4 Go de VRAM sur la RTX 4060), optimiseur AdamW, perte `(σ(sortie) − cible)²` où la cible mélange le score de recherche et le résultat de la partie.
-4. **Checkpoints.** À chaque superbatch (200 pas), `data/checkpoints/<run>/` reçoit les poids flottants avec leurs identifiants de paramètres, l'état AdamW et la progression. La reprise est exacte et se fait par défaut ; l'option `--fresh` repart de zéro.
-5. **Export.** Les poids quantifiés au format `CBNN` v1 attendu par `chess-eval` (décrit dans `crates/chess-eval/src/nnue/mod.rs`) vont dans `data/weights/<run>.nnue`, avec un instantané `data/weights/<run>/sbNNNNN.nnue` tous les 5 superbatchs.
-6. **Métriques.** `data/metrics/events.jsonl` reçoit une ligne par événement (perte, vitesse, VRAM, checkpoints, exports). `data/metrics/status.json` donne l'état courant (phase, device, parties, positions, perte) ; `chess-server` le lit.
+4. **Checkpoints.** À chaque superbatch (200 pas), `data/checkpoints/<run>/` reçoit les poids flottants avec leurs identifiants de paramètres, l'état AdamW et la progression. La reprise est exacte et se fait par défaut ; l'option `--fresh` (ou le bouton « Nouveau réseau ») repart de zéro.
+5. **Export.** Les poids quantifiés au format `CBNN` v1 attendu par `chess-eval` (décrit dans `crates/chess-eval/src/nnue/mod.rs`) vont dans `data/weights/<run>.nnue`, avec un instantané `data/weights/<run>/sbNNNNN.nnue` tous les 5 superbatchs. **Le serveur recharge ce fichier automatiquement** : dès le premier export, on joue et on analyse contre le réseau.
+6. **Elo.** Chaque export est mesuré contre l'évaluation classique (PeSTO), en 64 parties jouées par paires couleurs inversées, sur 2 threads. On obtient la courbe d'Elo entre checkpoints.
+7. **Métriques.** `data/metrics/events.jsonl` reçoit une ligne par événement (perte, vitesse, VRAM, checkpoints, exports, matchs) et `data/metrics/status.json` donne l'état courant. La page Entraînement les affiche : courbes de perte et d'Elo, parties générées, device, VRAM.
 
-Les étapes sont aussi disponibles séparément, en Docker (`just train <commande>`) ou en natif :
+Les étapes sont aussi disponibles séparément, en Docker (`just train-run <commande>`) ou en natif :
 
 ```sh
-chess-train gpu-check                 # device utilisé, matmul + rétropropagation vérifiés
-chess-train selfplay --games 10000    # génère un dataset
-chess-train train --superbatches 50   # entraîne sur tout le dossier de datasets
-chess-train export --out net.nnue     # quantifie le dernier checkpoint
+chess-train gpu-check                          # device utilisé ; matmul, sigmoïde, rétropropagation vérifiés
+chess-train selfplay --games 10000             # génère un dataset (--network net.nnue pour jouer avec un réseau)
+chess-train train --superbatches 50            # entraîne sur tout le dossier de datasets
+chess-train export --out net.nnue              # quantifie le dernier checkpoint
+chess-train match new.nnue old.nnue --games 400 --sprt --elo0 0 --elo1 10
+chess-train serve --port 4000                  # démon de contrôle (GET /status, POST /start, POST /stop)
 ```
 
-La configuration se fait par `chess-train.toml` (voir [`chess-train.example.toml`](chess-train.example.toml)), par les variables `CHESS_TRAIN_*` (`CHESS_TRAIN_SELFPLAY__NODES=8000`) ou par les options de la ligne de commande. `CHESS_TRAIN_RUN` sépare plusieurs expériences.
+`match` joue des paires de parties sur la même ouverture aléatoire, couleurs inversées, à nombre de nœuds fixe. Il affiche l'Elo avec son intervalle à 95 % et la LOS. Avec `--sprt`, il s'arrête dès que le test conclut (approximation normale du modèle trinomial, comme fishtest ; α = β = 0,05 par défaut). `classic` désigne l'évaluation PeSTO.
+
+La configuration se fait par `chess-train.toml` (voir [`chess-train.example.toml`](chess-train.example.toml)), par les variables `CHESS_TRAIN_*` (`CHESS_TRAIN_SELFPLAY__NODES=8000`) ou par les options de la ligne de commande. `CHESS_TRAIN_RUN` sépare plusieurs expériences ; le serveur suit alors `data/weights/<run>.nnue`.
 
 **Ordres de grandeur sur la machine de référence (8 cœurs, RTX 4060).**
-- Self-play : environ 136 parties/s (environ 10 000 positions/s), ou 80 parties/s quand l'entraînement tourne en parallèle.
-- Entraînement : environ 580 000 positions/s sur GPU, contre environ 100 000/s sur CPU.
+- Self-play : environ 136 parties/s avec PeSTO, moins avec le NNUE.
+- Entraînement : environ 580 000 positions/s sur GPU seul, environ 330 000/s quand le self-play tourne en parallèle, contre environ 100 000/s sur CPU.
+- Recherche : environ 5,8M nœuds/s avec PeSTO, environ 3M nœuds/s avec le NNUE (sans SIMD explicite pour l'instant).
 
 ## Utiliser le moteur dans une GUI (Cute Chess, Arena)
 
@@ -159,6 +171,7 @@ Options UCI :
 | `Hash` | 16 | taille de la table de transposition, en Mio |
 | `Move Overhead` | 30 | marge en ms gardée à chaque coup pour la latence de la GUI |
 | `Clear Hash` | — | vide la table de transposition |
+| `EvalFile` | `<empty>` | réseau `.nnue` à utiliser ; vide ou invalide : évaluation classique (PeSTO). Aussi via la variable `CHESS_EVAL_FILE` |
 
 La recherche tourne dans un thread séparé : `stop` et `isready` répondent pendant la réflexion. Les logs du moteur partent sur stderr, ce qui n'interfère pas avec le protocole. `RUST_LOG=debug` les rend visibles.
 
@@ -176,7 +189,7 @@ Le moteur peut aussi être piloté par script : `printf "position startpos\ngo d
 - [x] **Phase 3** : `chess-search` (PVS, iterative deepening, TT, quiescence, null move, LMR, killers, history, MVV-LVA, gestion du temps), évaluation PeSTO, UCI complet
 - [x] **Phase 4** : `chess-server` (API REST sans état, analyse en direct par WebSocket, OpenAPI) + front : modes jeu et analyse
 - [x] **Phase 5** : `chess-train` : self-play multithread, dataset binaire en streaming, entraînement NNUE (burn, GPU + repli CPU), checkpoints et reprise, export quantifié, métriques, pipeline producteur/consommateur
-- [ ] **Phase 6** : NNUE dans `chess-eval`, mode entraînement de l'UI, matchs entre versions
+- [x] **Phase 6** : NNUE incrémental dans `chess-eval` (chargé au runtime, repli PeSTO), mode Entraînement de l'UI (démon de contrôle, courbes), matchs entre versions avec SPRT et suivi de l'Elo
 - [ ] **Phase 7** : optimisations (profiling, SIMD), README final
 
 ## Licence

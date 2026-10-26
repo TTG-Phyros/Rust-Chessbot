@@ -66,12 +66,30 @@ RUN apt-get update \
 WORKDIR /app
 
 FROM chef-cuda AS builder-cuda
+# cubecl links a bundled LLVM that its build script (tracel-llvm-bundler)
+# downloads from GitHub, in one attempt. Fetch the archive first with retries
+# and resume, where the build script looks for it (it checks the checksum and
+# downloads again on a mismatch, e.g. after a version bump: keep in sync with
+# Cargo.lock). The archive and the installed bundle live in cache mounts, so
+# dependency changes do not download them again.
+ARG TRACEL_LLVM_VERSION=23.1.0-4
+RUN --mount=type=cache,target=/root/.cache/tracel,sharing=locked \
+    archive=/root/.cache/tracel/tracel-llvm-${TRACEL_LLVM_VERSION}-linux-x64.tar.xz \
+    && if [ ! -f "$archive" ]; then \
+         curl -fL --retry 10 --retry-all-errors --retry-delay 2 -C - -o "$archive.part" \
+           "https://github.com/tracel-ai/tracel-llvm/releases/download/v${TRACEL_LLVM_VERSION}/linux-x64.tar.xz" \
+         && mv "$archive.part" "$archive"; \
+       fi
 COPY --from=planner /app/recipe.json recipe.json
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/root/.cache/tracel,sharing=locked \
+    --mount=type=cache,target=/root/.local/share/tracel,sharing=locked \
     CUDARC_CUDA_VERSION=$(cat /cudarc-cuda-version) \
     cargo chef cook --release --recipe-path recipe.json -p chess-train --features cuda
 COPY . .
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/root/.cache/tracel,sharing=locked \
+    --mount=type=cache,target=/root/.local/share/tracel,sharing=locked \
     CUDARC_CUDA_VERSION=$(cat /cudarc-cuda-version) \
     cargo build --release --locked -p chess-train --features cuda \
     && cp target/release/chess-train /usr/local/bin/

@@ -18,6 +18,47 @@ use crate::metrics::Metrics;
 use crate::selfplay::{self, SelfplayConfig, SelfplayStats};
 use crate::trainer::{TrainState, Trainer};
 
+/// Decides, at the start of each epoch, whether the trainer may go through
+/// the dataset again.
+struct DataGate {
+    min_positions: u64,
+    max_reuse: u64,
+    /// Positions handed to the trainer so far (one full dataset per epoch).
+    served: u64,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum Gate {
+    Open,
+    /// Fewer than `min_positions` positions so far.
+    NotEnoughData,
+    /// Another epoch would train on each position more than `max_reuse`
+    /// times on average.
+    TooMuchReuse,
+}
+
+impl DataGate {
+    fn new(min_positions: u64, max_reuse: u64) -> Self {
+        Self {
+            min_positions,
+            max_reuse,
+            served: 0,
+        }
+    }
+
+    fn admit(&mut self, available: u64) -> Gate {
+        if available < self.min_positions.max(1) {
+            return Gate::NotEnoughData;
+        }
+        if self.max_reuse > 0 && self.served + available > available.saturating_mul(self.max_reuse)
+        {
+            return Gate::TooMuchReuse;
+        }
+        self.served += available;
+        Gate::Open
+    }
+}
+
 /// Runs self-play and training together until `stop` is raised or the
 /// configured number of superbatches is reached.
 pub(crate) fn run(
@@ -89,28 +130,34 @@ pub(crate) fn run(
         };
 
         // Train on this run's files once enough positions exist.
-        let (dir, run, min_positions) = (
-            config.dataset_dir.clone(),
-            config.run.clone(),
-            config.min_positions,
-        );
+        let (dir, run) = (config.dataset_dir.clone(), config.run.clone());
+        let mut gate = DataGate::new(config.min_positions, config.max_reuse);
         let mut last_report: Option<std::time::Instant> = None;
         let files = Box::new(move || {
             let files = dataset_files(&dir, Some(&run));
             let available: u64 = files.iter().map(|f| record_count(f)).sum();
-            if available < min_positions {
-                // Called every second while waiting: report every 30 s only.
-                if last_report.is_none_or(|at| at.elapsed() >= Duration::from_secs(30)) {
-                    tracing::info!(
-                        available,
-                        needed = min_positions,
-                        "waiting for self-play data (positions count once a chunk file is complete)"
-                    );
-                    last_report = Some(std::time::Instant::now());
+            match gate.admit(available) {
+                Gate::Open => files,
+                wait => {
+                    // Called every second while waiting: report every 30 s only.
+                    if last_report.is_none_or(|at| at.elapsed() >= Duration::from_secs(30)) {
+                        match wait {
+                            Gate::NotEnoughData => tracing::info!(
+                                available,
+                                needed = gate.min_positions,
+                                "waiting for self-play data (positions count once a chunk file is complete)"
+                            ),
+                            _ => tracing::info!(
+                                available,
+                                max_reuse = gate.max_reuse,
+                                "training is ahead of self-play: waiting for new games"
+                            ),
+                        }
+                        last_report = Some(std::time::Instant::now());
+                    }
+                    Vec::new()
                 }
-                return Vec::new();
             }
-            files
         });
         let trainer = Trainer {
             config: config.train.clone(),
@@ -140,4 +187,28 @@ pub(crate) fn run(
         produced?;
         trained
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gate_waits_for_data_then_bounds_reuse() {
+        let mut gate = DataGate::new(100, 3);
+        assert_eq!(gate.admit(50), Gate::NotEnoughData);
+        // 100 positions: three epochs, then each was seen three times.
+        for _ in 0..3 {
+            assert_eq!(gate.admit(100), Gate::Open);
+        }
+        assert_eq!(gate.admit(100), Gate::TooMuchReuse);
+        // New games make room again: 500 served for 200 available (≤ 3 × 200).
+        assert_eq!(gate.admit(200), Gate::Open);
+        assert_eq!(gate.admit(200), Gate::TooMuchReuse);
+
+        let mut unlimited = DataGate::new(1, 0);
+        for _ in 0..1000 {
+            assert_eq!(unlimited.admit(10), Gate::Open);
+        }
+    }
 }

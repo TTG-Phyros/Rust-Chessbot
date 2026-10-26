@@ -11,6 +11,10 @@ data_dir = "data"
 dataset_dir = "data/datasets"
 # Pipeline only: positions to generate before training starts.
 min_positions = 2000000
+# Pipeline only: most times each generated position is trained on, on average.
+# Training is much faster than self-play: beyond this, it waits for new games
+# instead of overfitting the existing ones. 0 = no limit.
+max_reuse = 30
 
 [selfplay]
 # Games to play; 0 = until stopped.

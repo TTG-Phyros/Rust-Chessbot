@@ -29,6 +29,9 @@ pub(crate) struct Config {
     pub(crate) dataset_dir: PathBuf,
     /// Pipeline: positions to generate before training starts.
     pub(crate) min_positions: u64,
+    /// Pipeline: most times each generated position is trained on, on
+    /// average; training waits for self-play beyond it (0 = no limit).
+    pub(crate) max_reuse: u64,
     pub(crate) selfplay: SelfplayConfig,
     pub(crate) train: TrainConfig,
     pub(crate) evaluation: EvaluationConfig,
@@ -42,6 +45,7 @@ impl Default for Config {
             data_dir: PathBuf::from("data"),
             dataset_dir: PathBuf::from("data/datasets"),
             min_positions: 2_000_000,
+            max_reuse: 30,
             selfplay: SelfplayConfig::default(),
             train: TrainConfig::default(),
             evaluation: EvaluationConfig::default(),

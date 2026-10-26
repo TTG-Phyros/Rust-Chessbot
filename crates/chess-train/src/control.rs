@@ -9,7 +9,7 @@
 //! - `GET /networks/defaults` → the hyperparameters of a new network
 //! - `POST /networks` (`{"name", "params"}`) → 201; `DELETE /networks/{name}` → 204
 //! - `POST /bots` (`{"name", "network", "superbatch"}`) → 201; `DELETE /bots/{name}` → 204
-//! - `POST /tournaments` (`{"bots", "gamesPerPair", "nodes", "threads"}`) → 202
+//! - `POST /tournaments` (`{"bots", "gamesPerPair", "limit", "threads"}`) → 202
 //! - `POST /tournaments/stop` → 202
 //!
 //! Errors are `{"error": "..."}` with 404, 409 or 422. Progress itself is
@@ -657,13 +657,17 @@ mod tests {
         );
 
         // A tournament against the classical evaluation.
-        let unknown = json!({ "bots": ["classic", "nobody"], "gamesPerPair": 2, "nodes": 100 });
+        let unknown = json!({
+            "bots": ["classic", "nobody"], "gamesPerPair": 2,
+            "limit": { "kind": "depth", "value": 2 }
+        });
         assert_eq!(
             call(&app, "POST", "/tournaments", unknown).await.0,
             StatusCode::NOT_FOUND
         );
         let request = json!({
-            "bots": ["classic", "lr-sb5"], "gamesPerPair": 2, "nodes": 100, "threads": 2
+            "bots": ["classic", "lr-sb5"], "gamesPerPair": 2,
+            "limit": { "kind": "nodes", "value": 100 }, "threads": 2
         });
         let (code, body) = call(&app, "POST", "/tournaments", request).await;
         assert_eq!(code, StatusCode::ACCEPTED);

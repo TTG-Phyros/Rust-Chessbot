@@ -136,9 +136,15 @@ enum Command {
         /// Maximum number of games.
         #[arg(long)]
         games: Option<u32>,
-        /// Nodes per move.
-        #[arg(long)]
+        /// Nodes per move of our engine.
+        #[arg(long, conflicts_with_all = ["depth", "movetime"])]
         nodes: Option<u64>,
+        /// Depth per move of our engine, instead of nodes.
+        #[arg(long, conflicts_with = "movetime")]
+        depth: Option<u32>,
+        /// Milliseconds per move of our engine, instead of nodes.
+        #[arg(long)]
+        movetime: Option<u64>,
         /// Worker threads (0 = all cores).
         #[arg(long)]
         threads: Option<usize>,
@@ -228,6 +234,8 @@ fn main() -> Result<()> {
             b,
             games,
             nodes,
+            depth,
+            movetime,
             threads,
             sprt,
             elo0,
@@ -236,6 +244,13 @@ fn main() -> Result<()> {
             let arena = &mut config.arena;
             arena.games = games.unwrap_or(arena.games);
             arena.nodes = nodes.unwrap_or(arena.nodes);
+            if let Some(limit) = depth
+                .map(arena::MoveLimit::Depth)
+                .or(movetime.map(arena::MoveLimit::Time))
+            {
+                arena.limit = Some(limit);
+            }
+            arena.move_limit().validate().map_err(anyhow::Error::msg)?;
             arena.threads = threads.unwrap_or(arena.threads);
             arena.sprt |= sprt;
             arena.elo0 = elo0.unwrap_or(arena.elo0);
@@ -250,10 +265,10 @@ fn run_match(a: &str, b: &str, config: &arena::ArenaConfig) -> Result<()> {
     let engine_a = arena::Contestant::load(a, config)?;
     let engine_b = arena::Contestant::load(b, config)?;
     println!(
-        "{a} ({}) vs {b} ({}), {} nodes per move",
+        "{a} ({}) vs {b} ({}), {}",
         engine_a.name(),
         engine_b.name(),
-        config.nodes
+        config.move_limit()
     );
     let report = |result: arena::MatchResult| {
         let mut line = format!(

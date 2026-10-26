@@ -170,7 +170,7 @@ Le niveau de log se règle avec `RUST_LOG` (ex. `RUST_LOG=debug`).
   - son **top 5** des snapshots, chacun sauvegardable comme bot ;
   - ses courbes de perte et d'Elo contre PeSTO ;
   - les boutons « Démarrer / reprendre », « Arrêter », « Repartir de zéro » et « Supprimer ».
-- **Arène** : les bots sauvegardés, plus PeSTO et **Stockfish niveaux 1 à 10**, et les **tournois** toutes-rondes entre eux : choix des participants, des parties par paire et des nœuds par coup. Un tournoi affiche sa progression en direct, un classement Elo, une table croisée et l'historique des tournois.
+- **Arène** : les bots sauvegardés, plus PeSTO et **Stockfish niveaux 1 à 10**, et les **tournois** toutes-rondes entre eux : choix des participants, des parties par paire et de la réflexion de nos bots (nœuds, profondeur ou temps par coup). Un tournoi affiche sa progression en direct, un classement Elo, une table croisée et l'historique des tournois.
 
 Les boutons de ces deux pages passent par le démon de contrôle : il faut le profil `train` ou `train-cpu`. Sans lui, réseaux, bots et résultats restent consultables.
 
@@ -197,7 +197,7 @@ L'API est **sans état** : une partie est toujours envoyée sous la forme `{ "fe
 | `POST /api/networks`, `DELETE /api/networks/{nom}` | crée un réseau (`{"name", "params"}`, 422 si un paramètre est hors bornes), le supprime |
 | `GET /api/arena` | bots et derniers tournois |
 | `POST /api/bots`, `DELETE /api/bots/{nom}` | sauvegarde un snapshot comme bot (`{"name", "network", "superbatch"}`), le supprime |
-| `POST /api/tournaments`, `POST /api/tournaments/stop` | lance un tournoi (`{"bots", "gamesPerPair", "nodes", "threads"}`), l'arrête |
+| `POST /api/tournaments`, `POST /api/tournaments/stop` | lance un tournoi (`{"bots", "gamesPerPair", "limit": {"kind": "nodes" | "depth" | "time", "value"}, "threads"}`), l'arrête |
 | `GET /ws` | WebSocket : `analyze` puis un message `info` par profondeur et un `done` final ; `stop` interrompt l'analyse |
 
 Les scores renvoyés sont du point de vue des blancs. Les limites sont plafonnées côté serveur (profondeur 64, 60 s par coup, 10 min d'analyse), et le nombre de recherches simultanées est borné par `max_searches`.
@@ -230,7 +230,7 @@ chess-train selfplay --games 10000             # génère un dataset (--network 
 chess-train train --superbatches 50            # entraîne sur tout le dossier de datasets
 chess-train export --out net.nnue              # quantifie le dernier checkpoint
 chess-train match new.nnue old.nnue --games 400 --sprt --elo0 0 --elo1 10
-chess-train match data/weights/main.nnue stockfish-5 --games 100
+chess-train match data/weights/main.nnue stockfish-5 --games 100 --movetime 100   # ou --nodes, --depth
 chess-train serve --port 4000                  # démon de contrôle (GET /status, POST /start, POST /stop)
 ```
 
@@ -246,9 +246,14 @@ La configuration se fait par `chess-train.toml` (voir [`chess-train.example.toml
   - Un seul réseau s'entraîne à la fois, car le GPU et les cœurs sont partagés.
   - **Réutiliser les parties de** : le nouveau réseau s'entraîne aussi sur les parties d'autres réseaux. Il démarre ainsi sans attendre 2 M positions de son propre self-play, ce qui est pratique pour comparer des hyperparamètres d'entraînement sur les mêmes données.
 - **Bot.** Un bot est un snapshot copié dans `data/bots/<nom>.nnue`, avec sa description (`<nom>.json` : réseau d'origine, superbatch, Elo mesuré, hyperparamètres). Il ne bouge plus, même si le réseau continue de s'entraîner ou est supprimé.
-- **Tournoi.** Chaque paire de bots joue les mêmes ouvertures aléatoires avec les deux couleurs, au même nombre de nœuds par coup : seule l'évaluation les distingue. Le classement ajuste un Elo sur toutes les parties (modèle de Bradley-Terry), avec PeSTO à 0 quand il participe. Les résultats sont écrits au fil des parties dans `data/tournaments/<id>.json`. Un tournoi peut tourner pendant un entraînement : il prend alors du CPU au self-play (réglable avec « Threads »).
+- **Tournoi.** Chaque paire de bots joue les mêmes ouvertures aléatoires avec les deux couleurs, et tous nos bots réfléchissent pareil : seule l'évaluation les distingue. La réflexion se règle de trois façons :
+  - **Nœuds** (par défaut) : chaque bot examine le même nombre de positions avant de jouer, soit environ 4 M nœuds/s par thread. Les résultats sont reproductibles quelle que soit la charge de la machine.
+  - **Profondeur** : chaque bot cherche jusqu'à la même profondeur (1 à 30 demi-coups). Le temps par coup varie beaucoup selon la position.
+  - **Temps** : chaque bot réfléchit le même temps par coup (10 ms à 60 s). Une évaluation plus rapide cherche alors plus loin, ce qui correspond aux conditions de jeu réelles, mais un entraînement en parallèle ralentit tout le monde.
+
+  Le classement ajuste un Elo sur toutes les parties (modèle de Bradley-Terry), avec PeSTO à 0 quand il participe. Les résultats sont écrits au fil des parties dans `data/tournaments/<id>.json`. Un tournoi peut tourner pendant un entraînement : il prend alors du CPU au self-play (réglable avec « Threads »).
 - **Hyperparamètres aléatoires.** Le bouton tire au hasard des valeurs dans des plages raisonnables : nœuds de self-play entre 2 000 et 20 000 et taux d'apprentissage entre 1e-4 et 3e-3 (tous deux en échelle log), décroissance du taux, poids du résultat, taille de batch et réutilisation. La durée, le seuil de démarrage et la mesure ne changent pas. On peut ainsi lancer plusieurs réseaux différents, sauvegarder leurs meilleurs snapshots et les départager en tournoi.
-- **Stockfish 1 à 10.** Stockfish 19 (inclus dans les images Docker) joue à un niveau bridé, à la manière de lichess. Il ne joue pas aux nœuds du tournoi, mais avec un niveau de jeu (`Skill Level`, qui choisit parfois exprès un coup plus faible), une profondeur et un temps par coup qui augmentent ensemble. Les niveaux 1 à 8 cherchent aussi profond et aussi longtemps que les 8 niveaux de lichess ; 9 et 10 vont au-delà. Hors Docker, il faut indiquer le binaire avec `[arena] stockfish` (ou `CHESS_TRAIN_ARENA__STOCKFISH`) ; sans lui, les niveaux sont grisés.
+- **Stockfish 1 à 10.** Stockfish 19 (inclus dans les images Docker) joue à un niveau bridé, à la manière de lichess. Il ignore la réflexion choisie pour nos bots et joue avec un niveau de jeu (`Skill Level`, qui choisit parfois exprès un coup plus faible), une profondeur et un temps par coup qui augmentent ensemble. Les niveaux 1 à 8 cherchent aussi profond et aussi longtemps que les 8 niveaux de lichess ; 9 et 10 vont au-delà. Hors Docker, il faut indiquer le binaire avec `[arena] stockfish` (ou `CHESS_TRAIN_ARENA__STOCKFISH`) ; sans lui, les niveaux sont grisés.
 
   | Niveau | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
   | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |

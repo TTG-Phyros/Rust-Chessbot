@@ -4,12 +4,14 @@ import { Link } from 'react-router';
 import { api } from '../../api/client';
 import type { ArenaView } from '../../api/generated/ArenaView';
 import type { BotInfo } from '../../api/generated/BotInfo';
+import type { MoveLimit } from '../../api/generated/MoveLimit';
 import type { Tournament } from '../../api/generated/Tournament';
 import type { TournamentState } from '../../api/generated/TournamentState';
 import { useArena } from '../../api/hooks';
-import { Button, ErrorText, Panel, Stat } from '../../components/ui';
+import { Button, ErrorText, Panel, Segmented, Stat } from '../../components/ui';
 import { formatDate, formatElo, formatPoints } from '../training/format';
 import { formatParam } from '../training/params';
+import { LIMIT_OPTIONS, type LimitKind, describeLimit, limitError, limitOption } from './limit';
 import { STOCKFISH_LEVELS, botLabel, describeLevel, stockfishBot } from './stockfish';
 
 /** Name of the classical evaluation in tournaments. */
@@ -74,7 +76,8 @@ function BotList({
               {stockfish ? (
                 <>
                   {stockfish}, bridé en 10 niveaux comme sur lichess (niveau de jeu, profondeur et
-                  temps par coup croissants) ; il joue à son niveau, pas aux nœuds du tournoi.
+                  temps par coup croissants) ; il joue à son niveau, pas avec la réflexion choisie
+                  pour nos bots.
                 </>
               ) : (
                 <span className="text-amber-300">
@@ -150,13 +153,23 @@ function TournamentForm({
   onStart: (request: {
     bots: string[];
     gamesPerPair: number;
-    nodes: number;
+    limit: MoveLimit;
     threads: number;
   }) => void;
 }) {
   const [chosen, setChosen] = useState<string[]>([CLASSIC]);
   const [games, setGames] = useState('20');
-  const [nodes, setNodes] = useState('5000');
+  const [limitKind, setLimitKind] = useState<LimitKind>('nodes');
+  // One draft per kind: switching back keeps what was typed.
+  const [limitDrafts, setLimitDrafts] = useState<Record<LimitKind, string>>(
+    () =>
+      Object.fromEntries(
+        LIMIT_OPTIONS.map((option) => [option.kind, String(option.initial)]),
+      ) as Record<LimitKind, string>,
+  );
+  const limitValue = Number(limitDrafts[limitKind]);
+  const limitProblem = limitError(limitKind, limitValue);
+  const option = limitOption(limitKind);
   const [threads, setThreads] = useState('0');
   const names = [CLASSIC, ...bots.map((bot) => bot.name)];
   const levels = STOCKFISH_LEVELS.map((level) => stockfishBot(level.level));
@@ -174,8 +187,7 @@ function TournamentForm({
     Number.isInteger(Number(games)) &&
     Number(games) >= 2 &&
     Number(games) <= 2000 &&
-    Number(nodes) >= 100 &&
-    Number(nodes) <= 1_000_000 &&
+    limitProblem === null &&
     Number.isInteger(Number(threads)) &&
     Number(threads) >= 0;
 
@@ -188,7 +200,7 @@ function TournamentForm({
           onStart({
             bots: participants,
             gamesPerPair: Number(games),
-            nodes: Number(nodes),
+            limit: { kind: limitKind, value: limitValue },
             threads: Number(threads),
           });
         }
@@ -238,7 +250,35 @@ function TournamentForm({
           })}
         </div>
       </fieldset>
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div>
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-sm text-slate-300">Réflexion de nos bots</span>
+          <Segmented
+            value={limitKind}
+            options={LIMIT_OPTIONS.map(({ kind, label }) => ({ value: kind, label }))}
+            onChange={setLimitKind}
+          />
+        </div>
+        <label className="mt-2 block text-sm">
+          <span className="text-slate-400">{option.field}</span>
+          <input
+            type="number"
+            min={option.min}
+            max={option.max}
+            step={option.step}
+            value={limitDrafts[limitKind]}
+            onChange={(e) => {
+              setLimitDrafts({ ...limitDrafts, [limitKind]: e.target.value });
+            }}
+            aria-invalid={limitProblem !== null}
+            className={`${INPUT} ${limitProblem ? 'border-rose-500' : ''}`}
+          />
+        </label>
+        <p className={`mt-1 text-xs ${limitProblem ? 'text-rose-400' : 'text-slate-500'}`}>
+          {limitProblem ?? `${option.help} Stockfish joue toujours à son niveau.`}
+        </p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
         <label
           className="block text-sm"
           title="Chaque paire joue ce nombre de parties, couleurs alternées, depuis les mêmes ouvertures."
@@ -252,23 +292,6 @@ function TournamentForm({
             value={games}
             onChange={(e) => {
               setGames(e.target.value);
-            }}
-            className={INPUT}
-          />
-        </label>
-        <label
-          className="block text-sm"
-          title="Recherche de chaque coup de nos bots, identique pour tous : seule l’évaluation les distingue. Stockfish joue à son niveau."
-        >
-          <span className="text-slate-300">Nœuds par coup (nos bots)</span>
-          <input
-            type="number"
-            min={100}
-            max={1_000_000}
-            step={500}
-            value={nodes}
-            onChange={(e) => {
-              setNodes(e.target.value);
             }}
             className={INPUT}
           />
@@ -346,8 +369,8 @@ function TournamentView({
           {STATE_LABEL[tournament.state]}
         </span>
         <span className="text-slate-400">
-          {tournament.nodes.toLocaleString('fr-FR')} nœuds par coup · {tournament.gamesPerPair}{' '}
-          parties par paire · lancé le {formatDate(tournament.createdAt)}
+          {describeLimit(tournament.limit)} · {tournament.gamesPerPair} parties par paire · lancé le{' '}
+          {formatDate(tournament.createdAt)}
         </span>
         <span className="flex-1" />
         {tournament.state === 'running' && (

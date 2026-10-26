@@ -23,8 +23,10 @@ use crate::stockfish::{self, Stockfish, UciScore};
 pub(crate) struct ArenaConfig {
     /// Maximum number of games (rounded up to pairs).
     pub(crate) games: u32,
-    /// Nodes searched per move by both engines.
+    /// Nodes searched per move by our engine, unless `limit` says otherwise.
     pub(crate) nodes: u64,
+    /// How our engine limits each move's search (default: `nodes`).
+    pub(crate) limit: Option<MoveLimit>,
     /// Worker threads; 0 = all cores.
     pub(crate) threads: usize,
     pub(crate) random_plies_min: u32,
@@ -47,6 +49,7 @@ impl Default for ArenaConfig {
         Self {
             games: 200,
             nodes: 3_000,
+            limit: None,
             threads: 0,
             random_plies_min: 6,
             random_plies_max: 10,
@@ -59,6 +62,65 @@ impl Default for ArenaConfig {
             alpha: 0.05,
             beta: 0.05,
         }
+    }
+}
+
+/// How long our engine thinks over each move of a match.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "value", rename_all = "lowercase")]
+pub(crate) enum MoveLimit {
+    /// Nodes searched: reproducible, whatever the load of the machine.
+    Nodes(u64),
+    /// Completed iterations of the search (plies).
+    Depth(u32),
+    /// Milliseconds of thinking: depends on the speed of each evaluation.
+    Time(u64),
+}
+
+impl MoveLimit {
+    pub(crate) fn search_limits(self) -> SearchLimits {
+        match self {
+            Self::Nodes(nodes) => SearchLimits::nodes(nodes.max(1)),
+            Self::Depth(depth) => SearchLimits::depth(depth.max(1)),
+            Self::Time(ms) => SearchLimits {
+                movetime: Some(std::time::Duration::from_millis(ms.max(1))),
+                ..SearchLimits::default()
+            },
+        }
+    }
+
+    /// Why the limit is out of the accepted range, if it is.
+    pub(crate) fn validate(self) -> Result<(), String> {
+        let ok = match self {
+            Self::Nodes(nodes) => (100..=10_000_000).contains(&nodes),
+            Self::Depth(depth) => (1..=30).contains(&depth),
+            Self::Time(ms) => (10..=60_000).contains(&ms),
+        };
+        if ok {
+            return Ok(());
+        }
+        Err(match self {
+            Self::Nodes(_) => "nodes per move must be between 100 and 10 000 000",
+            Self::Depth(_) => "the depth must be between 1 and 30",
+            Self::Time(_) => "the time per move must be between 10 ms and 60 s",
+        }
+        .into())
+    }
+}
+
+impl std::fmt::Display for MoveLimit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Nodes(nodes) => write!(f, "{nodes} nodes per move"),
+            Self::Depth(depth) => write!(f, "depth {depth}"),
+            Self::Time(ms) => write!(f, "{ms} ms per move"),
+        }
+    }
+}
+
+impl ArenaConfig {
+    pub(crate) fn move_limit(&self) -> MoveLimit {
+        self.limit.unwrap_or(MoveLimit::Nodes(self.nodes))
     }
 }
 
@@ -285,8 +347,8 @@ impl Seat {
     }
 }
 
-/// Plays one game. Our engine searches `config.nodes` per move; Stockfish
-/// plays at its level.
+/// Plays one game. Our engine searches within `config.move_limit()`;
+/// Stockfish plays at its level.
 fn play_game(
     white: &mut Seat,
     black: &mut Seat,
@@ -301,7 +363,7 @@ fn play_game(
     }
     white.new_game()?;
     black.new_game()?;
-    let limits = SearchLimits::nodes(config.nodes.max(1));
+    let limits = config.move_limit().search_limits();
     let mut decisive = 0;
     let mut quiet = 0;
     loop {
@@ -510,6 +572,35 @@ mod tests {
         assert!(progress >= 1);
         // Identical engines: every pair is a mirror, so wins and losses balance.
         assert_eq!(result.wins, result.losses);
+    }
+
+    #[test]
+    fn move_limits() {
+        let config = ArenaConfig::default();
+        assert_eq!(config.move_limit(), MoveLimit::Nodes(3_000));
+        assert_eq!(MoveLimit::Depth(6).search_limits().depth, Some(6));
+        assert_eq!(
+            MoveLimit::Time(250).search_limits().movetime,
+            Some(std::time::Duration::from_millis(250))
+        );
+        assert!(MoveLimit::Nodes(5_000).validate().is_ok());
+        assert!(MoveLimit::Depth(31).validate().is_err());
+        assert!(MoveLimit::Time(5).validate().is_err());
+        let json = serde_json::to_string(&MoveLimit::Depth(8)).unwrap();
+        assert_eq!(json, r#"{"kind":"depth","value":8}"#);
+        assert_eq!(MoveLimit::Time(100).to_string(), "100 ms per move");
+
+        // Depth-limited games are played to the end.
+        let config = ArenaConfig {
+            games: 2,
+            threads: 1,
+            max_plies: 60,
+            limit: Some(MoveLimit::Depth(2)),
+            ..ArenaConfig::default()
+        };
+        let classic = Contestant::Engine(EngineEval::default());
+        let result = play_match(&classic, &classic, &config, &StopFlag::new(), |_| {}).unwrap();
+        assert_eq!(result.games(), 2);
     }
 
     #[test]

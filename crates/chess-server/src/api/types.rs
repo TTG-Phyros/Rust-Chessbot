@@ -630,6 +630,19 @@ pub struct SaveBotRequest {
     pub superbatch: Option<u64>,
 }
 
+/// How long the bots (not Stockfish) think over each move of a tournament.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(tag = "kind", content = "value", rename_all = "lowercase")]
+#[ts(export)]
+pub enum MoveLimit {
+    /// Nodes searched (100 to 10 000 000): reproducible, whatever the load.
+    Nodes(#[ts(type = "number")] u64),
+    /// Search depth in plies (1 to 30).
+    Depth(u32),
+    /// Milliseconds per move (10 to 60 000).
+    Time(#[ts(type = "number")] u64),
+}
+
 /// Request of `POST /api/tournaments`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -639,9 +652,8 @@ pub struct TournamentRequest {
     pub bots: Vec<String>,
     /// Games of each pairing (colors alternate).
     pub games_per_pair: u32,
-    /// Nodes per move, the same for every bot.
-    #[ts(type = "number")]
-    pub nodes: u64,
+    /// How long the bots think per move, the same for all (Stockfish plays at its level).
+    pub limit: MoveLimit,
     /// Worker threads; 0 = all cores.
     pub threads: u32,
 }
@@ -727,9 +739,8 @@ pub struct Tournament {
     pub bots: Vec<String>,
     /// Games of each pairing.
     pub games_per_pair: u32,
-    /// Nodes per move.
-    #[ts(type = "number")]
-    pub nodes: u64,
+    /// How long the bots think per move.
+    pub limit: MoveLimit,
     /// Every pairing, in playing order.
     pub pairings: Vec<Pairing>,
     /// Best first.

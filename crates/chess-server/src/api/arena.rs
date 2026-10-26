@@ -194,7 +194,7 @@ mod tests {
 
         let tournament = |id: &str, created: u64| {
             format!(
-                r#"{{"id":"{id}","state":"running","error":null,"createdAt":{created},"updatedAt":{created},"bots":["classic","new"],"gamesPerPair":2,"nodes":100,"pairings":[],"standings":[]}}"#
+                r#"{{"id":"{id}","state":"running","error":null,"createdAt":{created},"updatedAt":{created},"bots":["classic","new"],"gamesPerPair":2,"limit":{{"kind":"depth","value":6}},"pairings":[],"standings":[]}}"#
             )
         };
         std::fs::write(dir.join("tournaments/t1.json"), tournament("t1", 1)).unwrap();

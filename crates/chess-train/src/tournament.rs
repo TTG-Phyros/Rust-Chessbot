@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use chess_search::StopFlag;
 use serde::{Deserialize, Serialize};
 
-use crate::arena::{self, ArenaConfig, Contestant, MatchResult};
+use crate::arena::{self, ArenaConfig, Contestant, MatchResult, MoveLimit};
 use crate::config::Config;
 use crate::metrics::now;
 use crate::network::{self, CLASSIC};
@@ -25,8 +25,8 @@ pub(crate) struct TournamentRequest {
     pub(crate) bots: Vec<String>,
     /// Games of each pairing (rounded up to an even number).
     pub(crate) games_per_pair: u32,
-    /// Nodes per move of our engine (Stockfish plays at its level).
-    pub(crate) nodes: u64,
+    /// How long our bots think per move (Stockfish plays at its level).
+    pub(crate) limit: MoveLimit,
     /// Worker threads; 0 = all cores.
     #[serde(default)]
     pub(crate) threads: usize,
@@ -51,10 +51,7 @@ impl TournamentRequest {
         if !(2..=2_000).contains(&self.games_per_pair) {
             return Err("games per pairing must be between 2 and 2 000".into());
         }
-        if !(100..=1_000_000).contains(&self.nodes) {
-            return Err("nodes per move must be between 100 and 1 000 000".into());
-        }
-        Ok(())
+        self.limit.validate()
     }
 }
 
@@ -104,7 +101,8 @@ pub(crate) struct Tournament {
     pub(crate) updated_at: u64,
     pub(crate) bots: Vec<String>,
     pub(crate) games_per_pair: u32,
-    pub(crate) nodes: u64,
+    /// How long our bots think per move.
+    pub(crate) limit: MoveLimit,
     /// Every pairing, in playing order; the ones not reached yet have no games.
     pub(crate) pairings: Vec<Pairing>,
     /// Best first.
@@ -136,7 +134,7 @@ impl Tournament {
             updated_at: now(),
             bots: bots.clone(),
             games_per_pair: request.games_per_pair.div_ceil(2) * 2,
-            nodes: request.nodes,
+            limit: request.limit,
             pairings,
             standings: Vec::new(),
         };
@@ -273,10 +271,10 @@ pub(crate) fn play(
 ) -> Tournament {
     let mut tournament = Tournament::new(id, request);
     save(config, &tournament);
-    tracing::info!(id = %tournament.id, bots = ?request.bots, "tournament started");
+    tracing::info!(id = %tournament.id, bots = ?request.bots, limit = %request.limit, "tournament started");
     let arena = ArenaConfig {
         games: tournament.games_per_pair,
-        nodes: request.nodes,
+        limit: Some(request.limit),
         threads: request.threads,
         sprt: false,
         ..config.arena.clone()
@@ -338,7 +336,7 @@ mod tests {
         let ok = TournamentRequest {
             bots: vec!["classic".into(), "best".into(), "stockfish-10".into()],
             games_per_pair: 20,
-            nodes: 2_000,
+            limit: MoveLimit::Nodes(2_000),
             threads: 0,
         };
         assert_eq!(ok.validate(), Ok(()));
@@ -363,7 +361,14 @@ mod tests {
                 bots: vec!["best".into(), "stockfish-11".into()],
                 ..ok.clone()
             },
-            TournamentRequest { nodes: 1, ..ok },
+            TournamentRequest {
+                limit: MoveLimit::Nodes(1),
+                ..ok.clone()
+            },
+            TournamentRequest {
+                limit: MoveLimit::Time(0),
+                ..ok
+            },
         ];
         for request in invalid {
             assert!(request.validate().is_err(), "{request:?}");
@@ -426,7 +431,7 @@ mod tests {
         let request = TournamentRequest {
             bots: vec!["classic".into(), "a".into(), "b".into()],
             games_per_pair: 2,
-            nodes: 100,
+            limit: MoveLimit::Depth(2),
             threads: 2,
         };
         let engines = vec![Contestant::Engine(chess_eval::EngineEval::default()); 3];

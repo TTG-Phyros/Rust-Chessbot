@@ -141,7 +141,7 @@ async fn networks_bots_and_tournaments() {
         std::fs::write(
             dir.join(format!("tournaments/{id}.json")),
             format!(
-                r#"{{"id":"{id}","state":"{state}","error":null,"createdAt":1,"updatedAt":1,"bots":["classic","champion"],"gamesPerPair":2,"nodes":100,"pairings":[{{"a":"classic","b":"champion","wins":0,"draws":1,"losses":1,"elo":-191.0,"eloError":300.0}}],"standings":[]}}"#
+                r#"{{"id":"{id}","state":"{state}","error":null,"createdAt":1,"updatedAt":1,"bots":["classic","champion"],"gamesPerPair":2,"limit":{{"kind":"time","value":100}},"pairings":[{{"a":"classic","b":"champion","wins":0,"draws":1,"losses":1,"elo":-191.0,"eloError":300.0}}],"standings":[]}}"#
             ),
         )
         .unwrap();
@@ -222,8 +222,7 @@ async fn networks_bots_and_tournaments() {
         (code, body["error"].as_str()),
         (StatusCode::NOT_FOUND, Some("no bot named x"))
     );
-    let request =
-        json!({ "bots": ["classic", "champion"], "gamesPerPair": 10, "nodes": 2000, "threads": 0 });
+    let request = json!({ "bots": ["classic", "champion"], "gamesPerPair": 10, "limit": { "kind": "nodes", "value": 2000 }, "threads": 0 });
     let (code, started) = call(&state, "POST", "/api/tournaments", request).await;
     assert_eq!((code, &started["id"]), (StatusCode::ACCEPTED, &json!("t3")));
 }
@@ -241,8 +240,7 @@ async fn arena_without_a_daemon() {
     assert_eq!(code, StatusCode::OK);
     let arena: ArenaView = serde_json::from_value(arena).unwrap();
     assert!(arena.bots.is_empty() && arena.tournaments.is_empty());
-    let request =
-        json!({ "bots": ["classic", "x"], "gamesPerPair": 2, "nodes": 100, "threads": 0 });
+    let request = json!({ "bots": ["classic", "x"], "gamesPerPair": 2, "limit": { "kind": "depth", "value": 4 }, "threads": 0 });
     assert_eq!(
         call(&state, "POST", "/api/tournaments", request).await.0,
         StatusCode::SERVICE_UNAVAILABLE

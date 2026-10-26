@@ -163,7 +163,14 @@ Le niveau de log se règle avec `RUST_LOG` (ex. `RUST_LOG=debug`).
 
 - **Jouer** : échiquier en glisser-déposer ou clic-clic, choix de la couleur (blancs, noirs, aléatoire), niveau réglable en profondeur (1 à 20) ou en temps par coup (0,1 à 10 s), annulation de coup, import/export FEN et PGN.
 - **Analyse** : barre d'évaluation, score, ligne principale en SAN, flèche du meilleur coup, infos de recherche en direct (profondeur, nœuds, vitesse, remplissage de la table). L'analyse est relancée à chaque coup. On navigue dans la partie avec les flèches ← → (Origine et Fin pour aller au début ou à la fin), ou en cliquant dans la liste des coups.
-- **Entraînement** : état du run (device, phase, parties, positions, superbatchs, perte, vitesse, VRAM), courbes de perte et d'Elo contre PeSTO, évaluation utilisée par le moteur. Boutons « Démarrer / reprendre », « Nouveau réseau » et « Arrêter », qui nécessitent le profil `train` ou `train-cpu`.
+- **Entraînement** : liste des réseaux de neurones, avec leurs hyperparamètres et leur meilleur Elo. « Nouveau réseau » ouvre un formulaire : nom, hyperparamètres (pré-remplis avec les valeurs par défaut ou celles d'un autre réseau) et réseaux dont on réutilise les parties. Pour le réseau sélectionné, on trouve :
+  - son état (device, phase, parties, positions, superbatchs, perte, vitesse, VRAM) ;
+  - son **top 5** des snapshots, chacun sauvegardable comme bot ;
+  - ses courbes de perte et d'Elo contre PeSTO ;
+  - les boutons « Démarrer / reprendre », « Arrêter », « Repartir de zéro » et « Supprimer ».
+- **Arène** : les bots sauvegardés (plus PeSTO, toujours disponible) et les **tournois** toutes-rondes entre eux : choix des participants, des parties par paire et des nœuds par coup. Un tournoi affiche sa progression en direct, un classement Elo, une table croisée et l'historique des tournois.
+
+Les boutons de ces deux pages passent par le démon de contrôle : il faut le profil `train` ou `train-cpu`. Sans lui, réseaux, bots et résultats restent consultables.
 
 Le front ne contient aucune règle d'échecs : chaque coup est validé par le moteur, qui renvoie aussi les coups légaux, le SAN et l'état de la partie.
 
@@ -181,9 +188,14 @@ L'API est **sans état** : une partie est toujours envoyée sous la forme `{ "fe
 | `POST /api/pgn/import` | première partie d'un PGN |
 | `POST /api/pgn/export` | partie au format PGN |
 | `GET /api/engine` | évaluation utilisée par le moteur (`nnue` ou `classic`, fichier de poids) |
-| `GET /api/training` | état du démon, statut du run, courbes de perte et d'Elo |
-| `POST /api/training/start` | démarre ou reprend le pipeline (`{"fresh": true}` pour un réseau vierge) ; 409 si déjà en cours |
+| `GET /api/training?network=<nom>` | état du démon, liste des réseaux (hyperparamètres, top 5), statut et courbes du réseau demandé |
+| `POST /api/training/start` | entraîne un réseau (`{"network": "exp", "fresh": false}`) ; 409 si un entraînement est déjà en cours |
 | `POST /api/training/stop` | arrête le pipeline après l'étape en cours (checkpoint écrit) |
+| `GET /api/networks/defaults` | hyperparamètres d'un nouveau réseau |
+| `POST /api/networks`, `DELETE /api/networks/{nom}` | crée un réseau (`{"name", "params"}`, 422 si un paramètre est hors bornes), le supprime |
+| `GET /api/arena` | bots et derniers tournois |
+| `POST /api/bots`, `DELETE /api/bots/{nom}` | sauvegarde un snapshot comme bot (`{"name", "network", "superbatch"}`), le supprime |
+| `POST /api/tournaments`, `POST /api/tournaments/stop` | lance un tournoi (`{"bots", "gamesPerPair", "nodes", "threads"}`), l'arrête |
 | `GET /ws` | WebSocket : `analyze` puis un message `info` par profondeur et un `done` final ; `stop` interrompt l'analyse |
 
 Les scores renvoyés sont du point de vue des blancs. Les limites sont plafonnées côté serveur (profondeur 64, 60 s par coup, 10 min d'analyse), et le nombre de recherches simultanées est borné par `max_searches`.
@@ -198,14 +210,14 @@ docker compose --profile train-cpu up    # même chose sans CUDA
 docker compose --profile train stop      # arrêt propre : l'étape en cours se termine, checkpoint écrit
 ```
 
-Le service `train` lance le **démon de contrôle** (`chess-train serve --autostart`). Celui-ci démarre aussitôt le pipeline ; ensuite, la page **Entraînement** de l'UI l'arrête, le reprend ou repart d'un réseau vierge, via `chess-server`. Le pipeline fait tourner **le self-play sur les cœurs CPU** (producteur) et **l'entraînement sur le GPU** (consommateur) en même temps :
+Le service `train` lance le **démon de contrôle** (`chess-train serve --autostart`). Celui-ci démarre aussitôt le pipeline du dernier réseau ; ensuite, les pages **Entraînement** et **Arène** de l'UI le pilotent via `chess-server`. C'est le démon qui écrit dans `data/` ; le serveur ne fait que lire. Le pipeline fait tourner **le self-play sur les cœurs CPU** (producteur) et **l'entraînement sur le GPU** (consommateur) en même temps :
 
 1. **Self-play.** Le moteur joue contre lui-même (rayon, un searcher par thread) après 6 à 10 coups aléatoires, à 5 000 nœuds par coup, **avec le dernier réseau exporté**. Il le recharge dès qu'un nouvel export paraît, et utilise PeSTO tant qu'il n'y en a pas. On ne garde que les positions calmes : pas d'échec, meilleur coup non tactique. Une partie s'arrête par adjudication quand les deux camps s'accordent sur le résultat.
 2. **Dataset.** Chaque position est un enregistrement fixe de 32 octets (format `CBDS` v1, décrit dans `crates/chess-train/src/dataset/mod.rs`), écrit par fichiers d'un million de positions publiés de façon atomique. Les datasets vivent dans le volume Docker `datasets`.
 3. **Entraînement.** Les fichiers sont **lus en continu depuis le disque**, par blocs mélangés, sans jamais tenir entièrement en mémoire. Les batchs de 16 384 positions arrivent sous forme **creuse** : 32 indices de features par position, au lieu de 768 flottants. Les entrées one-hot sont reconstruites sur le GPU par un scatter. Optimiseur AdamW, perte `(σ(sortie) − cible)²`, où la cible mélange le score de recherche et le résultat de la partie. Les poids restent bornés pour que la quantification ne puisse pas déborder. L'entraînement va bien plus vite que le self-play (environ 1,5 M positions/s contre 10 000/s). Le pipeline borne donc la réutilisation : chaque position sert en moyenne au plus 30 fois (`max_reuse`), et au-delà l'entraînement attend de nouvelles parties au lieu de sur-apprendre les anciennes.
-4. **Checkpoints.** À chaque superbatch (200 pas), `data/checkpoints/<run>/` reçoit les poids flottants avec leurs identifiants de paramètres, l'état AdamW et la progression. La reprise est exacte et se fait par défaut ; l'option `--fresh` (ou le bouton « Nouveau réseau ») repart de zéro.
+4. **Checkpoints.** À chaque superbatch (200 pas), `data/checkpoints/<run>/` reçoit les poids flottants avec leurs identifiants de paramètres, l'état AdamW et la progression. La reprise est exacte et se fait par défaut. L'option `--fresh` (ou le bouton « Repartir de zéro ») repart de zéro et efface le top 5 du réseau.
 5. **Export.** Les poids quantifiés au format `CBNN` v1 attendu par `chess-eval` (décrit dans `crates/chess-eval/src/nnue/mod.rs`) vont dans `data/weights/<run>.nnue`, avec un instantané `data/weights/<run>/sbNNNNN.nnue` tous les 5 superbatchs. **Le serveur recharge ce fichier automatiquement** : dès le premier export, on joue et on analyse contre le réseau.
-6. **Elo.** Chaque export est mesuré contre l'évaluation classique (PeSTO), en 64 parties jouées par paires couleurs inversées, sur 2 threads. On obtient la courbe d'Elo entre checkpoints.
+6. **Elo et top 5.** Chaque export est mesuré contre l'évaluation classique (PeSTO), en 64 parties jouées par paires couleurs inversées, sur 2 threads. On obtient la courbe d'Elo entre checkpoints. Les 5 meilleurs snapshots mesurés sont classés dans `data/weights/<run>/best.json` ; les autres snapshots mesurés sont supprimés (`keep_best` dans `[evaluation]`).
 7. **Métriques.** `data/metrics/events.jsonl` reçoit une ligne par événement (perte, vitesse, VRAM, checkpoints, exports, matchs) et `data/metrics/status.json` donne l'état courant. La page Entraînement les affiche.
 
 Les étapes sont aussi disponibles séparément, en Docker (`just train-run <commande>`) ou en natif :
@@ -221,7 +233,19 @@ chess-train serve --port 4000                  # démon de contrôle (GET /statu
 
 `match` joue des paires de parties sur la même ouverture aléatoire, couleurs inversées, à nombre de nœuds fixe. Il affiche l'Elo avec son intervalle à 95 % et la LOS. Avec `--sprt`, il s'arrête dès que le test conclut (approximation normale du modèle trinomial, comme fishtest ; α = β = 0,05 par défaut). `classic` désigne l'évaluation PeSTO.
 
-La configuration se fait par `chess-train.toml` (voir [`chess-train.example.toml`](chess-train.example.toml)), par les variables `CHESS_TRAIN_*` (`CHESS_TRAIN_SELFPLAY__NODES=8000`) ou par les options de la ligne de commande. `CHESS_TRAIN_RUN` sépare plusieurs expériences ; le serveur suit alors `data/weights/<run>.nnue`.
+La configuration se fait par `chess-train.toml` (voir [`chess-train.example.toml`](chess-train.example.toml)), par les variables `CHESS_TRAIN_*` (`CHESS_TRAIN_SELFPLAY__NODES=8000`) ou par les options de la ligne de commande.
+
+### Plusieurs réseaux, bots et tournois
+
+- **Réseau.** Un réseau est un run nommé, qui possède ses propres hyperparamètres dans `data/runs/<nom>.json`. Un réseau reprend toujours avec les réglages de sa création. Il a aussi son propre checkpoint, ses poids (`data/weights/<nom>.nnue`, snapshots dans `data/weights/<nom>/`) et ses parties (`<nom>-NNNN` dans le volume `datasets`).
+  - On peut changer les nœuds de self-play, le taux d'apprentissage et sa décroissance, le poids du résultat (WDL), la taille de batch, le nombre de batchs par superbatch, la durée, le seuil de démarrage, la réutilisation maximale, la fréquence d'export et le nombre de parties de mesure.
+  - L'architecture reste `768 → 256 ×2 → 1` : c'est le format lu par le moteur.
+  - Un seul réseau s'entraîne à la fois, car le GPU et les cœurs sont partagés.
+  - **Réutiliser les parties de** : le nouveau réseau s'entraîne aussi sur les parties d'autres réseaux. Il démarre ainsi sans attendre 2 M positions de son propre self-play, ce qui est pratique pour comparer des hyperparamètres d'entraînement sur les mêmes données.
+- **Bot.** Un bot est un snapshot copié dans `data/bots/<nom>.nnue`, avec sa description (`<nom>.json` : réseau d'origine, superbatch, Elo mesuré, hyperparamètres). Il ne bouge plus, même si le réseau continue de s'entraîner ou est supprimé.
+- **Tournoi.** Chaque paire de bots joue les mêmes ouvertures aléatoires avec les deux couleurs, au même nombre de nœuds par coup : seule l'évaluation les distingue. Le classement ajuste un Elo sur toutes les parties (modèle de Bradley-Terry), avec PeSTO à 0 quand il participe. Les résultats sont écrits au fil des parties dans `data/tournaments/<id>.json`. Un tournoi peut tourner pendant un entraînement : il prend alors du CPU au self-play (réglable avec « Threads »).
+
+Au premier démarrage du démon, le top 5 des réseaux entraînés avant cette fonctionnalité est **reconstruit depuis l'historique des matchs**, et leurs autres snapshots mesurés sont supprimés. Pour tous les garder, il faut copier `data/weights/<run>/` ailleurs avant de mettre à jour.
 
 ## Performances
 
@@ -283,7 +307,7 @@ Le moteur peut aussi être piloté par script : `printf "position startpos\ngo d
 | Build interrompu par `tls: bad record MAC`, `unexpected EOF` ou un téléchargement GitHub échoué | Réseau instable sur un gros téléchargement. Relancer la commande : les images et les dépendances déjà téléchargées restent en cache, et le LLVM de cubecl est récupéré avec reprise. Une image de base récalcitrante se télécharge à part avec `docker pull`. |
 | Port 8080 déjà utilisé | `CHESS_WEB_PORT=8081 docker compose up`. |
 | Fichiers de `./data` appartenant à un autre utilisateur (Linux) | `export CHESS_UID=$(id -u) CHESS_GID=$(id -g)` avant `docker compose`. |
-| Repartir de zéro | Bouton « Nouveau réseau » (garde les datasets), ou `docker compose down`, puis `docker volume rm chess-bot_datasets` et suppression de `data/checkpoints`, `data/weights` et `data/metrics`. |
+| Repartir de zéro | Créer un nouveau réseau, ou utiliser le bouton « Repartir de zéro » du réseau (ses parties sont gardées). Tout effacer : `docker compose down`, `docker volume rm chess-bot_datasets`, puis supprimer `data/checkpoints`, `data/weights`, `data/runs`, `data/bots`, `data/tournaments` et `data/metrics`. |
 
 ## Feuille de route
 

@@ -31,7 +31,8 @@ chunk_positions = 1000000
 seed = 24301
 
 [train]
-# Positions per optimizer step (dense inputs: ~100 MB per step at 16384).
+# Positions per optimizer step (sent as 32 feature indices each; ~100 MB of
+# one-hot inputs rebuilt on the device at 16384).
 batch_size = 16384
 # Steps per superbatch (one checkpoint and one metrics line each).
 batches_per_superbatch = 200

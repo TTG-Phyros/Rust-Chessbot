@@ -5,6 +5,7 @@ use anyhow::{Context, Result, ensure};
 use burn::module::{Param, ParamId};
 use burn::nn::{Linear, LinearConfig};
 use burn::prelude::*;
+use burn::tensor::IndexingUpdateOp;
 use chess_eval::nnue::{HIDDEN, INPUTS, NnueWeights, QA, QB};
 
 /// Largest output weight representable after quantization (`i8`-safe, as
@@ -95,6 +96,19 @@ impl Network {
         network.out.bias = Some(param(out_b, vector(&[weights.out_bias])));
         network
     }
+}
+
+/// Dense one-hot inputs `[batch, INPUTS]` from the sparse ones of a
+/// [`Batch`](crate::batch::Batch): `indices` and `mask` are `[batch, MAX_FEATURES]`.
+/// Built on the inputs' device, where it costs a fill and a scatter.
+pub(crate) fn one_hot(indices: Tensor<2, Int>, mask: Tensor<2>) -> Tensor<2> {
+    let [rows, _] = indices.dims();
+    Tensor::<2>::zeros([rows, INPUTS], &indices.device()).scatter(
+        1,
+        indices,
+        mask,
+        IndexingUpdateOp::Add,
+    )
 }
 
 fn param<const D: usize>(id: u64, tensor: Tensor<D>) -> Param<Tensor<D>> {
@@ -220,6 +234,7 @@ mod tests {
     use chess_core::Position;
 
     use super::*;
+    use crate::batch::MAX_FEATURES;
 
     fn cpu() -> Device {
         Device::flex()
@@ -254,6 +269,20 @@ mod tests {
             }
             Tensor::<2>::from_data(TensorData::new(input, [1, INPUTS]), &device)
         };
+        // The sparse batch path builds the same inputs.
+        let record = crate::dataset::Record::new(&pos, 0, crate::dataset::Outcome::Draw);
+        let batch = crate::batch::make_batch(&[record], 0.0);
+        let sparse = one_hot(
+            Tensor::from_data(TensorData::new(batch.stm, [1, MAX_FEATURES]), &device),
+            Tensor::from_data(TensorData::new(batch.mask, [1, MAX_FEATURES]), &device),
+        );
+        assert_eq!(
+            sparse.into_data().try_to_vec::<f32>().unwrap(),
+            dense(pos.side_to_move())
+                .into_data()
+                .try_to_vec::<f32>()
+                .unwrap()
+        );
         let us = pos.side_to_move();
         let output = network
             .forward(dense(us), dense(!us))

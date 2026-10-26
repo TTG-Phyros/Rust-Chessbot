@@ -8,19 +8,28 @@ use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use chess_eval::nnue::{INPUTS, SCALE};
+use chess_eval::nnue::SCALE;
 use chess_search::StopFlag;
 
 use crate::dataset::{DatasetReader, Record};
 use crate::rng::Rng;
 
-/// One batch, as dense inputs ready to become tensors.
+/// Most active features of a position from one perspective (one per piece).
+pub(crate) const MAX_FEATURES: usize = 32;
+
+/// One batch, as sparse inputs: the indices of the active features of each
+/// position, padded to [`MAX_FEATURES`]. The one-hot inputs are rebuilt on
+/// the device (see `model::one_hot`), so the CPU fills and the bus carries
+/// 32 indices per position instead of 768 floats.
 pub(crate) struct Batch {
     pub(crate) size: usize,
-    /// `[size, INPUTS]` features from the side to move's perspective.
-    pub(crate) stm: Vec<f32>,
-    /// `[size, INPUTS]` features from the opponent's perspective.
-    pub(crate) nstm: Vec<f32>,
+    /// `[size, MAX_FEATURES]` features from the side to move's perspective.
+    pub(crate) stm: Vec<i32>,
+    /// `[size, MAX_FEATURES]` features from the opponent's perspective.
+    pub(crate) nstm: Vec<i32>,
+    /// `[size, MAX_FEATURES]`: 1 for a feature, 0 for padding. Both
+    /// perspectives see the same pieces, so they share it.
+    pub(crate) mask: Vec<f32>,
     /// `[size]` targets in `[0, 1]`.
     pub(crate) target: Vec<f32>,
 }
@@ -33,17 +42,22 @@ fn sigmoid(x: f32) -> f32 {
 /// probability) with the game result: `(1 - wdl) · σ(score / SCALE) + wdl · result`.
 pub(crate) fn make_batch(records: &[Record], wdl: f32) -> Batch {
     let size = records.len();
-    let mut stm = vec![0.0; size * INPUTS];
-    let mut nstm = vec![0.0; size * INPUTS];
+    // Padding points at feature 0 with a mask of 0: it adds nothing.
+    let mut stm = vec![0; size * MAX_FEATURES];
+    let mut nstm = vec![0; size * MAX_FEATURES];
+    let mut mask = vec![0.0; size * MAX_FEATURES];
     let mut target = Vec::with_capacity(size);
     for (row, record) in records.iter().enumerate() {
         let us = record.side_to_move;
-        for feature in record.features(us) {
-            stm[row * INPUTS + feature] = 1.0;
+        let slots = row * MAX_FEATURES..(row + 1) * MAX_FEATURES;
+        for (slot, feature) in stm[slots.clone()].iter_mut().zip(record.features(us)) {
+            *slot = feature as i32;
         }
-        for feature in record.features(!us) {
-            nstm[row * INPUTS + feature] = 1.0;
+        for (slot, feature) in nstm[slots.clone()].iter_mut().zip(record.features(!us)) {
+            *slot = feature as i32;
         }
+        let pieces = record.features(us).count().min(MAX_FEATURES);
+        mask[slots][..pieces].fill(1.0);
         let score = sigmoid(record.score_for_side_to_move() / SCALE as f32);
         target.push((1.0 - wdl) * score + wdl * record.outcome.score_for(us));
     }
@@ -51,6 +65,7 @@ pub(crate) fn make_batch(records: &[Record], wdl: f32) -> Batch {
         size,
         stm,
         nstm,
+        mask,
         target,
     }
 }
@@ -159,7 +174,7 @@ fn produce_epoch(
 
 #[cfg(test)]
 mod tests {
-    use chess_core::Position;
+    use chess_core::{Color, Position};
 
     use super::*;
     use crate::dataset::{DatasetWriter, Outcome};
@@ -174,17 +189,36 @@ mod tests {
         let black = Record::new(&black_pos, 400, Outcome::WhiteWins);
         let batch = make_batch(&[white, black], 0.5);
         assert_eq!(batch.size, 2);
-        let row_sum =
-            |data: &[f32], row: usize| data[row * INPUTS..(row + 1) * INPUTS].iter().sum::<f32>();
-        assert!((row_sum(&batch.stm, 0) - 32.0).abs() < f32::EPSILON);
-        assert!((row_sum(&batch.nstm, 1) - 32.0).abs() < f32::EPSILON);
+        assert_eq!(batch.stm.len(), 2 * MAX_FEATURES);
+        let row = |data: &[i32], row: usize| {
+            let mut row = data[row * MAX_FEATURES..(row + 1) * MAX_FEATURES].to_vec();
+            row.sort_unstable();
+            row
+        };
+        let expected = |perspective| {
+            let mut features: Vec<i32> = chess_eval::nnue::active_features(&black_pos, perspective)
+                .map(|f| f as i32)
+                .collect();
+            features.sort_unstable();
+            features
+        };
+        assert_eq!(row(&batch.stm, 1), expected(Color::Black));
+        assert_eq!(row(&batch.nstm, 1), expected(Color::White));
+        assert!(batch.mask.iter().all(|&m| m == 1.0));
         // Start position, white wins: 0.5 · σ(0) + 0.5 · 1.
         assert!((batch.target[0] - 0.75).abs() < 1e-6);
         // Black to move, White +400 and White wins: Black's target is low.
         let expected = 0.5 * sigmoid(-1.0);
         assert!((batch.target[1] - expected).abs() < 1e-6);
         // The start position looks the same from both sides.
-        assert_eq!(batch.stm[..INPUTS], batch.nstm[..INPUTS]);
+        assert_eq!(row(&batch.stm, 0), row(&batch.nstm, 0));
+
+        // Fewer pieces: the rest of the row is masked padding.
+        let endgame = Position::from_fen("8/8/4k3/8/8/3K4/4P3/8 w - - 0 1").unwrap();
+        let batch = make_batch(&[Record::new(&endgame, 0, Outcome::Draw)], 0.0);
+        assert_eq!(batch.mask.iter().sum::<f32>(), 3.0);
+        assert!(batch.mask[..3].iter().all(|&m| m == 1.0));
+        assert!(batch.stm[3..].iter().all(|&f| f == 0));
     }
 
     #[test]

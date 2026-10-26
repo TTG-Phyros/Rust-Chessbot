@@ -9,22 +9,22 @@ use anyhow::{Context, Result};
 use burn::optim::{AdamWConfig, GradientsParams, ModuleOptimizer, OptimizerRecord};
 use burn::prelude::*;
 use burn::tensor::activation::sigmoid;
-use chess_eval::nnue::INPUTS;
+
 use chess_search::StopFlag;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::batch::{BatchLoader, FileSource, LoaderConfig};
+use crate::batch::{BatchLoader, FileSource, LoaderConfig, MAX_FEATURES};
 use crate::device::{SelectedDevice, vram_used_mb};
 use crate::metrics::Metrics;
-use crate::model::{FloatWeights, Network};
+use crate::model::{FloatWeights, Network, one_hot};
 
 /// Training parameters (`[train]` section of the configuration).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct TrainConfig {
-    /// Positions per optimizer step. 16 384 dense positions take about
-    /// 100 MB of input per step: comfortable on an 8 GB GPU.
+    /// Positions per optimizer step. At 16 384, the one-hot inputs rebuilt
+    /// on the device take about 100 MB: comfortable on an 8 GB GPU.
     pub(crate) batch_size: usize,
     /// Steps between two checkpoints/reports.
     pub(crate) batches_per_superbatch: usize,
@@ -149,10 +149,13 @@ impl Trainer<'_> {
                     break 'training;
                 }
                 let rows = batch.size;
-                let stm =
-                    Tensor::<2>::from_data(TensorData::new(batch.stm, [rows, INPUTS]), &device);
-                let nstm =
-                    Tensor::<2>::from_data(TensorData::new(batch.nstm, [rows, INPUTS]), &device);
+                let shape = [rows, MAX_FEATURES];
+                let indices = |data: Vec<i32>| {
+                    Tensor::<2, Int>::from_data(TensorData::new(data, shape), &device)
+                };
+                let mask = Tensor::<2>::from_data(TensorData::new(batch.mask, shape), &device);
+                let stm = one_hot(indices(batch.stm), mask.clone());
+                let nstm = one_hot(indices(batch.nstm), mask);
                 let target =
                     Tensor::<2>::from_data(TensorData::new(batch.target, [rows, 1]), &device);
 

@@ -14,6 +14,7 @@
 mod arena;
 mod batch;
 mod config;
+mod control;
 mod dataset;
 mod device;
 mod evaluation;
@@ -105,6 +106,15 @@ enum Command {
         /// Start from scratch instead of resuming the run's checkpoint.
         #[arg(long)]
         fresh: bool,
+    },
+    /// Control daemon: HTTP API to start and stop the pipeline (used by chess-server).
+    Serve {
+        /// Port of the control API.
+        #[arg(long, default_value_t = 4000, env = "CHESS_TRAIN_CONTROL_PORT")]
+        port: u16,
+        /// Start the pipeline immediately.
+        #[arg(long)]
+        autostart: bool,
     },
     /// Quantizes the run's latest checkpoint into a `.nnue` file.
     Export {
@@ -200,6 +210,7 @@ fn main() -> Result<()> {
             }
             run_pipeline(&config, cli.device, !fresh)
         }
+        Command::Serve { port, autostart } => control::serve(config, cli.device, port, autostart),
         Command::Export { out } => {
             let out =
                 out.unwrap_or_else(|| config.weights_dir().join(format!("{}.nnue", config.run)));
@@ -370,11 +381,22 @@ fn run_train(config: &Config, preference: DevicePreference, resume: bool) -> Res
 
 fn run_pipeline(config: &Config, preference: DevicePreference, resume: bool) -> Result<()> {
     let stop = stop_on_signal()?;
+    run_pipeline_with(config, preference, resume, &stop)
+}
+
+/// The pipeline with an external stop flag (signal handler or control API).
+pub(crate) fn run_pipeline_with(
+    config: &Config,
+    preference: DevicePreference,
+    resume: bool,
+    stop: &StopFlag,
+) -> Result<()> {
     let selected = device::select(preference)?;
     println!("device: {}", selected.info);
     let metrics = open_metrics(config, "pipeline", selected.info.to_string())?;
-    let state = pipeline::run(config, &selected, &metrics, &stop, resume)?;
+    let state = pipeline::run(config, &selected, &metrics, stop, resume);
     metrics.update(|status| status.phase = "finished".into());
+    let state = state?;
     println!(
         "trained {} superbatches ({} positions)",
         state.superbatch, state.positions

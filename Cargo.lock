@@ -1312,6 +1312,7 @@ name = "chess-train"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "axum",
  "burn",
  "chess-core",
  "chess-eval",
@@ -1323,6 +1324,8 @@ dependencies = [
  "rayon",
  "serde",
  "serde_json",
+ "tokio",
+ "tower",
  "tracing",
  "tracing-subscriber",
 ]

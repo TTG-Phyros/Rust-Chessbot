@@ -94,6 +94,13 @@ impl<E: Evaluator> Searcher<E> {
         &self.evaluator
     }
 
+    /// Replaces the evaluator (e.g. a new network) and forgets what was
+    /// learned with the previous one.
+    pub fn set_evaluator(&mut self, evaluator: E) {
+        self.evaluator = evaluator;
+        self.clear();
+    }
+
     /// Searches `pos` within `limits`, calling `on_info` after each completed
     /// iteration. The move history of `pos` is used to detect repetitions.
     ///
@@ -116,6 +123,7 @@ impl<E: Evaluator> Searcher<E> {
             tt: &mut self.tt,
             history: &mut self.history,
             pos: pos.clone(),
+            eval_state: self.evaluator.new_state(pos),
             killers: Killers::new(),
             pv: Box::new([[Move::NULL; MAX_PLY + 1]; MAX_PLY + 1]),
             pv_len: [0; MAX_PLY + 1],
@@ -198,12 +206,14 @@ static LMR: LazyLock<[[i32; 64]; 64]> = LazyLock::new(|| {
 const CHECK_INTERVAL: u64 = 1024;
 
 /// State of one search.
-struct Context<'a, E> {
+struct Context<'a, E: Evaluator> {
     evaluator: &'a E,
     stop: &'a StopFlag,
     tt: &'a mut TranspositionTable,
     history: &'a mut History,
     pos: Position,
+    /// Incremental evaluation state (NNUE accumulators), kept in step with `pos`.
+    eval_state: E::State,
     killers: Killers,
     /// Triangular PV table: `pv[ply][ply..pv_len[ply]]` is the line from `ply`.
     pv: Box<[[Move; MAX_PLY + 1]; MAX_PLY + 1]>,
@@ -262,9 +272,27 @@ impl<E: Evaluator> Context<'_, E> {
         self.stopped
     }
 
+    /// Plays `mv`, keeping the evaluation state in step.
+    fn make(&mut self, mv: Move) {
+        self.evaluator.on_make(&mut self.eval_state, &self.pos, mv);
+        self.pos.make_move(mv);
+    }
+
+    fn make_null(&mut self) {
+        self.evaluator
+            .on_make(&mut self.eval_state, &self.pos, Move::NULL);
+        self.pos.make_null_move();
+    }
+
+    /// Takes back the last move or null move.
+    fn unmake(&mut self) {
+        self.pos.unmake_move();
+        self.evaluator.on_unmake(&mut self.eval_state);
+    }
+
     fn evaluate(&self) -> i32 {
         self.evaluator
-            .evaluate(&self.pos)
+            .evaluate_incremental(&self.eval_state, &self.pos)
             .clamp(-MATE_BOUND + 1, MATE_BOUND - 1)
     }
 
@@ -361,9 +389,9 @@ impl<E: Evaluator> Context<'_, E> {
                 && self.pos.has_non_pawn_material(self.pos.side_to_move())
             {
                 let reduction = 3 + depth / 4 + ((static_eval - beta) / 200).min(3);
-                self.pos.make_null_move();
+                self.make_null();
                 let score = -self.negamax(depth - 1 - reduction, -beta, -beta + 1, ply + 1, false);
-                self.pos.unmake_move();
+                self.unmake();
                 if self.stopped {
                     return 0;
                 }
@@ -389,7 +417,7 @@ impl<E: Evaluator> Context<'_, E> {
 
         for (index, mv) in picker.enumerate() {
             let quiet = !is_noisy(mv);
-            self.pos.make_move(mv);
+            self.make(mv);
             let gives_check = self.pos.in_check();
 
             let score = if index == 0 {
@@ -419,7 +447,7 @@ impl<E: Evaluator> Context<'_, E> {
                 }
                 score
             };
-            self.pos.unmake_move();
+            self.unmake();
             if self.stopped {
                 return 0;
             }
@@ -514,9 +542,9 @@ impl<E: Evaluator> Context<'_, E> {
             {
                 continue;
             }
-            self.pos.make_move(mv);
+            self.make(mv);
             let score = -self.quiescence(-beta, -alpha, ply + 1);
-            self.pos.unmake_move();
+            self.unmake();
             if self.stopped {
                 return 0;
             }

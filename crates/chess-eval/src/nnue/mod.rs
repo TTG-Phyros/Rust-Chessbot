@@ -40,7 +40,7 @@
 //! | … | 512 × 2 | output weights, `i16` (side to move half first) |
 //! | … | 4 | output bias, `i32` |
 
-use chess_core::{Color, Piece, Position, Square};
+use chess_core::{Color, Move, MoveKind, Piece, PieceKind, Position, Square};
 use thiserror::Error;
 
 use crate::{Evaluator, Score};
@@ -102,6 +102,9 @@ pub enum NnueError {
         /// Size implied by the header.
         expected: usize,
     },
+    /// Weights too large for the integer accumulators.
+    #[error("network weights out of range: {0}")]
+    Range(String),
 }
 
 /// Quantized network weights.
@@ -215,12 +218,32 @@ impl NnueWeights {
         let out_weights: Vec<i16> = values.take(2 * HIDDEN).collect();
         let tail = &bytes[bytes.len() - 4..];
         let out_bias = i32::from_le_bytes([tail[0], tail[1], tail[2], tail[3]]);
-        Ok(Self {
+        let weights = Self {
             ft_weights,
             ft_bias,
             out_weights,
             out_bias,
-        })
+        };
+        weights.check_accumulator_range()?;
+        Ok(weights)
+    }
+
+    /// Accumulators are `i16`: reject weights that could overflow them with
+    /// the 32 pieces of a position.
+    fn check_accumulator_range(&self) -> Result<(), NnueError> {
+        for h in 0..HIDDEN {
+            let mut column: Vec<i32> = (0..INPUTS)
+                .map(|f| i32::from(self.ft_weights[f * HIDDEN + h]).abs())
+                .collect();
+            column.sort_unstable_by(|a, b| b.cmp(a));
+            let worst = i32::from(self.ft_bias[h]).abs() + column.iter().take(32).sum::<i32>();
+            if worst > i32::from(i16::MAX) {
+                return Err(NnueError::Range(format!(
+                    "hidden unit {h} can reach {worst}, beyond the i16 accumulator"
+                )));
+            }
+        }
+        Ok(())
     }
 
     /// Feature transformer output for `perspective`, computed from scratch.
@@ -276,9 +299,187 @@ impl NnueEval {
     }
 }
 
+/// Feature transformer outputs of one position, for both perspectives
+/// (indexed by `Color::index`).
+#[derive(Clone)]
+pub struct Accumulator([[i16; HIDDEN]; 2]);
+
+/// Accumulators along the line being searched; the last one is the current position's.
+#[derive(Clone)]
+pub struct NnueState {
+    stack: Vec<Accumulator>,
+}
+
+impl NnueState {
+    fn top(&self) -> Option<&Accumulator> {
+        self.stack.last()
+    }
+}
+
+impl NnueWeights {
+    fn row(&self, feature: usize) -> &[i16] {
+        &self.ft_weights[feature * HIDDEN..(feature + 1) * HIDDEN]
+    }
+
+    /// Accumulators of `pos`, computed from scratch.
+    fn refresh(&self, pos: &Position) -> Accumulator {
+        let mut acc = [[0_i16; HIDDEN]; 2];
+        for perspective in Color::ALL {
+            let values = &mut acc[perspective.index()];
+            values.copy_from_slice(&self.ft_bias);
+            for feature in active_features(pos, perspective) {
+                for (a, &w) in values.iter_mut().zip(self.row(feature)) {
+                    *a = a.wrapping_add(w);
+                }
+            }
+        }
+        Accumulator(acc)
+    }
+
+    /// Output layer on accumulators, for `side_to_move`.
+    fn output(&self, acc: &Accumulator, side_to_move: Color) -> Score {
+        let halves = [
+            &acc.0[side_to_move.index()],
+            &acc.0[(!side_to_move).index()],
+        ];
+        // Same arithmetic as `evaluate`: each half fits an i32, the total an i64.
+        let mut sum = i64::from(self.out_bias);
+        for (half, weights) in halves
+            .into_iter()
+            .zip(self.out_weights.as_chunks::<HIDDEN>().0)
+        {
+            sum += i64::from(
+                half.iter()
+                    .zip(weights)
+                    .map(|(&a, &w)| i32::from(a).clamp(0, QA) * i32::from(w))
+                    .sum::<i32>(),
+            );
+        }
+        (sum * i64::from(SCALE) / i64::from(QA * QB)) as Score
+    }
+}
+
+/// Pieces that leave and enter squares with a move: at most two of each
+/// (a capture, a castling rook).
+struct Delta {
+    removed: [(Piece, Square); 2],
+    n_removed: usize,
+    added: [(Piece, Square); 2],
+    n_added: usize,
+}
+
+impl Delta {
+    fn removed(&self) -> &[(Piece, Square)] {
+        &self.removed[..self.n_removed]
+    }
+
+    fn added(&self) -> &[(Piece, Square)] {
+        &self.added[..self.n_added]
+    }
+
+    fn remove(&mut self, piece: Piece, square: Square) {
+        self.removed[self.n_removed] = (piece, square);
+        self.n_removed += 1;
+    }
+
+    fn add(&mut self, piece: Piece, square: Square) {
+        self.added[self.n_added] = (piece, square);
+        self.n_added += 1;
+    }
+}
+
+/// Feature changes when `mv` is played in `before`.
+fn move_delta(before: &Position, mv: Move) -> Delta {
+    let placeholder = (Piece::new(Color::White, PieceKind::Pawn), Square::A1);
+    let mut delta = Delta {
+        removed: [placeholder; 2],
+        n_removed: 0,
+        added: [placeholder; 2],
+        n_added: 0,
+    };
+    let (from, to) = (mv.from(), mv.to());
+    let Some(piece) = before.piece_at(from) else {
+        return delta;
+    };
+
+    delta.remove(piece, from);
+    if mv.kind() == MoveKind::EnPassant {
+        let victim = Square::from_coords(to.file(), from.rank());
+        delta.remove(Piece::new(!piece.color, PieceKind::Pawn), victim);
+    } else if let Some(captured) = before.piece_at(to) {
+        delta.remove(captured, to);
+    }
+    delta.add(
+        Piece::new(piece.color, mv.promotion().unwrap_or(piece.kind)),
+        to,
+    );
+
+    if mv.is_castle() {
+        let (rook_from, rook_to) = match to {
+            Square::G1 => (Square::H1, Square::F1),
+            Square::C1 => (Square::A1, Square::D1),
+            Square::G8 => (Square::H8, Square::F8),
+            _ => (Square::A8, Square::D8),
+        };
+        // Castling captures nothing, so the second slots are free.
+        let rook = Piece::new(piece.color, PieceKind::Rook);
+        delta.remove(rook, rook_from);
+        delta.add(rook, rook_to);
+    }
+    delta
+}
+
 impl Evaluator for NnueEval {
+    type State = NnueState;
+
     fn evaluate(&self, pos: &Position) -> Score {
         self.weights.evaluate(pos)
+    }
+
+    fn new_state(&self, pos: &Position) -> NnueState {
+        let mut stack = Vec::with_capacity(256);
+        stack.push(self.weights.refresh(pos));
+        NnueState { stack }
+    }
+
+    fn on_make(&self, state: &mut NnueState, before: &Position, mv: Move) {
+        let Some(mut acc) = state.top().cloned() else {
+            state.stack.push(self.weights.refresh(before));
+            return;
+        };
+        if !mv.is_null() {
+            let delta = move_delta(before, mv);
+            for perspective in Color::ALL {
+                let values = &mut acc.0[perspective.index()];
+                for &(piece, square) in delta.removed() {
+                    let row = self.weights.row(feature_index(perspective, piece, square));
+                    for (a, &w) in values.iter_mut().zip(row) {
+                        *a = a.wrapping_sub(w);
+                    }
+                }
+                for &(piece, square) in delta.added() {
+                    let row = self.weights.row(feature_index(perspective, piece, square));
+                    for (a, &w) in values.iter_mut().zip(row) {
+                        *a = a.wrapping_add(w);
+                    }
+                }
+            }
+        }
+        state.stack.push(acc);
+    }
+
+    fn on_unmake(&self, state: &mut NnueState) {
+        // The root accumulator is never popped by a balanced search.
+        if state.stack.len() > 1 {
+            state.stack.pop();
+        }
+    }
+
+    fn evaluate_incremental(&self, state: &NnueState, pos: &Position) -> Score {
+        match state.top() {
+            Some(acc) => self.weights.output(acc, pos.side_to_move()),
+            None => self.evaluate(pos),
+        }
     }
 }
 
@@ -394,5 +595,73 @@ mod tests {
             NnueEval::new(NnueWeights::zeros()).evaluate(&Position::startpos()),
             0
         );
+    }
+
+    /// Walks a deterministic tree (every move of the first plies, then a
+    /// few) and checks that incremental updates always match a full refresh.
+    fn check_incremental(
+        eval: &NnueEval,
+        state: &mut NnueState,
+        pos: &mut Position,
+        depth: u32,
+        seed: &mut u64,
+    ) {
+        assert_eq!(
+            eval.evaluate_incremental(state, pos),
+            eval.evaluate(pos),
+            "{}",
+            pos.to_fen()
+        );
+        if depth == 0 {
+            return;
+        }
+        let moves = pos.legal_moves();
+        for (i, &mv) in moves.iter().enumerate() {
+            *seed = seed.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+            // Explore all moves near the root, a random third deeper down.
+            if depth < 3 && !(*seed >> 33).is_multiple_of(3) && i > 0 {
+                continue;
+            }
+            eval.on_make(state, pos, mv);
+            pos.make_move(mv);
+            check_incremental(eval, state, pos, depth - 1, seed);
+            pos.unmake_move();
+            eval.on_unmake(state);
+        }
+        if !pos.in_check() {
+            eval.on_make(state, pos, Move::NULL);
+            pos.make_null_move();
+            assert_eq!(eval.evaluate_incremental(state, pos), eval.evaluate(pos));
+            pos.unmake_move();
+            eval.on_unmake(state);
+        }
+    }
+
+    #[test]
+    fn incremental_updates_match_full_refresh() {
+        let eval = NnueEval::new(pseudo_random_weights());
+        // Castling, en passant, promotions (with capture), checks.
+        for fen in [
+            "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
+            "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1",
+            "rnbqkbnr/ppp1p1pp/8/3pPp2/8/8/PPPP1PPP/RNBQKBNR w KQkq f6 0 3",
+            "8/8/1k6/2b5/2pP4/8/5K2/8 b - d3 0 1",
+        ] {
+            let mut pos = Position::from_fen(fen).unwrap();
+            let mut state = eval.new_state(&pos);
+            check_incremental(&eval, &mut state, &mut pos, 3, &mut 42);
+            assert_eq!(state.stack.len(), 1, "unbalanced stack after {fen}");
+        }
+    }
+
+    #[test]
+    fn rejects_weights_that_overflow_accumulators() {
+        let mut weights = NnueWeights::zeros();
+        weights.ft_weights.iter_mut().for_each(|w| *w = 2_000);
+        let bytes = weights.to_bytes();
+        assert!(matches!(
+            NnueWeights::from_bytes(&bytes),
+            Err(NnueError::Range(_))
+        ));
     }
 }

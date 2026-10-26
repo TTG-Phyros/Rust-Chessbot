@@ -5,7 +5,7 @@
 //! Programming Wiki), tuned by Texel's method; they make a solid baseline for
 //! a material+PST evaluation.
 
-use chess_core::{Color, PieceKind, Position, Square};
+use chess_core::{Color, Move, PieceKind, Position, Square};
 
 use crate::{Evaluator, Score};
 
@@ -14,6 +14,18 @@ use crate::{Evaluator, Score};
 pub struct ClassicEval;
 
 impl Evaluator for ClassicEval {
+    type State = ();
+
+    fn new_state(&self, _pos: &Position) {}
+
+    fn on_make(&self, _state: &mut (), _before: &Position, _mv: Move) {}
+
+    fn on_unmake(&self, _state: &mut ()) {}
+
+    fn evaluate_incremental(&self, _state: &(), pos: &Position) -> Score {
+        self.evaluate(pos)
+    }
+
     fn evaluate(&self, pos: &Position) -> Score {
         let mut mg = [0; 2];
         let mut eg = [0; 2];

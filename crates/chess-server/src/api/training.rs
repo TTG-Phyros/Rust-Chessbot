@@ -16,7 +16,7 @@ use super::daemon::{self, check_name};
 use super::error::ApiError;
 use super::types::{
     CreateNetworkRequest, EloPoint, EngineInfo, ErrorResponse, LossPoint, NetworkParams,
-    NetworkSummary, StartTrainingRequest, TrainingStatus, TrainingView,
+    NetworkSummary, StartTrainingRequest, TrainingStatus, TrainingTimerRequest, TrainingView,
 };
 use crate::AppState;
 
@@ -272,6 +272,27 @@ pub(super) async fn start(
 )]
 pub(super) async fn stop(State(state): State<AppState>) -> Result<StatusCode, ApiError> {
     daemon::send(&state, Method::POST, "/stop", None::<&()>).await?;
+    Ok(StatusCode::ACCEPTED)
+}
+
+/// Sets, moves or removes the time limit of the running training.
+#[utoipa::path(
+    post,
+    path = "/api/training/timer",
+    tag = "training",
+    request_body = TrainingTimerRequest,
+    responses(
+        (status = 202, description = "Time limit changed"),
+        (status = 409, description = "No training in progress", body = ErrorResponse),
+        (status = 422, description = "Time limit out of range", body = ErrorResponse),
+        (status = 503, description = "Training service not running", body = ErrorResponse),
+    )
+)]
+pub(super) async fn timer(
+    State(state): State<AppState>,
+    Json(request): Json<TrainingTimerRequest>,
+) -> Result<StatusCode, ApiError> {
+    daemon::send(&state, Method::POST, "/timer", Some(&request)).await?;
     Ok(StatusCode::ACCEPTED)
 }
 

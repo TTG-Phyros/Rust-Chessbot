@@ -93,6 +93,9 @@ export const api = {
   /** Stops the pipeline after its current step (it checkpoints first). */
   stopTraining: () => command('POST', '/training/stop', {}),
 
+  /** Stops the running training `minutes` from now; `null`: no time limit. */
+  setTrainingTimer: (minutes: number | null) => command('POST', '/training/timer', { minutes }),
+
   /** Hyperparameters of a new network (the training service's settings). */
   networkDefaults: () => request<NetworkParams>('/networks/defaults'),
 

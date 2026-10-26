@@ -169,8 +169,9 @@ Le niveau de log se règle avec `RUST_LOG` (ex. `RUST_LOG=debug`).
   - son état (device, phase, parties, positions, superbatchs, perte, vitesse, VRAM) ;
   - son **top 5** des snapshots, chacun sauvegardable comme bot ;
   - ses courbes de perte et d'Elo contre PeSTO ;
-  - les boutons « Démarrer / reprendre », « Arrêter », « Repartir de zéro » et « Supprimer ».
-- **Arène** : les bots sauvegardés, plus PeSTO et **Stockfish niveaux 1 à 10**, et les **tournois** toutes-rondes entre eux : choix des participants, des parties par paire et de la réflexion de nos bots (nœuds, profondeur ou temps par coup). Un tournoi affiche sa progression en direct, un classement Elo, une table croisée et l'historique des tournois.
+  - les boutons « Démarrer / reprendre », « Arrêter », « Repartir de zéro » et « Supprimer » ;
+  - un **minuteur** : on démarre pour une durée donnée (15 min à 24 h, ou un nombre de minutes au choix, jusqu'à une semaine). À l'échéance, l'entraînement s'arrête comme avec « Arrêter » : il finit l'étape en cours, écrit un checkpoint et exporte le réseau. Pendant l'entraînement, un compte à rebours indique l'heure d'arrêt ; on peut la modifier ou retirer le minuteur.
+- **Arène** : les bots sauvegardés, plus PeSTO et **Stockfish niveaux 1 à 10**, et les **tournois** toutes-rondes entre eux : choix des participants, des parties par paire et de la réflexion de nos bots (nœuds, profondeur ou temps par coup). Avant le lancement, le formulaire affiche la **durée estimée** du tournoi. Une fois lancé, un tournoi affiche sa progression en direct, un classement Elo, une table croisée et l'historique des tournois.
 
 Les boutons de ces deux pages passent par le démon de contrôle : il faut le profil `train` ou `train-cpu`. Sans lui, réseaux, bots et résultats restent consultables.
 
@@ -193,6 +194,7 @@ L'API est **sans état** : une partie est toujours envoyée sous la forme `{ "fe
 | `GET /api/training?network=<nom>` | état du démon, liste des réseaux (hyperparamètres, top 5), statut et courbes du réseau demandé |
 | `POST /api/training/start` | entraîne un réseau (`{"network": "exp", "fresh": false}`) ; 409 si un entraînement est déjà en cours |
 | `POST /api/training/stop` | arrête le pipeline après l'étape en cours (checkpoint écrit) |
+| `POST /api/training/timer` | fixe, déplace ou retire le minuteur de l'entraînement en cours (`{"minutes": 90}` ou `{"minutes": null}`) ; `maxMinutes` au démarrage |
 | `GET /api/networks/defaults` | hyperparamètres d'un nouveau réseau |
 | `POST /api/networks`, `DELETE /api/networks/{nom}` | crée un réseau (`{"name", "params"}`, 422 si un paramètre est hors bornes), le supprime |
 | `GET /api/arena` | bots et derniers tournois |
@@ -228,6 +230,7 @@ Les étapes sont aussi disponibles séparément, en Docker (`just train-run <com
 chess-train gpu-check                          # device utilisé ; matmul, sigmoïde, rétropropagation vérifiés
 chess-train selfplay --games 10000             # génère un dataset (--network net.nnue pour jouer avec un réseau)
 chess-train train --superbatches 50            # entraîne sur tout le dossier de datasets
+chess-train pipeline --max-minutes 120         # self-play + entraînement, arrêt propre au bout de 2 h
 chess-train export --out net.nnue              # quantifie le dernier checkpoint
 chess-train match new.nnue old.nnue --games 400 --sprt --elo0 0 --elo1 10
 chess-train match data/weights/main.nnue stockfish-5 --games 100 --movetime 100   # ou --nodes, --depth
@@ -252,6 +255,14 @@ La configuration se fait par `chess-train.toml` (voir [`chess-train.example.toml
   - **Temps** : chaque bot réfléchit le même temps par coup (10 ms à 60 s). Une évaluation plus rapide cherche alors plus loin, ce qui correspond aux conditions de jeu réelles, mais un entraînement en parallèle ralentit tout le monde.
 
   Le classement ajuste un Elo sur toutes les parties (modèle de Bradley-Terry), avec PeSTO à 0 quand il participe. Les résultats sont écrits au fil des parties dans `data/tournaments/<id>.json`. Un tournoi peut tourner pendant un entraînement : il prend alors du CPU au self-play (réglable avec « Threads »).
+- **Durée estimée.** L'estimation vient d'un modèle calé sur des mesures faites sur la machine de référence :
+  - parties d'environ 100 demi-coups, adjudication comprise ;
+  - environ 3,5 M nœuds/s par thread ;
+  - une profondeur qui coûte environ ×1,9 par demi-coup supplémentaire ;
+  - une limite en temps dépassée d'environ 10 % ;
+  - un temps par coup mesuré pour chaque niveau de Stockfish (les niveaux 7 à 10 utilisent tout le leur).
+
+  Le modèle tient compte de la répartition des parties sur les threads, paire par paire. Sur des tournois réels, il tombe à ±30 % ; un entraînement en parallèle allonge tout.
 - **Hyperparamètres aléatoires.** Le bouton tire au hasard des valeurs dans des plages raisonnables : nœuds de self-play entre 2 000 et 20 000 et taux d'apprentissage entre 1e-4 et 3e-3 (tous deux en échelle log), décroissance du taux, poids du résultat, taille de batch et réutilisation. La durée, le seuil de démarrage et la mesure ne changent pas. On peut ainsi lancer plusieurs réseaux différents, sauvegarder leurs meilleurs snapshots et les départager en tournoi.
 - **Stockfish 1 à 10.** Stockfish 19 (inclus dans les images Docker) joue à un niveau bridé, à la manière de lichess. Il ignore la réflexion choisie pour nos bots et joue avec un niveau de jeu (`Skill Level`, qui choisit parfois exprès un coup plus faible), une profondeur et un temps par coup qui augmentent ensemble. Les niveaux 1 à 8 cherchent aussi profond et aussi longtemps que les 8 niveaux de lichess ; 9 et 10 vont au-delà. Hors Docker, il faut indiquer le binaire avec `[arena] stockfish` (ou `CHESS_TRAIN_ARENA__STOCKFISH`) ; sans lui, les niveaux sont grisés.
 

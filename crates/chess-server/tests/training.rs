@@ -32,7 +32,8 @@ async fn fake_daemon(start_status: StatusCode) -> String {
             get(|| async { r#"{"state":"running","run":"main","error":null}"# }),
         )
         .route("/start", post(move || async move { start_status }))
-        .route("/stop", post(|| async { StatusCode::ACCEPTED }));
+        .route("/stop", post(|| async { StatusCode::ACCEPTED }))
+        .route("/timer", post(|| async { StatusCode::ACCEPTED }));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
@@ -137,6 +138,13 @@ async fn progress_and_control_with_a_daemon() {
         state(dir.clone(), url.clone(), None),
         "POST",
         "/api/training/start",
+    )
+    .await;
+    assert_eq!(code, StatusCode::ACCEPTED);
+    let (code, _) = request::<serde_json::Value>(
+        state(dir.clone(), url.clone(), None),
+        "POST",
+        "/api/training/timer",
     )
     .await;
     assert_eq!(code, StatusCode::ACCEPTED);

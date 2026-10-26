@@ -389,6 +389,9 @@ pub struct ControllerView {
     /// Stockfish the daemon found for the `stockfish-1` to `stockfish-10`
     /// bots (`Stockfish 19`), absent if none.
     pub stockfish: Option<String>,
+    /// When the running training stops on its own (Unix seconds), if it has a time limit.
+    #[ts(type = "number | null", optional = nullable)]
+    pub deadline: Option<u64>,
 }
 
 /// Latest state of a training run (from its `status.json`).
@@ -501,6 +504,18 @@ pub struct StartTrainingRequest {
     /// Stop after this many superbatches.
     #[ts(type = "number | null", optional = nullable)]
     pub superbatches: Option<u64>,
+    /// Stop cleanly after this many minutes (1 to 10 080); absent: no time limit.
+    pub max_minutes: Option<u32>,
+}
+
+/// Request of `POST /api/training/timer`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
+pub struct TrainingTimerRequest {
+    /// Stop the running training this many minutes from now (1 to 10 080);
+    /// absent: no time limit.
+    pub minutes: Option<u32>,
 }
 
 /// Hyperparameters of a network (`data/runs/<name>.json`, written by

@@ -18,6 +18,7 @@ import {
 } from './format';
 import { NetworkForm } from './NetworkForm';
 import { PARAM_FIELDS, formatParam } from './params';
+import { DurationPicker, TrainingTimer } from './TrainingTimer';
 
 const STATE_DOT: Record<string, string> = {
   running: 'bg-emerald-400',
@@ -322,6 +323,8 @@ export function TrainingPage() {
   const { view, error, refresh } = useTraining(requested);
   const { busy, error: actionError, act } = useAction(refresh);
   const [creating, setCreating] = useState(false);
+  // Time limit of the next start: `null` none, `undefined` invalid custom value.
+  const [duration, setDuration] = useState<number | null | undefined>(null);
 
   const select = (name: string) => {
     setSearchParams({ network: name });
@@ -391,11 +394,25 @@ export function TrainingPage() {
           <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="primary"
-              disabled={state !== 'idle' || busy}
-              onClick={() => void act(() => api.startTraining({ network: selected, fresh: false }))}
+              disabled={state !== 'idle' || busy || duration === undefined}
+              onClick={() =>
+                void act(() =>
+                  api.startTraining({
+                    network: selected,
+                    fresh: false,
+                    maxMinutes: duration ?? null,
+                  }),
+                )
+              }
             >
               {network?.superbatch ? 'Reprendre l’entraînement' : 'Démarrer l’entraînement'}
             </Button>
+            {state === 'idle' && (
+              <span className="inline-flex items-center gap-2 text-sm text-slate-400">
+                pendant
+                <DurationPicker value={duration} onChange={setDuration} disabled={busy} />
+              </span>
+            )}
             <Button
               disabled={!trainingThis || state !== 'running' || busy}
               onClick={() => void act(() => api.stopTraining())}
@@ -412,7 +429,13 @@ export function TrainingPage() {
                     `Repartir de zéro ? Le checkpoint, le top 5 et les snapshots de « ${selected} » seront effacés (ses parties et les bots sauvegardés restent).`,
                   )
                 ) {
-                  void act(() => api.startTraining({ network: selected, fresh: true }));
+                  void act(() =>
+                    api.startTraining({
+                      network: selected,
+                      fresh: true,
+                      maxMinutes: duration ?? null,
+                    }),
+                  );
                 }
               }}
             >
@@ -443,6 +466,13 @@ export function TrainingPage() {
               « {controller.run} » s’entraîne : un seul réseau à la fois (le GPU et le CPU sont
               partagés). Arrête-le pour lancer celui-ci.
             </p>
+          )}
+          {trainingThis && state === 'running' && (
+            <TrainingTimer
+              deadline={controller?.deadline ?? null}
+              busy={busy}
+              onSet={(minutes) => void act(() => api.setTrainingTimer(minutes))}
+            />
           )}
           {actionError && <ErrorText>{actionError}</ErrorText>}
 

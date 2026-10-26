@@ -23,7 +23,7 @@ use crate::AppState;
     info(title = "chess-bot API", description = "Play, analyse and monitor training."),
     paths(
         health::health, game::position, game::engine_move, game::pgn_import, game::pgn_export,
-        training::training, training::engine, training::start, training::stop,
+        training::training, training::engine, training::start, training::stop, training::timer,
         training::network_defaults, training::create_network, training::delete_network,
         arena::arena, arena::save_bot, arena::delete_bot, arena::start_tournament,
         arena::stop_tournament,
@@ -57,6 +57,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/training", get(training::training))
         .route("/api/training/start", post(training::start))
         .route("/api/training/stop", post(training::stop))
+        .route("/api/training/timer", post(training::timer))
         .route("/api/networks", post(training::create_network))
         .route("/api/networks/defaults", get(training::network_defaults))
         .route("/api/networks/{name}", delete(training::delete_network))

@@ -28,6 +28,7 @@ mod ranking;
 mod rng;
 mod selfplay;
 mod stockfish;
+mod timer;
 mod tournament;
 mod trainer;
 
@@ -102,6 +103,9 @@ enum Command {
         /// Start from scratch instead of resuming the run's checkpoint.
         #[arg(long)]
         fresh: bool,
+        /// Stop cleanly after this many minutes.
+        #[arg(long)]
+        max_minutes: Option<u64>,
     },
     /// Self-play and training together, until Ctrl+C or the superbatch limit.
     Pipeline {
@@ -111,6 +115,9 @@ enum Command {
         /// Start from scratch instead of resuming the run's checkpoint.
         #[arg(long)]
         fresh: bool,
+        /// Stop cleanly after this many minutes.
+        #[arg(long)]
+        max_minutes: Option<u64>,
     },
     /// Control daemon: HTTP API to start and stop the pipeline (used by chess-server).
     Serve {
@@ -203,6 +210,7 @@ fn main() -> Result<()> {
             superbatches,
             batch_size,
             fresh,
+            max_minutes,
         } => {
             if let Some(superbatches) = superbatches {
                 config.train.superbatches = superbatches;
@@ -210,16 +218,17 @@ fn main() -> Result<()> {
             if let Some(batch_size) = batch_size {
                 config.train.batch_size = batch_size;
             }
-            run_train(&config, cli.device, !fresh)
+            run_train(&config, cli.device, !fresh, max_minutes)
         }
         Command::Pipeline {
             superbatches,
             fresh,
+            max_minutes,
         } => {
             if let Some(superbatches) = superbatches {
                 config.train.superbatches = superbatches;
             }
-            run_pipeline(&config, cli.device, !fresh)
+            run_pipeline(&config, cli.device, !fresh, max_minutes)
         }
         Command::Serve { port, autostart } => control::serve(config, cli.device, port, autostart),
         Command::Export { out } => {
@@ -357,8 +366,25 @@ fn run_selfplay(config: &Config) -> Result<()> {
     Ok(())
 }
 
-fn run_train(config: &Config, preference: DevicePreference, resume: bool) -> Result<()> {
+/// Stops cleanly after `minutes`, if given (the watcher ends with the run).
+fn time_limit(stop: &StopFlag, minutes: Option<u64>) -> Result<()> {
+    if let Some(minutes) = minutes {
+        timer::Timer::validate(minutes).map_err(anyhow::Error::msg)?;
+        let timer = timer::Timer::default();
+        timer.set(Some(minutes));
+        drop(timer.watch(stop.clone()));
+    }
+    Ok(())
+}
+
+fn run_train(
+    config: &Config,
+    preference: DevicePreference,
+    resume: bool,
+    max_minutes: Option<u64>,
+) -> Result<()> {
     let stop = stop_on_signal()?;
+    time_limit(&stop, max_minutes)?;
     let selected = device::select(preference)?;
     println!("device: {}", selected.info);
     let metrics = open_metrics(config, "training", selected.info.to_string())?;
@@ -400,8 +426,14 @@ fn run_train(config: &Config, preference: DevicePreference, resume: bool) -> Res
     Ok(())
 }
 
-fn run_pipeline(config: &Config, preference: DevicePreference, resume: bool) -> Result<()> {
+fn run_pipeline(
+    config: &Config,
+    preference: DevicePreference,
+    resume: bool,
+    max_minutes: Option<u64>,
+) -> Result<()> {
     let stop = stop_on_signal()?;
+    time_limit(&stop, max_minutes)?;
     run_pipeline_with(config, preference, resume, &stop)
 }
 

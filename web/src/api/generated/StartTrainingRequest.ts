@@ -15,4 +15,8 @@ fresh: boolean,
 /**
  * Stop after this many superbatches.
  */
-superbatches?: number | null, };
+superbatches?: number | null, 
+/**
+ * Stop cleanly after this many minutes (1 to 10 080); absent: no time limit.
+ */
+maxMinutes?: number | null, };

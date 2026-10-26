@@ -3,9 +3,11 @@
 //! writes every file of the data directory; the server only reads them.
 //!
 //! - `GET /status` → training and tournament state
-//! - `POST /start` (optional body `{"network": name, "fresh": bool, "superbatches": n}`)
+//! - `POST /start` (optional body `{"network", "fresh", "superbatches", "maxMinutes"}`)
 //!   → 202, or 409 if a training is running
 //! - `POST /stop` → 202 (the pipeline finishes its step and checkpoints)
+//! - `POST /timer` (`{"minutes": n | null}`) → 202: stop the running training
+//!   `n` minutes from now, or never; 409 if no training is running
 //! - `GET /networks/defaults` → the hyperparameters of a new network
 //! - `POST /networks` (`{"name", "params"}`) → 201; `DELETE /networks/{name}` → 204
 //! - `POST /bots` (`{"name", "network", "superbatch"}`) → 201; `DELETE /bots/{name}` → 204
@@ -34,6 +36,7 @@ use crate::device::DevicePreference;
 use crate::network::{self, NetworkParams};
 use crate::ranking;
 use crate::stockfish;
+use crate::timer::Timer;
 use crate::tournament::{self, TournamentRequest};
 
 /// State of the pipeline as seen by the daemon.
@@ -56,10 +59,12 @@ pub(crate) struct ControlStatus {
     pub(crate) tournament: Option<String>,
     /// Stockfish found for the `stockfish-N` bots (`id name`), if any.
     pub(crate) stockfish: Option<String>,
+    /// When the running training stops on its own (Unix seconds), if limited.
+    pub(crate) deadline: Option<u64>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, rename_all = "camelCase")]
 pub(crate) struct StartRequest {
     /// Network to train (default: the last one).
     pub(crate) network: Option<String>,
@@ -67,6 +72,15 @@ pub(crate) struct StartRequest {
     pub(crate) fresh: bool,
     /// Stop after this many superbatches (absent: the network's setting).
     pub(crate) superbatches: Option<u64>,
+    /// Stop after this many minutes (absent: no time limit).
+    pub(crate) max_minutes: Option<u64>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub(crate) struct TimerRequest {
+    /// Minutes from now; absent or `null`: no time limit.
+    pub(crate) minutes: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -144,6 +158,8 @@ pub(crate) struct Controller {
     run: String,
     training: Option<Job>,
     error: Arc<Mutex<Option<String>>>,
+    /// Time limit of the running training.
+    timer: Timer,
     tournament: Option<Job>,
     /// Version of the configured Stockfish, probed at startup.
     stockfish: Option<String>,
@@ -178,6 +194,7 @@ impl Controller {
             device,
             training: None,
             error: Arc::new(Mutex::new(None)),
+            timer: Timer::default(),
             tournament: None,
         }
     }
@@ -196,6 +213,11 @@ impl Controller {
             error: lock(&self.error).clone(),
             tournament: self.tournament.as_ref().map(|job| job.name.clone()),
             stockfish: self.stockfish.clone(),
+            deadline: self
+                .training
+                .is_some()
+                .then(|| self.timer.deadline())
+                .flatten(),
         }
     }
 
@@ -214,6 +236,9 @@ impl Controller {
         }
         let name = request.network.clone().unwrap_or_else(|| self.run.clone());
         valid_name(&name)?;
+        if let Some(minutes) = request.max_minutes {
+            Timer::validate(minutes).map_err(ControlError::invalid)?;
+        }
         let mut config = network::config_for(&self.config, &name)?;
         if let Some(superbatches) = request.superbatches {
             config.train.superbatches = superbatches;
@@ -222,15 +247,34 @@ impl Controller {
         let error = Arc::clone(&self.error);
         *lock(&error) = None;
         let flag = stop.clone();
+        // A fresh timer per run: the watcher of the previous one has ended.
+        self.timer = Timer::default();
+        self.timer.set(request.max_minutes);
+        let watcher = self.timer.watch(stop.clone());
         let thread = std::thread::spawn(move || {
             if let Err(err) = crate::run_pipeline_with(&config, device, resume, &flag) {
                 tracing::error!(error = %format!("{err:#}"), "training run failed");
                 *lock(&error) = Some(format!("{err:#}"));
             }
+            // Ended on its own (superbatch limit, error): release the watcher.
+            flag.stop();
+            let _ = watcher.join();
         });
         tracing::info!(network = %name, fresh = request.fresh, "training started from the control API");
         self.run.clone_from(&name);
         self.training = Some(Job { name, stop, thread });
+        Ok(())
+    }
+
+    /// Sets, moves or removes the time limit of the running training.
+    fn set_timer(&mut self, request: &TimerRequest) -> Result<(), ControlError> {
+        if let Some(minutes) = request.minutes {
+            Timer::validate(minutes).map_err(ControlError::invalid)?;
+        }
+        if self.status().state != RunState::Running {
+            return Err(ControlError::conflict("no training in progress"));
+        }
+        self.timer.set(request.minutes);
         Ok(())
     }
 
@@ -376,6 +420,7 @@ pub(crate) fn router(controller: Shared) -> Router {
         .route("/status", get(status))
         .route("/start", post(start))
         .route("/stop", post(stop))
+        .route("/timer", post(set_timer))
         .route("/networks", post(create_network))
         .route("/networks/defaults", get(network_defaults))
         .route("/networks/{name}", delete(delete_network))
@@ -404,6 +449,15 @@ async fn stop(State(controller): State<Shared>) -> (StatusCode, Json<ControlStat
     let mut controller = lock(&controller);
     controller.stop();
     (StatusCode::ACCEPTED, Json(controller.status()))
+}
+
+async fn set_timer(
+    State(controller): State<Shared>,
+    Json(request): Json<TimerRequest>,
+) -> Result<(StatusCode, Json<ControlStatus>), ControlError> {
+    let mut controller = lock(&controller);
+    controller.set_timer(&request)?;
+    Ok((StatusCode::ACCEPTED, Json(controller.status())))
 }
 
 async fn network_defaults(State(controller): State<Shared>) -> Json<NetworkParams> {
@@ -598,6 +652,27 @@ mod tests {
         // The run ends after its current step.
         let status = wait_for(&app, |s| s.state == RunState::Idle).await;
         assert_eq!((status.error, status.run.as_str()), (None, "ctl"));
+        assert_eq!(status.deadline, None);
+        let (code, _) = call(&app, "POST", "/timer", json!({ "minutes": 5 })).await;
+        assert_eq!(code, StatusCode::CONFLICT, "no training to time");
+
+        // A time limit, moved, then reached.
+        let (code, body) = call(&app, "POST", "/start", json!({ "maxMinutes": 90 })).await;
+        assert_eq!(code, StatusCode::ACCEPTED);
+        let deadline = body["deadline"].as_u64().unwrap();
+        assert!(deadline >= crate::metrics::now() + 90 * 60 - 5);
+        let (code, _) = call(&app, "POST", "/timer", json!({ "minutes": 0 })).await;
+        assert_eq!(code, StatusCode::UNPROCESSABLE_ENTITY);
+        let (code, body) = call(&app, "POST", "/timer", json!({ "minutes": null })).await;
+        assert_eq!(
+            (code, &body["deadline"]),
+            (StatusCode::ACCEPTED, &Value::Null)
+        );
+        lock(&controller).timer.set(Some(0));
+        let status = wait_for(&app, |s| s.state == RunState::Idle).await;
+        assert_eq!(status.error, None, "stopped by its time limit");
+        let (code, _) = call(&app, "POST", "/start", json!({ "maxMinutes": 0 })).await;
+        assert_eq!(code, StatusCode::UNPROCESSABLE_ENTITY);
         let (code, _) = call(&app, "POST", "/start", json!({ "network": "../x" })).await;
         assert_eq!(code, StatusCode::UNPROCESSABLE_ENTITY);
     }

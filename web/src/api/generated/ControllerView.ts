@@ -25,4 +25,8 @@ tournament?: string | null,
  * Stockfish the daemon found for the `stockfish-1` to `stockfish-10`
  * bots (`Stockfish 19`), absent if none.
  */
-stockfish?: string | null, };
+stockfish?: string | null, 
+/**
+ * When the running training stops on its own (Unix seconds), if it has a time limit.
+ */
+deadline?: number | null, };

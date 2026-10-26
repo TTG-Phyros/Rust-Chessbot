@@ -6,6 +6,7 @@ const LINKS = [
   { to: '/play', label: 'Jouer' },
   { to: '/analysis', label: 'Analyse' },
   { to: '/training', label: 'Entraînement' },
+  { to: '/arena', label: 'Arène' },
 ] as const;
 
 export function Layout() {

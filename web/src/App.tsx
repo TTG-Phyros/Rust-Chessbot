@@ -9,6 +9,11 @@ import { PlayPage } from './features/play/PlayPage';
 const TrainingPage = lazy(() =>
   import('./features/training/TrainingPage').then((module) => ({ default: module.TrainingPage })),
 );
+const ArenaPage = lazy(() =>
+  import('./features/arena/ArenaPage').then((module) => ({ default: module.ArenaPage })),
+);
+
+const loading = <p className="text-sm text-slate-400">Chargement…</p>;
 
 export function App() {
   return (
@@ -20,8 +25,16 @@ export function App() {
         <Route
           path="/training"
           element={
-            <Suspense fallback={<p className="text-sm text-slate-400">Chargement…</p>}>
+            <Suspense fallback={loading}>
               <TrainingPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/arena"
+          element={
+            <Suspense fallback={loading}>
+              <ArenaPage />
             </Suspense>
           }
         />

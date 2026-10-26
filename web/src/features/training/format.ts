@@ -25,6 +25,21 @@ export function formatElo(elo: number, error: number): string {
   return `${sign}${Math.abs(Math.round(elo))} ± ${Math.round(error)}`;
 }
 
+/** `26/10 14:03` (local time of a Unix timestamp). */
+export function formatDate(unix: number): string {
+  return new Date(unix * 1000).toLocaleString('fr-FR', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+/** `12,5` points: halves for draws. */
+export function formatPoints(points: number): string {
+  return points.toLocaleString('fr-FR', { maximumFractionDigits: 1 });
+}
+
 export const CONTROLLER_LABEL: Record<ControllerState, string> = {
   unavailable: 'Service arrêté',
   idle: 'En attente',

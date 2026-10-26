@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { ApiError, api } from './client';
 import type { AnalysisInfo } from './generated/AnalysisInfo';
+import type { ArenaView } from './generated/ArenaView';
 import type { EngineLimits } from './generated/EngineLimits';
 import type { GameRequest } from './generated/GameRequest';
 import type { HealthResponse } from './generated/HealthResponse';
@@ -182,26 +183,36 @@ export { ApiError };
 
 const TRAINING_POLL_MS = 3_000;
 
-export type TrainingState = {
-  view: TrainingView | null;
+export type Polled<T> = {
+  view: T | null;
   error: string | null;
-  /** Fetches again right away (after start/stop). */
+  /** Fetches again right away (after a command). */
   refresh: () => void;
 };
 
-/** Polls `GET /api/training`. */
-export function useTraining(): TrainingState {
-  const [state, setState] = useState<{ view: TrainingView | null; error: string | null }>({
+/** Polls `fetcher` every `intervalMs`, again whenever `key` changes. */
+function usePolling<T>(
+  key: string,
+  fetcher: (signal: AbortSignal) => Promise<T>,
+  intervalMs: number,
+): Polled<T> {
+  // While another key loads, the previous view stays (better than a blank page).
+  const [state, setState] = useState<{ view: T | null; error: string | null }>({
     view: null,
     error: null,
   });
   const [tick, setTick] = useState(0);
+  // The fetcher is rebuilt on every render: keep the latest without re-polling.
+  const fetcherRef = useRef(fetcher);
+  useEffect(() => {
+    fetcherRef.current = fetcher;
+  }, [fetcher]);
 
   useEffect(() => {
     const controller = new AbortController();
     const poll = () => {
-      api
-        .training(controller.signal)
+      fetcherRef
+        .current(controller.signal)
         .then((view) => {
           setState({ view, error: null });
         })
@@ -211,15 +222,25 @@ export function useTraining(): TrainingState {
         });
     };
     poll();
-    const timer = setInterval(poll, TRAINING_POLL_MS);
+    const timer = setInterval(poll, intervalMs);
     return () => {
       clearInterval(timer);
       controller.abort();
     };
-  }, [tick]);
+  }, [key, tick, intervalMs]);
 
   const refresh = useCallback(() => {
     setTick((value) => value + 1);
   }, []);
   return { ...state, refresh };
+}
+
+/** Polls `GET /api/training` for `network` (default: the one training). */
+export function useTraining(network: string | null): Polled<TrainingView> {
+  return usePolling(network ?? '', (signal) => api.training(network, signal), TRAINING_POLL_MS);
+}
+
+/** Polls `GET /api/arena`. */
+export function useArena(): Polled<ArenaView> {
+  return usePolling('arena', (signal) => api.arena(signal), TRAINING_POLL_MS);
 }

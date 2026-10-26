@@ -1,0 +1,563 @@
+import { useState } from 'react';
+import { Link } from 'react-router';
+
+import { api } from '../../api/client';
+import type { ArenaView } from '../../api/generated/ArenaView';
+import type { BotInfo } from '../../api/generated/BotInfo';
+import type { Tournament } from '../../api/generated/Tournament';
+import type { TournamentState } from '../../api/generated/TournamentState';
+import { useArena } from '../../api/hooks';
+import { Button, ErrorText, Panel, Stat } from '../../components/ui';
+import { formatDate, formatElo, formatPoints } from '../training/format';
+import { formatParam } from '../training/params';
+
+/** Name of the classical evaluation in tournaments. */
+const CLASSIC = 'classic';
+
+const botLabel = (name: string) => (name === CLASSIC ? 'PeSTO' : name);
+
+const STATE_LABEL: Record<TournamentState, string> = {
+  running: 'En cours',
+  finished: 'Terminé',
+  stopped: 'Arrêté',
+  failed: 'Échec',
+};
+
+const STATE_DOT: Record<TournamentState, string> = {
+  running: 'bg-emerald-400',
+  finished: 'bg-sky-400',
+  stopped: 'bg-amber-400',
+  failed: 'bg-rose-500',
+};
+
+const INPUT =
+  'mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 font-mono text-sm';
+
+function BotList({
+  bots,
+  canDelete,
+  onDelete,
+}: {
+  bots: readonly BotInfo[];
+  canDelete: boolean;
+  onDelete: (name: string) => void;
+}) {
+  return (
+    <div className="-mx-4 overflow-x-auto px-4">
+      <table className="w-full min-w-[40rem] text-sm">
+        <thead>
+          <tr className="text-left text-xs text-slate-500">
+            <th className="py-1.5 font-normal">Bot</th>
+            <th className="py-1.5 font-normal">Origine</th>
+            <th className="py-1.5 text-right font-normal">Elo vs PeSTO</th>
+            <th className="py-1.5 text-right font-normal">Nœuds self-play</th>
+            <th className="py-1.5 text-right font-normal">Taux d’app.</th>
+            <th className="py-1.5 text-right font-normal">Créé le</th>
+            <th className="py-1.5" />
+          </tr>
+        </thead>
+        <tbody>
+          <tr className="border-t border-slate-800 text-slate-400">
+            <td className="py-2 font-medium text-slate-200">PeSTO</td>
+            <td className="py-2" colSpan={5}>
+              Évaluation classique (tables pièce-case), toujours disponible : la référence 0 Elo.
+            </td>
+            <td />
+          </tr>
+          {bots.map((bot) => (
+            <tr key={bot.name} className="border-t border-slate-800">
+              <td className="py-2 pr-3 font-medium whitespace-nowrap text-slate-100">{bot.name}</td>
+              <td className="py-2 text-slate-400">
+                <Link
+                  to={`/training?network=${encodeURIComponent(bot.network)}`}
+                  className="hover:text-slate-200 hover:underline"
+                >
+                  {bot.network}
+                </Link>
+                {bot.superbatch != null ? ` · sb ${bot.superbatch}` : ' · dernière version'}
+              </td>
+              <td className="py-2 text-right font-mono">
+                {bot.elo != null ? formatElo(bot.elo, bot.eloError ?? 0) : '—'}
+              </td>
+              <td className="py-2 text-right font-mono">
+                {bot.params ? formatParam('selfplayNodes', bot.params.selfplayNodes) : '—'}
+              </td>
+              <td className="py-2 text-right font-mono">
+                {bot.params ? formatParam('learningRate', bot.params.learningRate) : '—'}
+              </td>
+              <td className="py-2 text-right whitespace-nowrap text-slate-400">
+                {formatDate(bot.createdAt)}
+              </td>
+              <td className="py-2 text-right">
+                <Button
+                  variant="ghost"
+                  className="px-2 py-1 text-xs text-rose-400 hover:text-rose-300"
+                  disabled={!canDelete}
+                  onClick={() => {
+                    if (window.confirm(`Supprimer le bot « ${bot.name} » ?`)) onDelete(bot.name);
+                  }}
+                >
+                  Supprimer
+                </Button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {bots.length === 0 && (
+        <p className="mt-3 text-sm text-slate-400">
+          Aucun bot sauvegardé : dans{' '}
+          <Link to="/training" className="underline hover:text-slate-200">
+            Entraînement
+          </Link>
+          , choisis un réseau et sauvegarde un de ses 5 meilleurs snapshots.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function TournamentForm({
+  bots,
+  disabled,
+  onStart,
+}: {
+  bots: readonly BotInfo[];
+  disabled: boolean;
+  onStart: (request: {
+    bots: string[];
+    gamesPerPair: number;
+    nodes: number;
+    threads: number;
+  }) => void;
+}) {
+  const [chosen, setChosen] = useState<string[]>([CLASSIC]);
+  const [games, setGames] = useState('20');
+  const [nodes, setNodes] = useState('5000');
+  const [threads, setThreads] = useState('0');
+  const names = [CLASSIC, ...bots.map((bot) => bot.name)];
+  const participants = names.filter((name) => chosen.includes(name));
+  const pairings = (participants.length * (participants.length - 1)) / 2;
+  const gamesPerPair = Math.ceil(Number(games) / 2) * 2;
+  const valid =
+    participants.length >= 2 &&
+    participants.length <= 16 &&
+    Number.isInteger(Number(games)) &&
+    Number(games) >= 2 &&
+    Number(games) <= 2000 &&
+    Number(nodes) >= 100 &&
+    Number(nodes) <= 1_000_000 &&
+    Number.isInteger(Number(threads)) &&
+    Number(threads) >= 0;
+
+  return (
+    <form
+      className="space-y-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (valid) {
+          onStart({
+            bots: participants,
+            gamesPerPair: Number(games),
+            nodes: Number(nodes),
+            threads: Number(threads),
+          });
+        }
+      }}
+    >
+      <fieldset>
+        <legend className="mb-2 text-sm text-slate-300">Participants</legend>
+        <div className="flex flex-wrap gap-x-5 gap-y-2">
+          {names.map((name) => (
+            <label key={name} className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={chosen.includes(name)}
+                onChange={(event) => {
+                  setChosen(
+                    event.target.checked ? [...chosen, name] : chosen.filter((n) => n !== name),
+                  );
+                }}
+                className="size-4 accent-emerald-500"
+              />
+              {botLabel(name)}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <label
+          className="block text-sm"
+          title="Chaque paire joue ce nombre de parties, couleurs alternées, depuis les mêmes ouvertures."
+        >
+          <span className="text-slate-300">Parties par paire</span>
+          <input
+            type="number"
+            min={2}
+            max={2000}
+            step={2}
+            value={games}
+            onChange={(e) => {
+              setGames(e.target.value);
+            }}
+            className={INPUT}
+          />
+        </label>
+        <label
+          className="block text-sm"
+          title="Recherche de chaque coup, identique pour tous les bots : seule l’évaluation les distingue."
+        >
+          <span className="text-slate-300">Nœuds par coup</span>
+          <input
+            type="number"
+            min={100}
+            max={1_000_000}
+            step={500}
+            value={nodes}
+            onChange={(e) => {
+              setNodes(e.target.value);
+            }}
+            className={INPUT}
+          />
+        </label>
+        <label
+          className="block text-sm"
+          title="0 = tous les cœurs. Pendant un entraînement, en laisser au self-play."
+        >
+          <span className="text-slate-300">Threads (0 = tous)</span>
+          <input
+            type="number"
+            min={0}
+            max={256}
+            step={1}
+            value={threads}
+            onChange={(e) => {
+              setThreads(e.target.value);
+            }}
+            className={INPUT}
+          />
+        </label>
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button type="submit" variant="primary" disabled={!valid || disabled}>
+          Lancer le tournoi
+        </Button>
+        <span className="text-sm text-slate-400">
+          {participants.length < 2
+            ? 'Choisis au moins 2 participants.'
+            : `${pairings} paire${pairings > 1 ? 's' : ''} × ${gamesPerPair} parties = ${pairings * gamesPerPair} parties`}
+        </span>
+      </div>
+    </form>
+  );
+}
+
+function scoreOf(tournament: Tournament, row: string, column: string) {
+  const pairing = tournament.pairings.find(
+    (p) => (p.a === row && p.b === column) || (p.a === column && p.b === row),
+  );
+  if (!pairing) return null;
+  const games = pairing.wins + pairing.draws + pairing.losses;
+  if (games === 0) return { games, points: 0, elo: 0, error: 0 };
+  const asA = pairing.a === row;
+  const won = asA ? pairing.wins : pairing.losses;
+  return {
+    games,
+    points: won + pairing.draws / 2,
+    elo: asA ? pairing.elo : -pairing.elo,
+    error: pairing.eloError,
+  };
+}
+
+function TournamentView({
+  tournament,
+  onStop,
+  busy,
+}: {
+  tournament: Tournament;
+  onStop: () => void;
+  busy: boolean;
+}) {
+  const played = tournament.pairings.reduce((sum, p) => sum + p.wins + p.draws + p.losses, 0);
+  const total = tournament.pairings.length * tournament.gamesPerPair;
+  const order = tournament.standings.map((standing) => standing.bot);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-3 text-sm">
+        <span className="flex items-center gap-2 font-medium">
+          <span
+            aria-hidden
+            className={`inline-block size-2.5 rounded-full ${STATE_DOT[tournament.state]}`}
+          />
+          {STATE_LABEL[tournament.state]}
+        </span>
+        <span className="text-slate-400">
+          {tournament.nodes.toLocaleString('fr-FR')} nœuds par coup · {tournament.gamesPerPair}{' '}
+          parties par paire · lancé le {formatDate(tournament.createdAt)}
+        </span>
+        <span className="flex-1" />
+        {tournament.state === 'running' && (
+          <Button onClick={onStop} disabled={busy}>
+            Arrêter le tournoi
+          </Button>
+        )}
+      </div>
+      {tournament.error && <ErrorText>{tournament.error}</ErrorText>}
+      <div>
+        <div className="mb-1 flex justify-between text-xs text-slate-400">
+          <span>Progression</span>
+          <span>
+            {played} / {total} parties
+          </span>
+        </div>
+        <div
+          className="h-2 overflow-hidden rounded-full bg-slate-800"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={total}
+          aria-valuenow={played}
+        >
+          <div
+            className="h-full rounded-full bg-emerald-500"
+            style={{ width: `${total ? (100 * played) / total : 0}%` }}
+          />
+        </div>
+      </div>
+
+      <div className="-mx-4 overflow-x-auto px-4">
+        <table className="w-full min-w-[28rem] text-sm">
+          <thead>
+            <tr className="text-left text-xs text-slate-500">
+              <th className="py-1.5 pr-3 font-normal">#</th>
+              <th className="py-1.5 font-normal">Bot</th>
+              <th
+                className="py-1.5 text-right font-normal"
+                title={
+                  order.includes(CLASSIC)
+                    ? 'Relatif à PeSTO (0)'
+                    : 'Relatif à la moyenne du tournoi'
+                }
+              >
+                Elo {order.includes(CLASSIC) ? '(PeSTO = 0)' : '(moyenne = 0)'}
+              </th>
+              <th className="py-1.5 text-right font-normal">Points</th>
+              <th className="py-1.5 text-right font-normal">Score</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tournament.standings.map((standing, rank) => (
+              <tr key={standing.bot} className="border-t border-slate-800">
+                <td className="py-2 pr-3 font-mono text-slate-400">{rank + 1}</td>
+                <td className="py-2 font-medium">{botLabel(standing.bot)}</td>
+                <td className="py-2 text-right font-mono">
+                  {standing.games > 0
+                    ? `${standing.elo > 0 ? '+' : standing.elo < 0 ? '−' : ''}${Math.abs(Math.round(standing.elo))}`
+                    : '—'}
+                </td>
+                <td className="py-2 text-right font-mono">
+                  {formatPoints(standing.points)} / {standing.games}
+                </td>
+                <td className="py-2 text-right font-mono">
+                  {standing.games > 0
+                    ? `${Math.round((100 * standing.points) / standing.games)} %`
+                    : '—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div>
+        <h3 className="mb-2 text-xs font-semibold tracking-wider text-slate-400 uppercase">
+          Table croisée (points de la ligne contre la colonne)
+        </h3>
+        <div className="-mx-4 overflow-x-auto px-4">
+          <table className="text-sm">
+            <thead>
+              <tr className="text-xs text-slate-500">
+                <th />
+                {order.map((bot) => (
+                  <th key={bot} className="px-2 py-1.5 text-right font-normal">
+                    {botLabel(bot)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {order.map((row) => (
+                <tr key={row} className="border-t border-slate-800">
+                  <th className="py-2 pr-3 text-left font-medium">{botLabel(row)}</th>
+                  {order.map((column) => {
+                    if (row === column) {
+                      return (
+                        <td key={column} className="px-2 text-right text-slate-600">
+                          ·
+                        </td>
+                      );
+                    }
+                    const score = scoreOf(tournament, row, column);
+                    if (!score || score.games === 0) {
+                      return (
+                        <td key={column} className="px-2 text-right text-slate-600">
+                          —
+                        </td>
+                      );
+                    }
+                    const ratio = score.points / score.games;
+                    return (
+                      <td
+                        key={column}
+                        className={`px-2 text-right font-mono ${ratio > 0.5 ? 'text-emerald-300' : ratio < 0.5 ? 'text-rose-300' : 'text-slate-300'}`}
+                        title={`${formatElo(score.elo, score.error)} Elo sur ${score.games} parties`}
+                      >
+                        {formatPoints(score.points)}/{score.games}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-2 text-xs text-slate-500">
+          Survole une case pour l’écart Elo de la paire et son intervalle à 95 %. Le classement,
+          lui, ajuste un Elo sur toutes les parties (modèle de Bradley-Terry).
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function ArenaContent({ view, refresh }: { view: ArenaView; refresh: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [shown, setShown] = useState<string | null>(null);
+  const available = view.controller.state !== 'unavailable';
+  const playing = view.controller.tournament ?? null;
+
+  const act = async (action: () => Promise<unknown>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await action();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'erreur');
+    } finally {
+      setBusy(false);
+      refresh();
+    }
+  };
+
+  const tournament =
+    view.tournaments.find((t) => t.id === shown) ??
+    view.tournaments.find((t) => t.id === playing) ??
+    view.tournaments[0] ??
+    null;
+
+  return (
+    <div className="space-y-4">
+      {!available && (
+        <Panel>
+          <p className="text-sm text-slate-400">
+            {view.controller.error ?? 'Service d’entraînement arrêté'} — les tournois sont joués par
+            ce service : bots et résultats restent consultables.
+          </p>
+        </Panel>
+      )}
+      {error && <ErrorText>{error}</ErrorText>}
+
+      <div className="grid gap-4 lg:grid-cols-[3fr_2fr]">
+        <Panel title={`Bots (${view.bots.length + 1})`}>
+          <BotList
+            bots={view.bots}
+            canDelete={available && !playing && !busy}
+            onDelete={(name) => void act(() => api.deleteBot(name))}
+          />
+        </Panel>
+        <Panel title="Nouveau tournoi">
+          <TournamentForm
+            bots={view.bots}
+            disabled={!available || playing !== null || busy}
+            onStart={(request) =>
+              void act(async () => {
+                const { id } = await api.startTournament(request);
+                setShown(id);
+              })
+            }
+          />
+          {playing && (
+            <p className="mt-3 text-sm text-slate-400">
+              Un tournoi est en cours : un seul à la fois.
+            </p>
+          )}
+        </Panel>
+      </div>
+
+      <Panel title="Tournoi">
+        {tournament ? (
+          <>
+            {view.tournaments.length > 1 && (
+              <label className="mb-4 flex items-center gap-2 text-sm text-slate-300">
+                Historique
+                <select
+                  value={tournament.id}
+                  onChange={(event) => {
+                    setShown(event.target.value);
+                  }}
+                  className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-sm"
+                >
+                  {view.tournaments.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {formatDate(t.createdAt)} — {t.bots.map(botLabel).join(', ')} (
+                      {STATE_LABEL[t.state].toLowerCase()})
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <TournamentView
+              tournament={tournament}
+              busy={busy}
+              onStop={() => void act(() => api.stopTournament())}
+            />
+          </>
+        ) : (
+          <p className="text-sm text-slate-400">
+            Aucun tournoi joué : choisis des participants ci-dessus. Chaque paire de bots joue les
+            mêmes ouvertures aléatoires avec les deux couleurs, au même nombre de nœuds par coup.
+          </p>
+        )}
+      </Panel>
+    </div>
+  );
+}
+
+export function ArenaPage() {
+  const { view, error, refresh } = useArena();
+  if (!view) {
+    return error ? (
+      <ErrorText>{error}</ErrorText>
+    ) : (
+      <p className="text-sm text-slate-400">Chargement…</p>
+    );
+  }
+  return (
+    <>
+      {error && <ErrorText>{error}</ErrorText>}
+      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <Stat label="Bots" value={view.bots.length + 1} hint="PeSTO compris" />
+        <Stat label="Tournois" value={view.tournaments.length} />
+        <Stat label="Tournoi en cours" value={view.controller.tournament ? 'oui' : 'non'} />
+        <Stat
+          label="Meilleur bot (dernier tournoi)"
+          value={
+            view.tournaments[0]?.standings[0] ? botLabel(view.tournaments[0].standings[0].bot) : '—'
+          }
+        />
+      </div>
+      <ArenaContent view={view} refresh={refresh} />
+    </>
+  );
+}

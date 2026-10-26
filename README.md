@@ -88,8 +88,10 @@ Sous Windows : `winget install Rustlang.Rustup Casey.Just OpenJS.NodeJS.LTS`, pl
 | Commande | Effet |
 | --- | --- |
 | `docker compose up` / `just up` | serveur + UI sur <http://localhost:8080> |
-| `docker compose --profile train up` / `just train` | UI + entraînement sur GPU (image CUDA) |
-| `docker compose --profile train-cpu up` / `just train-cpu` | UI + entraînement sur CPU (image sans CUDA) |
+| `just train` (`docker compose --profile train up -d --build`) | UI + entraînement sur GPU (image CUDA), en arrière-plan |
+| `just train-cpu` | UI + entraînement sur CPU (image sans CUDA), en arrière-plan |
+| `just logs [service]` | suit les logs de `train` (par défaut), `train-cpu`, `server` ou `web` |
+| `just down` | arrête tout, entraînement compris (checkpoint écrit) |
 | `just train-run <commande>` | une commande `chess-train` ponctuelle dans l'image CUDA (`match`, `export`…) |
 | `just gpu-check` | `nvidia-smi` dans un conteneur, puis un matmul et une rétropropagation burn sur le GPU, comparés au CPU |
 | `just web-dev` | Vite (rechargement à chaud) + `chess-server` natif, sans reconstruire d'image |

@@ -34,17 +34,21 @@ serve:
 up:
     docker compose up --build
 
-# Stop the Docker stack
+# Stop the Docker stack, training included (it checkpoints first)
 down:
-    docker compose down
+    docker compose --profile train --profile train-cpu down
 
-# UI + API + training on the NVIDIA GPU (start/stop from the Training page)
+# UI + API + training on the NVIDIA GPU, in the background (start/stop from the Training page)
 train:
-    docker compose --profile train up --build
+    docker compose --profile train up -d --build
 
-# UI + API + training on the CPU (image without CUDA)
+# UI + API + training on the CPU (image without CUDA), in the background
 train-cpu:
-    docker compose --profile train-cpu up --build
+    docker compose --profile train-cpu up -d --build
+
+# Follow the logs of a service: train (default), train-cpu, server or web
+logs service="train":
+    docker compose --profile train --profile train-cpu logs -f {{ service }}
 
 # One-off chess-train command in the CUDA image, e.g. `just train-run match a.nnue classic`
 train-run *args:

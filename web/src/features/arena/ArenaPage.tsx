@@ -11,6 +11,7 @@ import { useArena } from '../../api/hooks';
 import { Button, ErrorText, Panel, Segmented, Stat } from '../../components/ui';
 import { formatDate, formatElo, formatPoints } from '../training/format';
 import { formatParam } from '../training/params';
+import { estimateTournament, formatDuration } from './estimate';
 import { LIMIT_OPTIONS, type LimitKind, describeLimit, limitError, limitOption } from './limit';
 import { STOCKFISH_LEVELS, botLabel, describeLevel, stockfishBot } from './stockfish';
 
@@ -141,6 +142,42 @@ function BotList({
   );
 }
 
+/** Expected duration of the tournament being set up. */
+function Estimate({
+  bots,
+  gamesPerPair,
+  limit,
+  threads,
+}: {
+  bots: string[];
+  gamesPerPair: number;
+  limit: MoveLimit;
+  threads: number;
+}) {
+  const estimate = estimateTournament({ bots, gamesPerPair, limit, threads });
+  const long = estimate.seconds > 3600;
+  const slowest = estimate.slowest;
+  const dominated = slowest !== null && bots.length > 2 && slowest.seconds > estimate.seconds / 2;
+  return (
+    <div
+      className={`rounded-lg px-3 py-2 text-sm ${long ? 'bg-amber-950/40 text-amber-200' : 'bg-slate-950/60 text-slate-300'}`}
+    >
+      <p>
+        Durée estimée :{' '}
+        <span className="font-mono font-semibold">{formatDuration(estimate.seconds)}</span> sur{' '}
+        {threads} thread{threads > 1 ? 's' : ''}
+      </p>
+      <p className="mt-1 text-xs text-slate-500">
+        {dominated &&
+          `Surtout ${botLabel(slowest.a)} contre ${botLabel(slowest.b)} (${formatDuration(slowest.seconds)}). `}
+        Ordre de grandeur mesuré sur la machine de référence : la longueur des parties varie, la
+        profondeur coûte très différemment selon les positions, et un entraînement en parallèle
+        ralentit tout.
+      </p>
+    </div>
+  );
+}
+
 function TournamentForm({
   bots,
   stockfish,
@@ -181,6 +218,9 @@ function TournamentForm({
   };
   const pairings = (participants.length * (participants.length - 1)) / 2;
   const gamesPerPair = Math.ceil(Number(games) / 2) * 2;
+  // 0 = every core of the machine running the service: usually this one.
+  const cores = navigator.hardwareConcurrency || 4;
+  const workers = Number(threads) > 0 ? Number(threads) : cores;
   const valid =
     participants.length >= 2 &&
     participants.length <= 16 &&
@@ -327,6 +367,14 @@ function TournamentForm({
             : `${pairings} paire${pairings > 1 ? 's' : ''} × ${gamesPerPair} parties = ${pairings * gamesPerPair} parties`}
         </span>
       </div>
+      {valid && (
+        <Estimate
+          bots={participants}
+          gamesPerPair={gamesPerPair}
+          limit={{ kind: limitKind, value: limitValue }}
+          threads={workers}
+        />
+      )}
     </form>
   );
 }

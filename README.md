@@ -6,7 +6,7 @@ Moteur d'échecs en Rust avec trois parties :
 2. **Entraînement** : self-play et entraînement d'un réseau NNUE avec [burn](https://burn.dev), sur GPU NVIDIA avec repli automatique sur le CPU.
 3. **Visualisation** : interface web (React + TypeScript) pour jouer, analyser et suivre l'entraînement.
 
-> **État : phase 4 sur 7.** Le moteur joue (perft exact, recherche alpha-beta, évaluation PeSTO, UCI complet) et l'interface web permet de jouer contre lui et d'analyser des parties en direct. L'entraînement NNUE arrive en phases 5 et 6. Voir [Feuille de route](#feuille-de-route).
+> **État : phase 5 sur 7.** Le moteur joue (perft exact, recherche alpha-beta, évaluation PeSTO, UCI complet), l'interface web permet de jouer et d'analyser, et le pipeline d'entraînement NNUE (self-play, dataset en streaming, entraînement GPU avec repli CPU, export quantifié) fonctionne. Le moteur utilisera le réseau entraîné en phase 6. Voir [Feuille de route](#feuille-de-route).
 
 ## Démarrage rapide
 
@@ -108,6 +108,40 @@ L'API est **sans état** : une partie est toujours envoyée sous la forme `{ "fe
 
 Les scores renvoyés sont du point de vue des blancs. Les limites sont plafonnées côté serveur (profondeur 64, 60 s par coup, 10 min d'analyse), et le nombre de recherches simultanées est borné par `max_searches`.
 
+## Entraînement (NNUE)
+
+Le réseau suit l'architecture `768 → 256 ×2 → 1` en perspective. Les entrées sont 768 features binaires (couleur relative × pièce × case), et un feature transformer commun alimente deux moitiés : celle du camp au trait et celle de l'adversaire. Les deux passent par un ReLU borné (CReLU) avant la couche de sortie.
+
+```sh
+docker compose --profile train up        # pipeline sur GPU (repli CPU si aucun GPU)
+docker compose --profile train-cpu up    # même chose sans CUDA
+docker compose --profile train stop      # arrêt propre : l'étape en cours se termine, checkpoint écrit
+```
+
+La commande par défaut est `pipeline`. Elle fait tourner **le self-play sur les cœurs CPU** (producteur) et **l'entraînement sur le GPU** (consommateur) en même temps :
+
+1. **Self-play.** Le moteur joue contre lui-même (rayon, un searcher par thread) après 6 à 10 coups aléatoires, à 5 000 nœuds par coup. On ne garde que les positions calmes : pas d'échec, meilleur coup non tactique. Une partie s'arrête par adjudication quand les deux camps s'accordent sur le résultat.
+2. **Dataset.** Chaque position est un enregistrement fixe de 32 octets (format `CBDS` v1, décrit dans `crates/chess-train/src/dataset/mod.rs`), écrit par fichiers d'un million de positions publiés de façon atomique. Les datasets vivent dans le volume Docker `datasets`.
+3. **Entraînement.** Les fichiers sont **lus en continu depuis le disque**, par blocs mélangés, sans jamais tenir entièrement en mémoire. Batchs de 16 384 positions (environ 1,4 Go de VRAM sur la RTX 4060), optimiseur AdamW, perte `(σ(sortie) − cible)²` où la cible mélange le score de recherche et le résultat de la partie.
+4. **Checkpoints.** À chaque superbatch (200 pas), `data/checkpoints/<run>/` reçoit les poids flottants avec leurs identifiants de paramètres, l'état AdamW et la progression. La reprise est exacte et se fait par défaut ; l'option `--fresh` repart de zéro.
+5. **Export.** Les poids quantifiés au format `CBNN` v1 attendu par `chess-eval` (décrit dans `crates/chess-eval/src/nnue/mod.rs`) vont dans `data/weights/<run>.nnue`, avec un instantané `data/weights/<run>/sbNNNNN.nnue` tous les 5 superbatchs.
+6. **Métriques.** `data/metrics/events.jsonl` reçoit une ligne par événement (perte, vitesse, VRAM, checkpoints, exports). `data/metrics/status.json` donne l'état courant (phase, device, parties, positions, perte) ; `chess-server` le lit.
+
+Les étapes sont aussi disponibles séparément, en Docker (`just train <commande>`) ou en natif :
+
+```sh
+chess-train gpu-check                 # device utilisé, matmul + rétropropagation vérifiés
+chess-train selfplay --games 10000    # génère un dataset
+chess-train train --superbatches 50   # entraîne sur tout le dossier de datasets
+chess-train export --out net.nnue     # quantifie le dernier checkpoint
+```
+
+La configuration se fait par `chess-train.toml` (voir [`chess-train.example.toml`](chess-train.example.toml)), par les variables `CHESS_TRAIN_*` (`CHESS_TRAIN_SELFPLAY__NODES=8000`) ou par les options de la ligne de commande. `CHESS_TRAIN_RUN` sépare plusieurs expériences.
+
+**Ordres de grandeur sur la machine de référence (8 cœurs, RTX 4060).**
+- Self-play : environ 136 parties/s (environ 10 000 positions/s), ou 80 parties/s quand l'entraînement tourne en parallèle.
+- Entraînement : environ 580 000 positions/s sur GPU, contre environ 100 000/s sur CPU.
+
 ## Utiliser le moteur dans une GUI (Cute Chess, Arena)
 
 ```sh
@@ -141,7 +175,7 @@ Le moteur peut aussi être piloté par script : `printf "position startpos\ngo d
 - [x] **Phase 2** : `chess-core` complet (magic bitboards, coups légaux, make/unmake, Zobrist, FEN/SAN/UCI/PGN, fins de partie), perft exact
 - [x] **Phase 3** : `chess-search` (PVS, iterative deepening, TT, quiescence, null move, LMR, killers, history, MVV-LVA, gestion du temps), évaluation PeSTO, UCI complet
 - [x] **Phase 4** : `chess-server` (API REST sans état, analyse en direct par WebSocket, OpenAPI) + front : modes jeu et analyse
-- [ ] **Phase 5** : `chess-train` : self-play, dataset, entraînement NNUE, export
+- [x] **Phase 5** : `chess-train` : self-play multithread, dataset binaire en streaming, entraînement NNUE (burn, GPU + repli CPU), checkpoints et reprise, export quantifié, métriques, pipeline producteur/consommateur
 - [ ] **Phase 6** : NNUE dans `chess-eval`, mode entraînement de l'UI, matchs entre versions
 - [ ] **Phase 7** : optimisations (profiling, SIMD), README final
 

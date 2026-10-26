@@ -1,0 +1,50 @@
+# Configuration of `chess-train`, with the default values.
+# Copy it to `chess-train.toml` (or point CHESS_TRAIN_CONFIG at it) and edit.
+# Every key can also be set from the environment: CHESS_TRAIN_<KEY>, with
+# `__` for sections, e.g. CHESS_TRAIN_SELFPLAY__NODES=8000.
+
+# Name of the run: prefixes dataset files, names checkpoints and weights.
+run = "main"
+# Weights (`weights/`), checkpoints (`checkpoints/`) and metrics (`metrics/`).
+data_dir = "data"
+# Dataset files, streamed during training: keep them on a fast disk.
+dataset_dir = "data/datasets"
+# Pipeline only: positions to generate before training starts.
+min_positions = 2000000
+
+[selfplay]
+# Games to play; 0 = until stopped.
+games = 0
+# Nodes searched per move (strength vs. speed of data generation).
+nodes = 5000
+# Random plies played first, for opening diversity.
+random_plies_min = 6
+random_plies_max = 10
+# Longer games are adjudicated a draw.
+max_plies = 400
+# Worker threads; 0 = all cores (all but one in the pipeline).
+threads = 0
+# Transposition table per worker, in MiB.
+hash_mb = 4
+# Positions per dataset file (32 bytes each).
+chunk_positions = 1000000
+seed = 24301
+
+[train]
+# Positions per optimizer step (dense inputs: ~100 MB per step at 16384).
+batch_size = 16384
+# Steps per superbatch (one checkpoint and one metrics line each).
+batches_per_superbatch = 200
+# Superbatches to train; 0 = until stopped.
+superbatches = 0
+learning_rate = 0.001
+# The learning rate is multiplied by lr_drop_factor every lr_drop_every superbatches.
+lr_drop_every = 40
+lr_drop_factor = 0.3
+# Weight of the game result in the target (the rest is the search score).
+wdl = 0.25
+# Records shuffled together by the loader (32 bytes each: 2M = 64 MB).
+shuffle_records = 2000000
+# Export quantized weights every this many superbatches.
+export_every = 5
+seed = 31249

@@ -171,7 +171,7 @@ Le niveau de log se règle avec `RUST_LOG` (ex. `RUST_LOG=debug`).
   - ses courbes de perte et d'Elo contre PeSTO ;
   - les boutons « Démarrer / reprendre », « Arrêter », « Repartir de zéro » et « Supprimer » ;
   - un **minuteur** : on démarre pour une durée donnée (15 min à 24 h, ou un nombre de minutes au choix, jusqu'à une semaine). À l'échéance, l'entraînement s'arrête comme avec « Arrêter » : il finit l'étape en cours, écrit un checkpoint et exporte le réseau. Pendant l'entraînement, un compte à rebours indique l'heure d'arrêt ; on peut la modifier ou retirer le minuteur.
-- **Arène** : les bots sauvegardés, plus PeSTO et **Stockfish niveaux 1 à 10**, et les **tournois** toutes-rondes entre eux : choix des participants, des parties par paire et de la réflexion de nos bots (nœuds, profondeur ou temps par coup). Avant le lancement, le formulaire affiche la **durée estimée** du tournoi. Une fois lancé, un tournoi affiche sa progression en direct, un classement Elo, une table croisée et l'historique des tournois.
+- **Arène** : les bots sauvegardés, plus PeSTO et **Stockfish niveaux 1 à 10**, et les **tournois** toutes-rondes entre eux : choix des participants, des parties par paire et de la réflexion de nos bots (nœuds, profondeur ou temps par coup). La **table croisée des participants** permet d'activer ou de désactiver chaque combat avant le lancement, par exemple pour ne faire jouer tes réseaux que contre Stockfish. Un clic sur un nom bascule tous ses combats, et des boutons permettent de tout activer ou de tout désactiver. Avant le lancement, le formulaire affiche la **durée estimée** du tournoi. Une fois lancé, un tournoi affiche sa progression en direct, un classement Elo, une table croisée et l'historique des tournois.
 
 Les boutons de ces deux pages passent par le démon de contrôle : il faut le profil `train` ou `train-cpu`. Sans lui, réseaux, bots et résultats restent consultables.
 
@@ -199,7 +199,7 @@ L'API est **sans état** : une partie est toujours envoyée sous la forme `{ "fe
 | `POST /api/networks`, `DELETE /api/networks/{nom}` | crée un réseau (`{"name", "params"}`, 422 si un paramètre est hors bornes), le supprime |
 | `GET /api/arena` | bots et derniers tournois |
 | `POST /api/bots`, `DELETE /api/bots/{nom}` | sauvegarde un snapshot comme bot (`{"name", "network", "superbatch"}`), le supprime |
-| `POST /api/tournaments`, `POST /api/tournaments/stop` | lance un tournoi (`{"bots", "gamesPerPair", "limit": {"kind": "nodes" | "depth" | "time", "value"}, "threads"}`), l'arrête |
+| `POST /api/tournaments`, `POST /api/tournaments/stop` | lance un tournoi (`{"bots", "gamesPerPair", "limit": {"kind": "nodes" | "depth" | "time", "value"}, "threads", "pairings": [{"a", "b"}] | null}`, où `null` signifie tous les combats), l'arrête |
 | `GET /ws` | WebSocket : `analyze` puis un message `info` par profondeur et un `done` final ; `stop` interrompt l'analyse |
 
 Les scores renvoyés sont du point de vue des blancs. Les limites sont plafonnées côté serveur (profondeur 64, 60 s par coup, 10 min d'analyse), et le nombre de recherches simultanées est borné par `max_searches`.
@@ -254,7 +254,7 @@ La configuration se fait par `chess-train.toml` (voir [`chess-train.example.toml
   - **Profondeur** : chaque bot cherche jusqu'à la même profondeur (1 à 30 demi-coups). Le temps par coup varie beaucoup selon la position.
   - **Temps** : chaque bot réfléchit le même temps par coup (10 ms à 60 s). Une évaluation plus rapide cherche alors plus loin, ce qui correspond aux conditions de jeu réelles, mais un entraînement en parallèle ralentit tout le monde.
 
-  Le classement ajuste un Elo sur toutes les parties (modèle de Bradley-Terry), avec PeSTO à 0 quand il participe. Les résultats sont écrits au fil des parties dans `data/tournaments/<id>.json`. Un tournoi peut tourner pendant un entraînement : il prend alors du CPU au self-play (réglable avec « Threads »).
+  Le classement ajuste un Elo sur toutes les parties (modèle de Bradley-Terry), avec PeSTO à 0 quand il participe. Si des combats sont désactivés, deux groupes de bots qui ne se rencontrent jamais n'ont pas d'échelle commune, et le formulaire le signale. Un bot sans aucun combat est retiré du tournoi. Les résultats sont écrits au fil des parties dans `data/tournaments/<id>.json`. Un tournoi peut tourner pendant un entraînement : il prend alors du CPU au self-play (réglable avec « Threads »).
 - **Durée estimée.** L'estimation vient d'un modèle calé sur des mesures faites sur la machine de référence :
   - parties d'environ 100 demi-coups, adjudication comprise ;
   - environ 3,5 M nœuds/s par thread ;

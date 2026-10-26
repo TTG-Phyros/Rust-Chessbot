@@ -4,6 +4,7 @@
  * promise: game lengths vary, and so does the time a depth takes.
  */
 import type { MoveLimit } from '../../api/generated/MoveLimit';
+import { type Pair, allPairs } from './pairings';
 import { stockfishLevel } from './stockfish';
 
 /** Plies of an average game, adjudication included (measured: 90 to 100). */
@@ -53,38 +54,49 @@ export type TournamentEstimate = {
   slowest: PairingEstimate | null;
 };
 
+/** Wall-clock seconds of one pairing of `gamesPerPair` games. */
+export function pairingSeconds(
+  a: string,
+  b: string,
+  { gamesPerPair, limit, threads }: { gamesPerPair: number; limit: MoveLimit; threads: number },
+): number {
+  // Pairs of games (same opening, colors swapped, one after the other on a
+  // thread) run `threads` at a time.
+  const pairsOfGames = Math.max(1, Math.ceil(gamesPerPair / 2));
+  const batches = Math.ceil(pairsOfGames / Math.max(1, threads));
+  // Each side plays half the plies.
+  const gameMs = (PLIES_PER_GAME / 2) * (botMoveMs(a, limit) + botMoveMs(b, limit));
+  const startMs = stockfishLevel(a) !== null || stockfishLevel(b) !== null ? STOCKFISH_START_MS : 0;
+  return (batches * (2 * gameMs + startMs)) / 1000;
+}
+
 /**
- * Pairings are played in turn; within one, pairs of games (same opening,
- * colors swapped, one after the other on a thread) run `threads` at a time.
+ * Pairings are played one after the other: `pairings` (default: every pair
+ * of `bots`) add up.
  */
 export function estimateTournament({
   bots,
+  pairings,
   gamesPerPair,
   limit,
   threads,
 }: {
   bots: readonly string[];
+  pairings?: readonly Pair[];
   gamesPerPair: number;
   limit: MoveLimit;
   threads: number;
 }): TournamentEstimate {
-  const pairsOfGames = Math.max(1, Math.ceil(gamesPerPair / 2));
-  const batches = Math.ceil(pairsOfGames / Math.max(1, threads));
+  const settings = { gamesPerPair, limit, threads };
   let seconds = 0;
   let slowest: PairingEstimate | null = null;
-  let games = 0;
-  bots.forEach((a, i) => {
-    for (const b of bots.slice(i + 1)) {
-      // Each side plays half the plies.
-      const gameMs = (PLIES_PER_GAME / 2) * (botMoveMs(a, limit) + botMoveMs(b, limit));
-      const startMs =
-        stockfishLevel(a) !== null || stockfishLevel(b) !== null ? STOCKFISH_START_MS : 0;
-      const pairing = (batches * (2 * gameMs + startMs)) / 1000;
-      seconds += pairing;
-      games += 2 * pairsOfGames;
-      if (!slowest || pairing > slowest.seconds) slowest = { a, b, seconds: pairing };
-    }
-  });
+  const played = pairings ?? allPairs(bots);
+  for (const [a, b] of played) {
+    const pairing = pairingSeconds(a, b, settings);
+    seconds += pairing;
+    if (!slowest || pairing > slowest.seconds) slowest = { a, b, seconds: pairing };
+  }
+  const games = played.length * 2 * Math.max(1, Math.ceil(gamesPerPair / 2));
   return { seconds, games, slowest };
 }
 

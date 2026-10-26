@@ -74,6 +74,16 @@ describe('tournament estimate', () => {
     const three = estimateTournament({ ...base, bots: ['a', 'b', 'stockfish-9'], threads: 4 });
     expect(three.games).toBe(24);
     expect(three.slowest?.b).toBe('stockfish-9');
+
+    // Only the chosen pairings count.
+    const chosen = estimateTournament({
+      ...base,
+      bots: ['a', 'b', 'stockfish-9'],
+      pairings: [['a', 'b']],
+      threads: 4,
+    });
+    expect(chosen.games).toBe(8);
+    expect(chosen.seconds).toBeCloseTo(four.seconds);
   });
 
   it('formats durations', () => {

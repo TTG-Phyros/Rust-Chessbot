@@ -30,9 +30,38 @@ pub(crate) struct TournamentRequest {
     /// Worker threads; 0 = all cores.
     #[serde(default)]
     pub(crate) threads: usize,
+    /// The pairings to play (in any order, either way round); absent: every
+    /// pair of bots.
+    #[serde(default)]
+    pub(crate) pairings: Option<Vec<PlannedPairing>>,
+}
+
+/// Two bots of the request that play each other.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct PlannedPairing {
+    pub(crate) a: String,
+    pub(crate) b: String,
 }
 
 impl TournamentRequest {
+    /// Indices `(a, b)`, `a < b`, of the pairings to play, in playing order
+    /// (that of the bots). Expects a validated request.
+    pub(crate) fn schedule(&self) -> Vec<(usize, usize)> {
+        let n = self.bots.len();
+        let wanted = |a: usize, b: usize| {
+            self.pairings.as_ref().is_none_or(|pairings| {
+                pairings.iter().any(|p| {
+                    let (x, y) = (&self.bots[a], &self.bots[b]);
+                    (p.a == *x && p.b == *y) || (p.a == *y && p.b == *x)
+                })
+            })
+        };
+        (0..n)
+            .flat_map(|a| (a + 1..n).map(move |b| (a, b)))
+            .filter(|&(a, b)| wanted(a, b))
+            .collect()
+    }
+
     pub(crate) fn validate(&self) -> Result<(), String> {
         if !(2..=16).contains(&self.bots.len()) {
             return Err("a tournament needs 2 to 16 bots".into());
@@ -46,6 +75,29 @@ impl TournamentRequest {
                 .any(|other| other.eq_ignore_ascii_case(bot))
             {
                 return Err(format!("{bot} is listed twice"));
+            }
+        }
+        if let Some(pairings) = &self.pairings {
+            if pairings.is_empty() {
+                return Err("no pairing to play".into());
+            }
+            let mut seen = Vec::new();
+            for pairing in pairings {
+                let index = |name: &str| self.bots.iter().position(|bot| bot == name);
+                let (Some(a), Some(b)) = (index(&pairing.a), index(&pairing.b)) else {
+                    return Err(format!(
+                        "{} vs {}: both must take part in the tournament",
+                        pairing.a, pairing.b
+                    ));
+                };
+                if a == b {
+                    return Err(format!("{} cannot play itself", pairing.a));
+                }
+                let key = (a.min(b), a.max(b));
+                if seen.contains(&key) {
+                    return Err(format!("{} vs {} is listed twice", pairing.a, pairing.b));
+                }
+                seen.push(key);
             }
         }
         if !(2..=2_000).contains(&self.games_per_pair) {
@@ -112,20 +164,19 @@ pub(crate) struct Tournament {
 impl Tournament {
     fn new(id: String, request: &TournamentRequest) -> Self {
         let bots = &request.bots;
-        let mut pairings = Vec::new();
-        for (i, a) in bots.iter().enumerate() {
-            for b in &bots[i + 1..] {
-                pairings.push(Pairing {
-                    a: a.clone(),
-                    b: b.clone(),
-                    wins: 0,
-                    draws: 0,
-                    losses: 0,
-                    elo: 0.0,
-                    elo_error: 0.0,
-                });
-            }
-        }
+        let pairings = request
+            .schedule()
+            .into_iter()
+            .map(|(a, b)| Pairing {
+                a: bots[a].clone(),
+                b: bots[b].clone(),
+                wins: 0,
+                draws: 0,
+                losses: 0,
+                elo: 0.0,
+                elo_error: 0.0,
+            })
+            .collect();
         let mut tournament = Self {
             id,
             state: TournamentState::Running,
@@ -279,26 +330,22 @@ pub(crate) fn play(
         sprt: false,
         ..config.arena.clone()
     };
-    let mut pairing = 0;
-    for (i, a) in engines.iter().enumerate() {
-        for b in &engines[i + 1..] {
-            if stop.is_stopped() {
-                break;
-            }
-            let result = arena::play_match(a, b, &arena, stop, |result| {
-                tournament.set_result(pairing, result);
+    for (pairing, (a, b)) in request.schedule().into_iter().enumerate() {
+        if stop.is_stopped() {
+            break;
+        }
+        let result = arena::play_match(&engines[a], &engines[b], &arena, stop, |result| {
+            tournament.set_result(pairing, result);
+            save(config, &tournament);
+        });
+        match result {
+            Ok(result) => tournament.set_result(pairing, result),
+            Err(err) => {
+                tournament.state = TournamentState::Failed;
+                tournament.error = Some(format!("{err:#}"));
                 save(config, &tournament);
-            });
-            match result {
-                Ok(result) => tournament.set_result(pairing, result),
-                Err(err) => {
-                    tournament.state = TournamentState::Failed;
-                    tournament.error = Some(format!("{err:#}"));
-                    save(config, &tournament);
-                    return tournament;
-                }
+                return tournament;
             }
-            pairing += 1;
         }
     }
     tournament.state = if stop.is_stopped() {
@@ -338,6 +385,7 @@ mod tests {
             games_per_pair: 20,
             limit: MoveLimit::Nodes(2_000),
             threads: 0,
+            pairings: None,
         };
         assert_eq!(ok.validate(), Ok(()));
         let invalid = [
@@ -372,6 +420,56 @@ mod tests {
         ];
         for request in invalid {
             assert!(request.validate().is_err(), "{request:?}");
+        }
+    }
+
+    #[test]
+    fn chosen_pairings_only() {
+        let planned = |a: &str, b: &str| PlannedPairing {
+            a: a.into(),
+            b: b.into(),
+        };
+        let request = TournamentRequest {
+            bots: ["a", "b", "c", "stockfish-1"].map(String::from).into(),
+            games_per_pair: 2,
+            limit: MoveLimit::Depth(1),
+            threads: 1,
+            pairings: None,
+        };
+        assert_eq!(request.schedule().len(), 6, "every pair by default");
+        // Our bots against Stockfish only, listed either way round.
+        let against_stockfish = TournamentRequest {
+            pairings: Some(vec![
+                planned("stockfish-1", "a"),
+                planned("b", "stockfish-1"),
+                planned("c", "stockfish-1"),
+            ]),
+            ..request.clone()
+        };
+        assert_eq!(against_stockfish.validate(), Ok(()));
+        assert_eq!(against_stockfish.schedule(), [(0, 3), (1, 3), (2, 3)]);
+        let tournament = Tournament::new("t".into(), &against_stockfish);
+        assert_eq!(tournament.pairings.len(), 3);
+        assert_eq!(
+            (
+                tournament.pairings[0].a.as_str(),
+                tournament.pairings[0].b.as_str()
+            ),
+            ("a", "stockfish-1")
+        );
+        assert_eq!(tournament.standings.len(), 4);
+
+        for pairings in [
+            vec![],
+            vec![planned("a", "zz")],
+            vec![planned("a", "a")],
+            vec![planned("a", "b"), planned("b", "a")],
+        ] {
+            let invalid = TournamentRequest {
+                pairings: Some(pairings.clone()),
+                ..request.clone()
+            };
+            assert!(invalid.validate().is_err(), "{pairings:?}");
         }
     }
 
@@ -433,6 +531,7 @@ mod tests {
             games_per_pair: 2,
             limit: MoveLimit::Depth(2),
             threads: 2,
+            pairings: None,
         };
         let engines = vec![Contestant::Engine(chess_eval::EngineEval::default()); 3];
         let id = new_id(&config);

@@ -222,7 +222,7 @@ async fn networks_bots_and_tournaments() {
         (code, body["error"].as_str()),
         (StatusCode::NOT_FOUND, Some("no bot named x"))
     );
-    let request = json!({ "bots": ["classic", "champion"], "gamesPerPair": 10, "limit": { "kind": "nodes", "value": 2000 }, "threads": 0 });
+    let request = json!({ "bots": ["classic", "champion"], "gamesPerPair": 10, "limit": { "kind": "nodes", "value": 2000 }, "threads": 0, "pairings": [{ "a": "champion", "b": "classic" }] });
     let (code, started) = call(&state, "POST", "/api/tournaments", request).await;
     assert_eq!((code, &started["id"]), (StatusCode::ACCEPTED, &json!("t3")));
 }

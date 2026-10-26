@@ -671,6 +671,19 @@ pub struct TournamentRequest {
     pub limit: MoveLimit,
     /// Worker threads; 0 = all cores.
     pub threads: u32,
+    /// The pairings to play (either way round); absent: every pair of bots.
+    #[ts(optional = nullable)]
+    pub pairings: Option<Vec<PlannedPairing>>,
+}
+
+/// Two bots of a tournament that play each other.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
+#[ts(export)]
+pub struct PlannedPairing {
+    /// A bot of the tournament.
+    pub a: String,
+    /// Another bot of the tournament.
+    pub b: String,
 }
 
 /// Answer of `POST /api/tournaments`.

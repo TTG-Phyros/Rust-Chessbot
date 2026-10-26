@@ -12,6 +12,8 @@ import { Button, ErrorText, Panel, Segmented, Stat } from '../../components/ui';
 import { formatDate, formatElo, formatPoints } from '../training/format';
 import { formatParam } from '../training/params';
 import { estimateTournament, formatDuration } from './estimate';
+import { PairingMatrix } from './PairingMatrix';
+import { type Pair, allPairs, enabledPairs, idleBots } from './pairings';
 import { LIMIT_OPTIONS, type LimitKind, describeLimit, limitError, limitOption } from './limit';
 import { STOCKFISH_LEVELS, botLabel, describeLevel, stockfishBot } from './stockfish';
 
@@ -145,19 +147,22 @@ function BotList({
 /** Expected duration of the tournament being set up. */
 function Estimate({
   bots,
+  pairings,
   gamesPerPair,
   limit,
   threads,
 }: {
   bots: string[];
+  pairings: readonly Pair[];
   gamesPerPair: number;
   limit: MoveLimit;
   threads: number;
 }) {
-  const estimate = estimateTournament({ bots, gamesPerPair, limit, threads });
+  const estimate = estimateTournament({ bots, pairings, gamesPerPair, limit, threads });
   const long = estimate.seconds > 3600;
   const slowest = estimate.slowest;
-  const dominated = slowest !== null && bots.length > 2 && slowest.seconds > estimate.seconds / 2;
+  const dominated =
+    slowest !== null && pairings.length > 1 && slowest.seconds > estimate.seconds / 2;
   return (
     <div
       className={`rounded-lg px-3 py-2 text-sm ${long ? 'bg-amber-950/40 text-amber-200' : 'bg-slate-950/60 text-slate-300'}`}
@@ -192,6 +197,7 @@ function TournamentForm({
     gamesPerPair: number;
     limit: MoveLimit;
     threads: number;
+    pairings: { a: string; b: string }[] | null;
   }) => void;
 }) {
   const [chosen, setChosen] = useState<string[]>([CLASSIC]);
@@ -216,7 +222,12 @@ function TournamentForm({
   const toggle = (name: string, on: boolean) => {
     setChosen(on ? [...chosen, name] : chosen.filter((n) => n !== name));
   };
-  const pairings = (participants.length * (participants.length - 1)) / 2;
+  // Pairings switched off in the cross table (the others are played).
+  const [disabledPairs, setDisabledPairs] = useState<Set<string>>(() => new Set());
+  const enabled = enabledPairs(participants, disabledPairs);
+  const idle = idleBots(participants, enabled);
+  const playing = participants.filter((bot) => !idle.includes(bot));
+  const pairings = enabled.length;
   const gamesPerPair = Math.ceil(Number(games) / 2) * 2;
   // 0 = every core of the machine running the service: usually this one.
   const cores = navigator.hardwareConcurrency || 4;
@@ -224,6 +235,7 @@ function TournamentForm({
   const valid =
     participants.length >= 2 &&
     participants.length <= 16 &&
+    enabled.length > 0 &&
     Number.isInteger(Number(games)) &&
     Number(games) >= 2 &&
     Number(games) <= 2000 &&
@@ -241,140 +253,171 @@ function TournamentForm({
         event.preventDefault();
         if (valid) {
           onStart({
-            bots: participants,
+            // Bots without a pairing stay out of the tournament.
+            bots: playing,
             gamesPerPair: Number(games),
             limit: { kind: limitKind, value: limitValue },
             threads: Number(threads),
+            pairings:
+              enabled.length === allPairs(participants).length
+                ? null
+                : enabled.map(([a, b]) => ({ a, b })),
           });
         }
       }}
     >
-      <fieldset>
-        <legend className="mb-2 text-sm text-slate-300">Participants</legend>
-        <div className="flex flex-wrap gap-x-5 gap-y-2">
-          {names.map((name) => (
-            <label key={name} className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={chosen.includes(name)}
-                onChange={(event) => {
-                  toggle(name, event.target.checked);
-                }}
-                className="size-4 accent-emerald-500"
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="space-y-4">
+          <fieldset>
+            <legend className="mb-2 text-sm text-slate-300">Participants</legend>
+            <div className="flex flex-wrap gap-x-5 gap-y-2">
+              {names.map((name) => (
+                <label key={name} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={chosen.includes(name)}
+                    onChange={(event) => {
+                      toggle(name, event.target.checked);
+                    }}
+                    className="size-4 accent-emerald-500"
+                  />
+                  {botLabel(name)}
+                </label>
+              ))}
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-1.5">
+              <span className="mr-1 text-sm text-slate-400">Stockfish</span>
+              {STOCKFISH_LEVELS.map((level) => {
+                const name = stockfishBot(level.level);
+                const on = chosen.includes(name);
+                return (
+                  <button
+                    key={name}
+                    type="button"
+                    aria-pressed={on}
+                    disabled={!stockfish}
+                    title={describeLevel(level)}
+                    onClick={() => {
+                      toggle(name, !on);
+                    }}
+                    className={`min-w-8 rounded-md px-2 py-1 font-mono text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                      on
+                        ? 'bg-emerald-600 text-white hover:bg-emerald-500'
+                        : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                    }`}
+                  >
+                    {level.level}
+                  </button>
+                );
+              })}
+            </div>
+          </fieldset>
+          <div>
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-sm text-slate-300">Réflexion de nos bots</span>
+              <Segmented
+                value={limitKind}
+                options={LIMIT_OPTIONS.map(({ kind, label }) => ({ value: kind, label }))}
+                onChange={setLimitKind}
               />
-              {botLabel(name)}
-            </label>
-          ))}
-        </div>
-        <div className="mt-3 flex flex-wrap items-center gap-1.5">
-          <span className="mr-1 text-sm text-slate-400">Stockfish</span>
-          {STOCKFISH_LEVELS.map((level) => {
-            const name = stockfishBot(level.level);
-            const on = chosen.includes(name);
-            return (
-              <button
-                key={name}
-                type="button"
-                aria-pressed={on}
-                disabled={!stockfish}
-                title={describeLevel(level)}
-                onClick={() => {
-                  toggle(name, !on);
+            </div>
+            <label className="mt-2 block text-sm">
+              <span className="text-slate-400">{option.field}</span>
+              <input
+                type="number"
+                min={option.min}
+                max={option.max}
+                step={option.step}
+                value={limitDrafts[limitKind]}
+                onChange={(e) => {
+                  setLimitDrafts({ ...limitDrafts, [limitKind]: e.target.value });
                 }}
-                className={`min-w-8 rounded-md px-2 py-1 font-mono text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
-                  on
-                    ? 'bg-emerald-600 text-white hover:bg-emerald-500'
-                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                }`}
-              >
-                {level.level}
-              </button>
-            );
-          })}
+                aria-invalid={limitProblem !== null}
+                className={`${INPUT} ${limitProblem ? 'border-rose-500' : ''}`}
+              />
+            </label>
+            <p className={`mt-1 text-xs ${limitProblem ? 'text-rose-400' : 'text-slate-500'}`}>
+              {limitProblem ?? `${option.help} Stockfish joue toujours à son niveau.`}
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label
+              className="block text-sm"
+              title="Chaque paire joue ce nombre de parties, couleurs alternées, depuis les mêmes ouvertures."
+            >
+              <span className="text-slate-300">Parties par paire</span>
+              <input
+                type="number"
+                min={2}
+                max={2000}
+                step={2}
+                value={games}
+                onChange={(e) => {
+                  setGames(e.target.value);
+                }}
+                className={INPUT}
+              />
+            </label>
+            <label
+              className="block text-sm"
+              title="0 = tous les cœurs. Pendant un entraînement, en laisser au self-play."
+            >
+              <span className="text-slate-300">Threads (0 = tous)</span>
+              <input
+                type="number"
+                min={0}
+                max={256}
+                step={1}
+                value={threads}
+                onChange={(e) => {
+                  setThreads(e.target.value);
+                }}
+                className={INPUT}
+              />
+            </label>
+          </div>
         </div>
-      </fieldset>
-      <div>
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-sm text-slate-300">Réflexion de nos bots</span>
-          <Segmented
-            value={limitKind}
-            options={LIMIT_OPTIONS.map(({ kind, label }) => ({ value: kind, label }))}
-            onChange={setLimitKind}
-          />
+        <div className="space-y-4">
+          {participants.length >= 2 ? (
+            <PairingMatrix
+              bots={participants}
+              disabled={disabledPairs}
+              onChange={setDisabledPairs}
+              enabled={enabled}
+              settings={{
+                gamesPerPair,
+                limit: { kind: limitKind, value: limitProblem ? 1 : limitValue },
+                threads: workers,
+              }}
+            />
+          ) : (
+            <p className="text-sm text-slate-400">
+              Choisis au moins 2 participants : leur table croisée permettra de choisir les combats.
+            </p>
+          )}
+          <div className="flex flex-wrap items-center gap-3">
+            <Button type="submit" variant="primary" disabled={!valid || disabled}>
+              Lancer le tournoi
+            </Button>
+            <span className="text-sm text-slate-400">
+              {participants.length < 2
+                ? 'Choisis au moins 2 participants.'
+                : pairings === 0
+                  ? 'Active au moins un combat.'
+                  : `${pairings} combat${pairings > 1 ? 's' : ''} × ${gamesPerPair} parties = ${pairings * gamesPerPair} parties`}
+            </span>
+          </div>
+          {valid && (
+            <Estimate
+              bots={playing}
+              pairings={enabled}
+              gamesPerPair={gamesPerPair}
+              limit={{ kind: limitKind, value: limitValue }}
+              threads={workers}
+            />
+          )}
         </div>
-        <label className="mt-2 block text-sm">
-          <span className="text-slate-400">{option.field}</span>
-          <input
-            type="number"
-            min={option.min}
-            max={option.max}
-            step={option.step}
-            value={limitDrafts[limitKind]}
-            onChange={(e) => {
-              setLimitDrafts({ ...limitDrafts, [limitKind]: e.target.value });
-            }}
-            aria-invalid={limitProblem !== null}
-            className={`${INPUT} ${limitProblem ? 'border-rose-500' : ''}`}
-          />
-        </label>
-        <p className={`mt-1 text-xs ${limitProblem ? 'text-rose-400' : 'text-slate-500'}`}>
-          {limitProblem ?? `${option.help} Stockfish joue toujours à son niveau.`}
-        </p>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label
-          className="block text-sm"
-          title="Chaque paire joue ce nombre de parties, couleurs alternées, depuis les mêmes ouvertures."
-        >
-          <span className="text-slate-300">Parties par paire</span>
-          <input
-            type="number"
-            min={2}
-            max={2000}
-            step={2}
-            value={games}
-            onChange={(e) => {
-              setGames(e.target.value);
-            }}
-            className={INPUT}
-          />
-        </label>
-        <label
-          className="block text-sm"
-          title="0 = tous les cœurs. Pendant un entraînement, en laisser au self-play."
-        >
-          <span className="text-slate-300">Threads (0 = tous)</span>
-          <input
-            type="number"
-            min={0}
-            max={256}
-            step={1}
-            value={threads}
-            onChange={(e) => {
-              setThreads(e.target.value);
-            }}
-            className={INPUT}
-          />
-        </label>
-      </div>
-      <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" variant="primary" disabled={!valid || disabled}>
-          Lancer le tournoi
-        </Button>
-        <span className="text-sm text-slate-400">
-          {participants.length < 2
-            ? 'Choisis au moins 2 participants.'
-            : `${pairings} paire${pairings > 1 ? 's' : ''} × ${gamesPerPair} parties = ${pairings * gamesPerPair} parties`}
-        </span>
-      </div>
-      {valid && (
-        <Estimate
-          bots={participants}
-          gamesPerPair={gamesPerPair}
-          limit={{ kind: limitKind, value: limitValue }}
-          threads={workers}
-        />
-      )}
     </form>
   );
 }
@@ -525,10 +568,25 @@ function TournamentView({
                       );
                     }
                     const score = scoreOf(tournament, row, column);
-                    if (!score || score.games === 0) {
+                    if (!score) {
                       return (
-                        <td key={column} className="px-2 text-right text-slate-600">
-                          —
+                        <td
+                          key={column}
+                          className="px-2 text-right text-slate-700"
+                          title="Pas au programme"
+                        >
+                          ×
+                        </td>
+                      );
+                    }
+                    if (score.games === 0) {
+                      return (
+                        <td
+                          key={column}
+                          className="px-2 text-right text-slate-600"
+                          title="Pas encore joué"
+                        >
+                          …
                         </td>
                       );
                     }
@@ -549,8 +607,9 @@ function TournamentView({
           </table>
         </div>
         <p className="mt-2 text-xs text-slate-500">
-          Survole une case pour l’écart Elo de la paire et son intervalle à 95 %. Le classement,
-          lui, ajuste un Elo sur toutes les parties (modèle de Bradley-Terry).
+          Survole une case pour l’écart Elo de la paire et son intervalle à 95 % ; × : combat pas au
+          programme, … : pas encore joué. Le classement, lui, ajuste un Elo sur toutes les parties
+          (modèle de Bradley-Terry).
         </p>
       </div>
     </div>
@@ -595,7 +654,7 @@ function ArenaContent({ view, refresh }: { view: ArenaView; refresh: () => void 
       )}
       {error && <ErrorText>{error}</ErrorText>}
 
-      <div className="grid gap-4 lg:grid-cols-[3fr_2fr]">
+      <div className="grid gap-4">
         <Panel title={`Bots (${view.bots.length + 1})`}>
           <BotList
             bots={view.bots}
@@ -655,7 +714,8 @@ function ArenaContent({ view, refresh }: { view: ArenaView; refresh: () => void 
         ) : (
           <p className="text-sm text-slate-400">
             Aucun tournoi joué : choisis des participants ci-dessus. Chaque paire de bots joue les
-            mêmes ouvertures aléatoires avec les deux couleurs, au même nombre de nœuds par coup.
+            mêmes ouvertures aléatoires avec les deux couleurs, nos bots avec la même réflexion
+            (Stockfish à son niveau).
           </p>
         )}
       </Panel>

@@ -115,7 +115,7 @@ function EloChart({ points }: { points: readonly EloPoint[] }) {
           y={0}
           stroke={AXIS}
           strokeDasharray="4 4"
-          label={{ value: 'PeSTO', position: 'insideTopRight', fill: AXIS, fontSize: 11 }}
+          label={{ value: 'PeSTO', position: 'insideTopLeft', fill: AXIS, fontSize: 11 }}
         />
         <Tooltip
           cursor={{ stroke: AXIS, strokeDasharray: '3 3' }}

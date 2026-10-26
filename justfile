@@ -38,13 +38,17 @@ up:
 down:
     docker compose down
 
-# Train on the NVIDIA GPU (Docker, CUDA image)
-train *args:
-    docker compose --profile train run --rm --build train {{ args }}
+# UI + API + training on the NVIDIA GPU (start/stop from the Training page)
+train:
+    docker compose --profile train up --build
 
-# Train on the CPU (Docker, image without CUDA)
-train-cpu *args:
-    docker compose --profile train-cpu run --rm --build train-cpu {{ args }}
+# UI + API + training on the CPU (image without CUDA)
+train-cpu:
+    docker compose --profile train-cpu up --build
+
+# One-off chess-train command in the CUDA image, e.g. `just train-run match a.nnue classic`
+train-run *args:
+    docker compose --profile train run --rm --build train {{ args }}
 
 # Check that Docker sees the GPU (nvidia-smi) and that burn computes on it
 gpu-check:

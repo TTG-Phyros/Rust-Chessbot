@@ -17,6 +17,13 @@ x-train-common: &train-common
     CHESS_TRAIN_CONFIG:
   # SIGTERM finishes the current step and writes a checkpoint: give it time.
   stop_grace_period: 2m
+  # Control daemon: the UI starts and stops runs through chess-server;
+  # --autostart begins training as soon as the service is up.
+  command: ["serve", "--autostart"]
+  networks:
+    default:
+      # chess-server reaches the daemon (GPU or CPU flavour) at http://trainer:4000.
+      aliases: [trainer]
   volumes:
     # Weights, checkpoints and metrics, shared with the server and readable from the host.
     - ./data:/data
@@ -35,6 +42,10 @@ services:
       CHESS_SERVER_BIND: 0.0.0.0:3000
       CHESS_SERVER_DATA_DIR: /data
       CHESS_SERVER_LOG_FORMAT: ${CHESS_SERVER_LOG_FORMAT:-pretty}
+      # The engine plays with the network of this run as soon as it exists.
+      CHESS_SERVER_EVAL_FILE: /data/weights/${CHESS_TRAIN_RUN:-main}.nnue
+      # Training control daemon (only reachable with --profile train or train-cpu).
+      CHESS_SERVER_TRAINER_URL: http://trainer:4000
       RUST_LOG:
     volumes:
       - ./data:/data

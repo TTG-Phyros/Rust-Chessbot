@@ -100,3 +100,7 @@ ci: lint test
 # Engine signature and speed: fixed-depth search over the bench positions
 engine-bench depth="10":
     cargo run --release -p chess-uci -- bench {{ depth }}
+
+# Sync the Chess.com games of a player into the review cache and list them, e.g. `just chesscom hikaru -n 10 --time-class blitz`
+chesscom username *args:
+    cargo run --release -p chess-reviewer -- fetch {{ username }} {{ args }}

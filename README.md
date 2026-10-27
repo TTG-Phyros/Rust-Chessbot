@@ -18,6 +18,7 @@ Moteur d'échecs en Rust qui apprend en jouant contre lui-même :
 - [Architecture](#architecture)
 - [Interface web et API](#interface-web)
 - [Entraînement (NNUE)](#entraînement-nnue)
+- [Analyse Chess.com](#analyse-chesscom)
 - [Performances](#performances)
 - [Utiliser le moteur dans une GUI](#utiliser-le-moteur-dans-une-gui-cute-chess-arena)
 - [Dépannage](#dépannage)
@@ -101,6 +102,7 @@ Sous Windows : `winget install Rustlang.Rustup Casey.Just OpenJS.NodeJS.LTS`, pl
 | `just engine-bench` | signature et vitesse (nœuds/s) du moteur, via `chess-uci bench` |
 | `just play` | moteur UCI sur stdin/stdout |
 | `just gen-types` | régénère les types TypeScript depuis les structs Rust |
+| `just chesscom <pseudo> [options]` | synchronise les parties Chess.com d'un joueur dans le cache et les liste (voir [Analyse Chess.com](#analyse-chesscom)) |
 
 ## Architecture
 
@@ -113,9 +115,12 @@ crates/
   chess-uci/     binaire UCI
   chess-train/   binaire : self-play, entraînement burn (CUDA ou CPU), matchs, démon de contrôle
   chess-server/  binaire : API REST (OpenAPI) + WebSocket (axum)
+  chess-chesscom/ client de l'API publique Chess.com (requêtes en série, retry, PGN + horloges)
+  chess-reviewer/ cache SQLite des parties et des analyses, synchronisation, binaire CLI
 web/             React + TypeScript + Vite + Tailwind
 docker/          Dockerfiles (engine, train, web) + nginx.conf
-data/            poids, checkpoints, métriques (ignoré par git)
+config/          configuration de l'analyse Chess.com (review.toml)
+data/            poids, checkpoints, métriques, cache (ignoré par git)
 ```
 
 ```mermaid
@@ -286,6 +291,23 @@ La configuration se fait par `chess-train.toml` (voir [`chess-train.example.toml
   Comme repère, sur la machine de référence, `main` (sb305, 5 000 nœuds par coup) s'est classé entre Stockfish 3 et Stockfish 5 : environ +45 Elo, contre +105 pour le niveau 5 et +243 pour le niveau 7, PeSTO étant à 0. Ce n'est qu'une estimation sur 8 parties par paire.
 
 Au premier démarrage du démon, le top 5 des réseaux entraînés avant cette fonctionnalité est **reconstruit depuis l'historique des matchs**, et leurs autres snapshots mesurés sont supprimés. Pour tous les garder, il faut copier `data/weights/<run>/` ailleurs avant de mettre à jour.
+
+## Analyse Chess.com
+
+À partir d'un pseudo Chess.com : analyse de chaque partie (style *Game Review*) et bilan du profil sur les N dernières parties. Fonctionnalité en cours de construction ; disponible pour l'instant : la récupération et le cache des parties.
+
+**User-Agent obligatoire.** Chess.com demande à tout client de son API publique un `User-Agent` explicite, avec un moyen de contacter son auteur. Copiez `.env.example` en `.env` et renseignez `CHESS_REVIEW_USER_AGENT`. Sans lui, rien n'est envoyé.
+
+```powershell
+just chesscom hikaru -n 20 --time-class blitz,rapid
+cargo run -p chess-reviewer -- fetch hikaru -n 50 --since 2026-01-01 --until 2026-06-30 --rated
+```
+
+- **Requêtes en série.** Chess.com autorise un accès illimité en série mais répond `429` aux requêtes parallèles. Le client n'envoie qu'une requête à la fois, espacées de `min_interval_ms`. Les réponses `429` et `5xx` et les erreurs réseau sont retentées avec un backoff exponentiel (avec jitter, en respectant `Retry-After`).
+- **Cache** (`data/review/cache.sqlite`). Les mois passés ne changent plus : lus une fois après leur fin, ils ne sont plus jamais téléchargés à nouveau. La liste des mois et le mois en cours sont revalidés après `recent_ttl_secs` par requête conditionnelle (`ETag`, réponse `304`). La lecture va du mois le plus récent au plus ancien et s'arrête dès que le nombre de parties demandé est atteint. Seules les parties d'échecs standard sont gardées (pas de 960 ni de variantes).
+- **PGN.** `chess-core` garde le commentaire de chaque coup. Les horloges `[%clk]` et le tag `TimeControl` (`180+2`, `1/86400` pour le Daily) sont décodés.
+
+Configuration : `config/review.toml` (ou le chemin donné par `CHESS_REVIEW_CONFIG`) < variables `CHESS_REVIEW_*`, avec `__` entre section et clé (`CHESS_REVIEW_CHESSCOM__MAX_RETRIES=3`).
 
 ## Performances
 

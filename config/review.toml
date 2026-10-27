@@ -1,0 +1,25 @@
+# Chess.com game reviews (chess-reviewer, chess-server).
+#
+# Every key can be overridden by a CHESS_REVIEW_* variable (`__` between a
+# section and its key, e.g. CHESS_REVIEW_CHESSCOM__MAX_RETRIES=3), and this
+# file replaced by CHESS_REVIEW_CONFIG. The values below are the defaults.
+
+# User-Agent sent to Chess.com: the application and a way to contact you.
+# No default: set CHESS_REVIEW_USER_AGENT in .env (see .env.example).
+# user_agent = "chess-bot/0.1 (you@example.com)"
+
+# SQLite cache of games and analyses (a named volume in Docker).
+cache = "data/review/cache.sqlite"
+
+[chesscom]
+base_url = "https://api.chess.com/pub"
+# Requests are sent one at a time, at least this far apart.
+min_interval_ms = 200
+# Rate-limited (429) or failed requests: retries, exponential backoff.
+max_retries = 5
+initial_backoff_ms = 1000
+max_backoff_ms = 60000
+timeout_secs = 30
+# The list of months and the current month are revalidated after this many
+# seconds; past months are never downloaded twice.
+recent_ttl_secs = 600

@@ -484,8 +484,6 @@ impl Evaluator for NnueEval {
 
 #[cfg(test)]
 mod tests {
-    use chess_core::PieceKind;
-
     use super::*;
 
     #[test]

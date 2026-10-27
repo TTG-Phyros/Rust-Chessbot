@@ -37,7 +37,7 @@ export function PairingMatrix({
 
   return (
     <fieldset>
-      <legend className="mb-2 text-sm text-slate-300">Combats</legend>
+      <legend className="mb-2 text-sm text-mute">Combats</legend>
       <div className="-mx-1 overflow-x-auto px-1">
         <table className="border-separate border-spacing-1 text-xs">
           <thead>
@@ -47,7 +47,7 @@ export function PairingMatrix({
                 <th
                   key={bot}
                   scope="col"
-                  className="max-w-20 truncate px-1 text-center font-normal text-slate-400"
+                  className="max-w-20 truncate px-1 text-center font-normal text-dim"
                   title={botLabel(bot)}
                 >
                   {botLabel(bot)}
@@ -65,7 +65,7 @@ export function PairingMatrix({
                     onClick={() => {
                       onChange(toggleRow(row, bots, disabled));
                     }}
-                    className={`max-w-32 truncate rounded px-1.5 py-0.5 text-left hover:bg-slate-800 ${idle.includes(row) ? 'text-slate-500 line-through' : 'text-slate-200'}`}
+                    className={`max-w-32 truncate rounded px-1.5 py-0.5 text-left hover:bg-ink-800 ${idle.includes(row) ? 'text-dim line-through' : 'text-bone'}`}
                   >
                     {botLabel(row)}
                   </button>
@@ -74,7 +74,7 @@ export function PairingMatrix({
                   if (row === column) {
                     return (
                       <td key={column} className="p-0 text-center">
-                        <span className="mx-auto block size-7 rounded bg-slate-950" />
+                        <span className="mx-auto block size-7 rounded bg-ink-950" />
                       </td>
                     );
                   }
@@ -92,8 +92,8 @@ export function PairingMatrix({
                         }}
                         className={`size-7 rounded text-sm transition-colors ${
                           on
-                            ? 'bg-emerald-700/80 text-white hover:bg-emerald-600'
-                            : 'bg-slate-800 text-slate-500 hover:bg-slate-700'
+                            ? 'bg-signal/85 text-ink-950 hover:bg-signal'
+                            : 'bg-ink-800 text-dim hover:bg-ink-700'
                         }`}
                       >
                         {on ? '✓' : '×'}
@@ -107,7 +107,7 @@ export function PairingMatrix({
         </table>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-        <span className="text-slate-400">
+        <span className="text-dim">
           {enabled.length} combat{enabled.length > 1 ? 's' : ''} sur {total}
         </span>
         <Button
@@ -131,17 +131,17 @@ export function PairingMatrix({
           Tout désactiver
         </Button>
       </div>
-      <p className="mt-1 text-xs text-slate-500">
+      <p className="mt-1 text-xs text-dim">
         Clique une case pour activer ou désactiver un combat, ou un nom pour tous ses combats.
       </p>
       {idle.length > 0 && enabled.length > 0 && (
-        <p className="mt-1 text-xs text-amber-300">
+        <p className="mt-1 text-xs text-warn">
           Sans combat, donc absent{idle.length > 1 ? 's' : ''} du tournoi :{' '}
           {idle.map(botLabel).join(', ')}.
         </p>
       )}
       {split.length > 1 && (
-        <p className="mt-1 text-xs text-amber-300">
+        <p className="mt-1 text-xs text-warn">
           Ces groupes ne se rencontrent jamais, leurs Elo ne sont pas comparables entre eux :{' '}
           {split.map((group) => group.map(botLabel).join(', ')).join(' | ')}.
         </p>

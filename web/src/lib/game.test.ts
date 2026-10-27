@@ -6,6 +6,7 @@ import {
   destinations,
   fenMoveNumber,
   formatLine,
+  moveLabel,
   moveRows,
   movesBetween,
   newGame,
@@ -68,5 +69,20 @@ describe('game bookkeeping', () => {
   it('reads piece colors', () => {
     expect(pieceSide('wQ')).toBe('white');
     expect(pieceSide('bN')).toBe('black');
+  });
+});
+
+describe('moveLabel', () => {
+  it('numbers white and black moves', () => {
+    const history = ['e4', 'e5', 'Nf3'];
+    expect(moveLabel(history, 0)).toBe('1. e4');
+    expect(moveLabel(history, 1)).toBe('1… e5');
+    expect(moveLabel(history, 2)).toBe('2. Nf3');
+    expect(moveLabel(history, 3)).toBeNull();
+  });
+
+  it('follows a start position with Black to move', () => {
+    const fen = 'r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 2 7';
+    expect(moveLabel(['Nf6'], 0, fen)).toBe('7… Nf6');
   });
 });

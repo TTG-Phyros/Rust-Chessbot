@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { eloBand, formatCount, formatElapsed, formatElo } from './format';
+import { deviceName, eloBand, formatCount, formatElapsed, formatElo } from './format';
 
 // toLocaleString('fr-FR') groups digits with a narrow no-break space.
 const nbsp = (text: string) => text.replace(/\s/g, ' ');
@@ -29,5 +29,17 @@ describe('training formatting', () => {
     expect(eloBand([{ superbatch: 5, elo: -40, error: 25, games: 64 }])).toEqual([
       { superbatch: 5, elo: -40, band: [-65, -15], error: 25, games: 64 },
     ]);
+  });
+});
+
+describe('deviceName', () => {
+  it('keeps the model of a GPU', () => {
+    expect(
+      deviceName('GPU NVIDIA GeForce RTX 4060 (compute 8.9, 8187 MiB VRAM, 5291 MiB free)'),
+    ).toBe('NVIDIA GeForce RTX 4060');
+  });
+
+  it('leaves other devices alone', () => {
+    expect(deviceName('CPU')).toBe('CPU');
   });
 });

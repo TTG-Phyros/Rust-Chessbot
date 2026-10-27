@@ -4,7 +4,7 @@ import { api } from '../api/client';
 import type { GameRequest } from '../api/generated/GameRequest';
 import type { PgnTag } from '../api/generated/PgnTag';
 import { newGame } from '../lib/game';
-import { Button, ErrorText } from './ui';
+import { Button, ErrorText, INPUT } from './ui';
 
 type GameIOProps = {
   game: GameRequest;
@@ -60,7 +60,7 @@ export function GameIO({ game, fen, tags = [], onLoad }: GameIOProps) {
     });
 
   return (
-    <div className="space-y-3 text-sm">
+    <div className="space-y-4 text-sm">
       <div className="flex gap-2">
         <input
           value={fenInput}
@@ -69,7 +69,7 @@ export function GameIO({ game, fen, tags = [], onLoad }: GameIOProps) {
           }}
           placeholder={fen ?? 'FEN'}
           aria-label="FEN"
-          className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 font-mono text-xs"
+          className={`${INPUT} min-w-0 flex-1 text-xs`}
         />
         <Button onClick={() => void loadFen()} disabled={!fenInput.trim()}>
           Charger
@@ -85,11 +85,11 @@ export function GameIO({ game, fen, tags = [], onLoad }: GameIOProps) {
         }}
         placeholder="Coller un PGN ici…"
         aria-label="PGN"
-        rows={5}
-        className="w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 font-mono text-xs"
+        rows={7}
+        className={`${INPUT} text-xs`}
       />
       <div className="flex gap-2">
-        <Button onClick={() => void importPgn()} disabled={!pgn.trim()}>
+        <Button variant="primary" onClick={() => void importPgn()} disabled={!pgn.trim()}>
           Importer PGN
         </Button>
         <Button onClick={() => void exportPgn()}>Exporter PGN</Button>
@@ -98,7 +98,7 @@ export function GameIO({ game, fen, tags = [], onLoad }: GameIOProps) {
         (message.error ? (
           <ErrorText>{message.text}</ErrorText>
         ) : (
-          <p className="text-emerald-400">{message.text}</p>
+          <p className="text-signal">{message.text}</p>
         ))}
     </div>
   );

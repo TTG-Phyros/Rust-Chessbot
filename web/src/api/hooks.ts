@@ -3,6 +3,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from './client';
 import type { AnalysisInfo } from './generated/AnalysisInfo';
 import type { ArenaView } from './generated/ArenaView';
+import type { ControllerView } from './generated/ControllerView';
+import type { EngineInfo } from './generated/EngineInfo';
 import type { EngineLimits } from './generated/EngineLimits';
 import type { GameRequest } from './generated/GameRequest';
 import type { HealthResponse } from './generated/HealthResponse';
@@ -122,6 +124,10 @@ export type AnalysisState = {
   running: boolean;
   /** Latest completed depth of the current analysis. */
   info: AnalysisInfo | null;
+  /** Every completed depth of the current analysis, shallowest first. */
+  depths: AnalysisInfo[];
+  /** The game being analysed, which `info` and `depths` describe. */
+  game: GameRequest | null;
   error: string | null;
 };
 
@@ -137,6 +143,8 @@ export function useAnalysis(): AnalysisState & {
   const [state, setState] = useState<Omit<AnalysisState, 'socket'>>({
     running: false,
     info: null,
+    depths: [],
+    game: null,
     error: null,
   });
 
@@ -144,7 +152,14 @@ export function useAnalysis(): AnalysisState & {
     switch (message.type) {
       case 'info':
         if (message.info.id === currentId.current) {
-          setState((previous) => ({ ...previous, info: message.info }));
+          setState((previous) => ({
+            ...previous,
+            info: message.info,
+            depths: [
+              ...previous.depths.filter((info) => info.depth < message.info.depth),
+              message.info,
+            ],
+          }));
         }
         break;
       case 'done':
@@ -166,7 +181,7 @@ export function useAnalysis(): AnalysisState & {
     (game: GameRequest, limits: EngineLimits = {}) => {
       if (!socket) return;
       currentId.current += 1;
-      setState({ running: true, info: null, error: null });
+      setState({ running: true, info: null, depths: [], game, error: null });
       socket.send({ type: 'analyze', id: currentId.current, game, limits });
     },
     [socket],
@@ -241,4 +256,22 @@ export function useTraining(network: string | null): Polled<TrainingView> {
 /** Polls `GET /api/arena`. */
 export function useArena(): Polled<ArenaView> {
   return usePolling('arena', (signal) => api.arena(signal), TRAINING_POLL_MS);
+}
+
+const CONTROLLER_POLL_MS = 10_000;
+
+/** Polls the state of the training service (for the header). */
+export function useController(): Polled<ControllerView> {
+  return usePolling(
+    'controller',
+    (signal) => api.training(null, signal).then((view) => view.controller),
+    CONTROLLER_POLL_MS,
+  );
+}
+
+const ENGINE_POLL_MS = 30_000;
+
+/** Polls which evaluation the engine plays with (the server reloads the network). */
+export function useEngineInfo(): Polled<EngineInfo> {
+  return usePolling('engine', (signal) => api.engine(signal), ENGINE_POLL_MS);
 }

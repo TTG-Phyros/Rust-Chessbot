@@ -7,6 +7,7 @@
 import type { ArenaView } from './generated/ArenaView';
 import type { BotInfo } from './generated/BotInfo';
 import type { CreateNetworkRequest } from './generated/CreateNetworkRequest';
+import type { EngineInfo } from './generated/EngineInfo';
 import type { EngineMoveRequest } from './generated/EngineMoveRequest';
 import type { EngineMoveResponse } from './generated/EngineMoveResponse';
 import type { ErrorResponse } from './generated/ErrorResponse';
@@ -66,6 +67,9 @@ export const api = {
   /** Replays a game: legal moves, status, history. Rejects illegal moves (422). */
   position: (game: GameRequest, signal?: AbortSignal) =>
     post<PositionView>('/position', game, signal),
+
+  /** Which evaluation the engine plays with (NNUE network or PeSTO). */
+  engine: (signal?: AbortSignal) => request<EngineInfo>('/engine', { signal: signal ?? null }),
 
   /** The engine's move in a game. */
   engineMove: (body: EngineMoveRequest, signal?: AbortSignal) =>

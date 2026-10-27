@@ -82,6 +82,19 @@ export function formatLine(moves: readonly string[], fen: string): string {
     .join(' ');
 }
 
+/** The move of index `ply` with its number: `8. cxd5`, `7… Cc6`; `null` if there is none. */
+export function moveLabel(
+  history: readonly string[],
+  ply: number,
+  startFen: string = STARTPOS_FEN,
+): string | null {
+  for (const row of moveRows(history, startFen)) {
+    if (row.white?.ply === ply) return `${row.number}. ${row.white.san}`;
+    if (row.black?.ply === ply) return `${row.number}… ${row.black.san}`;
+  }
+  return null;
+}
+
 /** Color of a react-chessboard piece code (`wP`, `bK`). */
 export function pieceSide(pieceType: string): Side {
   return pieceType.startsWith('w') ? 'white' : 'black';

@@ -39,7 +39,7 @@ export function DurationPicker({
             onChange(choice === '' ? null : Number(choice));
           }
         }}
-        className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm disabled:opacity-40"
+        className="rounded-xl border border-line bg-ink-950 px-2 py-1.5 text-sm disabled:opacity-40"
       >
         {DURATION_PRESETS.map((p) => (
           <option key={p.label} value={p.minutes ?? ''}>
@@ -62,10 +62,10 @@ export function DurationPicker({
               onChange(minutesError(minutes) === null ? minutes : undefined);
             }}
             aria-invalid={error !== null}
-            className={`w-20 rounded-md border bg-slate-950 px-2 py-1 font-mono text-sm ${error ? 'border-rose-500' : 'border-slate-700'}`}
+            className={`w-20 rounded-xl border bg-ink-950 px-2 py-1 font-mono text-sm ${error ? 'border-alert' : 'border-line'}`}
           />
-          <span className="text-slate-400">min</span>
-          {error && <span className="text-xs text-rose-400">{error}</span>}
+          <span className="text-dim">min</span>
+          {error && <span className="text-xs text-alert">{error}</span>}
         </label>
       )}
     </span>
@@ -98,14 +98,14 @@ export function TrainingTimer({
   const remaining = deadline === null ? null : deadline - now / 1000;
 
   return (
-    <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg bg-slate-950/60 px-3 py-2 text-sm">
+    <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg bg-ink-950 px-3 py-2 text-sm">
       <span aria-hidden>⏱</span>
       {deadline === null ? (
-        <span className="text-slate-400">Sans limite de temps</span>
+        <span className="text-dim">Sans limite de temps</span>
       ) : (
         <span>
           Arrêt automatique à <span className="font-mono">{formatClock(deadline)}</span>
-          <span className="text-slate-400">
+          <span className="text-dim">
             {' '}
             (dans {formatRemaining(remaining ?? 0)}) — fin de l’étape, checkpoint, export
           </span>
@@ -114,7 +114,7 @@ export function TrainingTimer({
       <span className="flex-1" />
       {editing ? (
         <>
-          <span className="text-slate-400">S’arrêter dans</span>
+          <span className="text-dim">S’arrêter dans</span>
           <DurationPicker value={minutes} onChange={setMinutes} disabled={busy} />
           <Button
             variant="primary"

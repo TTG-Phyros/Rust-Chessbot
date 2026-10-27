@@ -14,7 +14,7 @@ const ArenaPage = lazy(() =>
   import('./features/arena/ArenaPage').then((module) => ({ default: module.ArenaPage })),
 );
 
-const loading = <p className="text-sm text-slate-400">Chargement…</p>;
+const loading = <p className="text-sm text-dim">Chargement…</p>;
 
 export function App() {
   return (

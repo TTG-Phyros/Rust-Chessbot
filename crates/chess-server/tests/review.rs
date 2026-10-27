@@ -11,12 +11,13 @@ use axum::http::{Request, StatusCode, header};
 use axum::routing::get;
 use axum::{Json, Router};
 use chess_chesscom::Month;
-use chess_reviewer::{EngineKind, ReviewConfig, ReviewService, Store};
+use chess_reviewer::{EngineKind, Preset, ReviewConfig, ReviewService, Store};
 use chess_server::AppState;
 use chess_server::api::router;
 use chess_server::api::types::ScoreView;
 use chess_server::api::types::review::{
-    ReviewGameSummary, ReviewGameView, ReviewJobState, ReviewJobView, ReviewStarted,
+    ReviewEstimates, ReviewGameSummary, ReviewGameView, ReviewJobState, ReviewJobView,
+    ReviewOptions, ReviewStarted,
 };
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
@@ -71,6 +72,14 @@ async fn review_state(user_agent: &str) -> AppState {
     config.analysis.workers = 2;
     config.native.eval_file = "does/not/exist.nnue".into();
     config.native.hash_mb = 1;
+    // Presets shallow enough for our engine in a test (the real ones go to
+    // depth 16, and an estimate times each of them).
+    for (preset, depth) in config.analysis.presets.iter_mut().zip([1, 2, 3]) {
+        *preset = Preset {
+            depth: Some(depth),
+            ..preset.clone()
+        };
+    }
     let service = ReviewService::with_store(config, Store::in_memory().unwrap()).unwrap();
     AppState::default().with_review(Arc::new(service))
 }
@@ -164,6 +173,67 @@ async fn reviews_a_player_and_streams_the_progress() {
     assert_eq!(before_mate.score, ScoreView::Mate { moves: -1 });
     assert_eq!(before_mate.lines[0].san[0], "Qh4#");
     assert!(analysis.positions[4].checkmated);
+}
+
+#[tokio::test]
+async fn presets_and_estimates() {
+    let state = review_state("chess-bot tests").await;
+    let (status, options): (_, ReviewOptions) = get_json(&state, "/api/review/options").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(options.chesscom_enabled);
+    let names: Vec<&str> = options.presets.iter().map(|p| p.name.as_str()).collect();
+    assert_eq!(names, ["fast", "balanced", "deep"]);
+    assert_eq!(options.default_preset, "deep");
+    assert_eq!(options.presets[0].depth, Some(1));
+    assert_eq!(options.workers, 2);
+
+    // Shallow custom settings: the presets, then them.
+    let request = Request::post("/api/review/estimate")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            json!({ "username": "alice", "depth": 2, "multipv": 1 }).to_string(),
+        ))
+        .unwrap();
+    let (status, body) = call(&state, request).await;
+    assert_eq!(status, StatusCode::OK, "{}", String::from_utf8_lossy(&body));
+    let estimates: ReviewEstimates = serde_json::from_slice(&body).unwrap();
+    assert_eq!(estimates.games, 2);
+    let labels: Vec<&str> = estimates.options.iter().map(|o| o.label.as_str()).collect();
+    assert_eq!(
+        labels,
+        ["Rapide", "Équilibré", "Approfondi", "Personnalisé"]
+    );
+    let custom = &estimates.options[3];
+    assert_eq!((custom.preset.as_deref(), custom.depth), (None, Some(2)));
+    assert_eq!((custom.pending_games, custom.positions), (2, 11));
+    assert!(!custom.measured);
+
+    // A preset by name; after the review, its estimate is measured and cached.
+    let (status, started) = start(&state, json!({ "username": "alice", "preset": "fast" })).await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    let id = started["jobId"].as_u64().unwrap();
+    let last = events(&state, id).await.pop().unwrap();
+    assert_eq!(last.state, ReviewJobState::Done);
+    assert_eq!(last.eta_seconds, None);
+    let request = Request::post("/api/review/estimate")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            json!({ "username": "alice", "preset": "fast" }).to_string(),
+        ))
+        .unwrap();
+    let (_, body) = call(&state, request).await;
+    let estimates: ReviewEstimates = serde_json::from_slice(&body).unwrap();
+    assert_eq!(estimates.options.len(), 3, "the preset is not repeated");
+    let fast = &estimates.options[0];
+    assert_eq!(
+        (fast.cached_games, fast.pending_games, fast.seconds),
+        (2, 0, 0)
+    );
+    assert!(fast.measured);
+
+    let (status, body) = start(&state, json!({ "username": "alice", "preset": "turbo" })).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(body["error"].as_str().unwrap().contains("turbo"));
 }
 
 #[tokio::test]

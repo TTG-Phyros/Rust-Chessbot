@@ -36,6 +36,11 @@ ratedOnly?: boolean | null,
  */
 engine?: ReviewEngine | null, 
 /**
+ * Preset (`name` of a [`ReviewPreset`]); the default one if absent.
+ * `depth`, `movetimeMs` and `multipv` override its values.
+ */
+preset?: string | null, 
+/**
  * Depth of each search.
  */
 depth?: number | null, 

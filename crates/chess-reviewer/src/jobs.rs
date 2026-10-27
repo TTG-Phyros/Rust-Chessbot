@@ -7,9 +7,9 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
-use chess_chesscom::{Client, GameFilter, PlayedGame, is_valid_username};
+use chess_chesscom::{ApiGame, Client, GameFilter, PlayedGame, is_valid_username};
 use chess_review::{
-    AnalysisEngine, Budget, EngineSpec, GameAnalysis, SearchSettings, analyse_game,
+    AnalysisEngine, Budget, EngineSpec, GameAnalysis, SearchSettings, analyse_game, bench,
 };
 use serde::Serialize;
 use tokio::sync::{Semaphore, watch};
@@ -90,6 +90,9 @@ pub struct JobProgress {
     pub positions_total: usize,
     /// Engine analysing the games (its id).
     pub engine: Option<String>,
+    /// Estimated time left, in seconds, while analysing: from the speed
+    /// measured so far, or before that from earlier analyses or a benchmark.
+    pub eta_secs: Option<u64>,
     /// Why the job failed.
     pub error: Option<String>,
 }
@@ -107,9 +110,96 @@ impl JobProgress {
             positions_done: 0,
             positions_total: 0,
             engine: None,
+            eta_secs: None,
             error: None,
         }
     }
+}
+
+/// What the time left of a job is estimated from.
+#[derive(Debug, Clone, Copy, Default)]
+struct Timing {
+    /// Start of the analyses.
+    started: Option<Instant>,
+    /// Engine time per position known beforehand (one worker).
+    prior: Option<f64>,
+    /// Games analysed at once.
+    parallel: usize,
+}
+
+/// Positions to analyse before the measured speed replaces the prior one.
+const MEASURED_AFTER: usize = 20;
+
+/// Seconds left to analyse `total - done` positions: at the speed measured
+/// over `elapsed` seconds once enough positions are done, else at `prior`
+/// seconds per position on `parallel` workers.
+#[must_use]
+pub fn time_left(
+    done: usize,
+    total: usize,
+    elapsed: f64,
+    prior: Option<f64>,
+    parallel: usize,
+) -> Option<f64> {
+    let left = total.saturating_sub(done);
+    #[allow(clippy::cast_precision_loss)] // Position counts.
+    let (done, left) = (done as f64, left as f64);
+    #[allow(clippy::cast_precision_loss)]
+    let parallel = parallel.max(1) as f64;
+    let measured = done >= MEASURED_AFTER as f64 && elapsed > 0.0;
+    match (measured, prior) {
+        (true, _) => Some(left * elapsed / done),
+        (false, Some(prior)) => Some(left * prior / parallel),
+        (false, None) => None,
+    }
+}
+
+/// Whole seconds, rounded up.
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // Non-negative, bounded.
+fn seconds(time: f64) -> u64 {
+    time.max(0.0).ceil().min(u64::MAX as f64) as u64
+}
+
+/// How long reviewing some games with some settings should take.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Estimate {
+    /// The settings.
+    pub settings: SearchSettings,
+    /// Games already analysed with them (nothing to do).
+    pub cached_games: usize,
+    /// Games to analyse.
+    pub pending_games: usize,
+    /// Positions of the games to analyse.
+    pub positions: usize,
+    /// Engine time per position (one worker), in seconds.
+    pub seconds_per_position: f64,
+    /// Whether that time was measured on real analyses (else on a short
+    /// benchmark, less accurate).
+    pub measured: bool,
+    /// Estimated duration of the review, in seconds, on the workers.
+    pub seconds: u64,
+}
+
+/// Duration of analysing games of `lengths` positions, `per_position`
+/// seconds each, on `workers` workers: the work shared out, but never less
+/// than the longest game (one game runs on one worker).
+#[must_use]
+pub fn review_time(lengths: &[usize], per_position: f64, workers: usize) -> f64 {
+    let total: usize = lengths.iter().sum();
+    let longest = lengths.iter().copied().max().unwrap_or(0);
+    let parallel = workers.min(lengths.len()).max(1);
+    #[allow(clippy::cast_precision_loss)] // Position counts.
+    let shared = total as f64 * per_position / parallel as f64;
+    #[allow(clippy::cast_precision_loss)]
+    let longest = longest as f64 * per_position;
+    shared.max(longest)
+}
+
+/// Games of a review: which are cached, which remain to analyse.
+struct Plan {
+    cached: usize,
+    pending: Vec<PlayedGame>,
+    unreadable: usize,
 }
 
 /// A running or finished review.
@@ -122,6 +212,7 @@ pub struct Job {
     cancelled: AtomicBool,
     progress: watch::Sender<JobProgress>,
     finished: Mutex<Option<Instant>>,
+    timing: Mutex<Timing>,
 }
 
 impl Job {
@@ -150,10 +241,46 @@ impl Job {
         self.progress.send_modify(change);
     }
 
+    fn timing(&self) -> std::sync::MutexGuard<'_, Timing> {
+        self.timing.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// The analyses start: `positions` to analyse on `parallel` workers,
+    /// `prior` seconds per position if known.
+    fn start_analyses(&self, positions: usize, prior: Option<f64>, parallel: usize) {
+        *self.timing() = Timing {
+            started: Some(Instant::now()),
+            prior,
+            parallel,
+        };
+        self.update(|p| {
+            p.positions_total = positions;
+            p.eta_secs = time_left(0, positions, 0.0, prior, parallel).map(seconds);
+        });
+    }
+
+    /// One more position analysed.
+    fn advance(&self) {
+        let timing = *self.timing();
+        let elapsed = timing.started.map_or(0.0, |at| at.elapsed().as_secs_f64());
+        self.update(|p| {
+            p.positions_done += 1;
+            p.eta_secs = time_left(
+                p.positions_done,
+                p.positions_total,
+                elapsed,
+                timing.prior,
+                timing.parallel,
+            )
+            .map(seconds);
+        });
+    }
+
     fn finish(&self, state: JobState, error: Option<String>) {
         self.update(|progress| {
             progress.state = state;
             progress.error = error;
+            progress.eta_secs = None;
         });
         *self.finished.lock().unwrap_or_else(PoisonError::into_inner) = Some(Instant::now());
     }
@@ -299,21 +426,7 @@ impl ReviewService {
     /// [`Error::Unavailable`] without a `User-Agent`, [`Error::Invalid`]
     /// for a request out of bounds.
     pub fn start(self: &Arc<Self>, request: JobRequest) -> Result<Arc<Job>, Error> {
-        if self.client.is_none() {
-            return Err(Error::Unavailable(
-                "Chess.com reviews need a User-Agent: set CHESS_REVIEW_USER_AGENT".into(),
-            ));
-        }
-        if !is_valid_username(&request.username) {
-            return Err(Error::Invalid(format!(
-                "invalid Chess.com username {:?}",
-                request.username
-            )));
-        }
-        let max = self.config.max_games;
-        if !(1..=max).contains(&request.filter.max_games) {
-            return Err(Error::Invalid(format!("ask for 1 to {max} games")));
-        }
+        self.check_request(&request.username, &request.filter)?;
         let settings = request
             .settings
             .unwrap_or_else(|| self.config.search_settings());
@@ -326,6 +439,7 @@ impl ReviewService {
             cancelled: AtomicBool::new(false),
             progress: watch::Sender::new(JobProgress::new()),
             finished: Mutex::new(None),
+            timing: Mutex::new(Timing::default()),
         });
         {
             let mut jobs = self.jobs();
@@ -383,25 +497,17 @@ impl ReviewService {
         let key = analysis_key(&engine, &settings);
         job.update(|p| p.engine = Some(engine));
 
-        let mut pending = Vec::new();
-        for api in &games {
-            if self.store.analysis(api.id(), &key)?.is_some() {
-                job.update(|p| p.games_cached += 1);
-                continue;
-            }
-            match PlayedGame::from_api(api) {
-                Ok(game) => pending.push(game),
-                Err(err) => {
-                    tracing::warn!(game = api.id(), %err, "unreadable game");
-                    job.update(|p| p.games_failed += 1);
-                }
-            }
-        }
-        let positions: usize = pending.iter().map(|g| g.game.moves().len() + 1).sum();
-        job.update(|p| p.positions_total = positions);
+        let plan = self.plan(&games, &key)?;
+        job.update(|p| {
+            p.games_cached = plan.cached;
+            p.games_failed = plan.unreadable;
+        });
+        let positions: usize = plan.pending.iter().map(positions_of).sum();
+        let parallel = self.config.workers().min(plan.pending.len());
+        job.start_analyses(positions, self.known_speed(&key)?, parallel);
 
         let mut tasks = JoinSet::new();
-        for game in pending {
+        for game in plan.pending {
             let (service, job, pool) = (Arc::clone(self), Arc::clone(job), Arc::clone(&pool));
             tasks.spawn(async move {
                 let result = service.analyse(&job, &pool, game.clone(), settings).await;
@@ -410,10 +516,16 @@ impl ReviewService {
         }
         while let Some(joined) = tasks.join_next().await {
             let outcome = match joined {
-                Ok((id, Ok(Some(analysis)))) => self
-                    .store
-                    .save_analysis(&id, &analysis, crate::now())
-                    .map_err(|err| err.to_string()),
+                Ok((id, Ok(Some((analysis, seconds))))) => {
+                    // Measured on real games: the estimates of the next reviews.
+                    #[allow(clippy::cast_precision_loss)] // Position counts.
+                    let positions = analysis.positions.len() as f64;
+                    let key = analysis_key(&analysis.engine, &analysis.settings);
+                    self.store
+                        .save_analysis(&id, &analysis, crate::now())
+                        .and_then(|()| self.store.record_speed(&key, positions, seconds))
+                        .map_err(|err| err.to_string())
+                }
                 Ok((_, Ok(None))) => continue,
                 Ok((_, Err(err))) => Err(format!("{err:#}")),
                 Err(err) => Err(err.to_string()),
@@ -429,14 +541,15 @@ impl ReviewService {
         Ok(())
     }
 
-    /// Analyses `game` once a worker is free; `None` when cancelled.
+    /// Analyses `game` once a worker is free, with the engine time it took
+    /// (seconds); `None` when cancelled.
     async fn analyse(
         &self,
         job: &Arc<Job>,
         pool: &Arc<EnginePool>,
         game: PlayedGame,
         settings: SearchSettings,
-    ) -> anyhow::Result<Option<GameAnalysis>> {
+    ) -> anyhow::Result<Option<(GameAnalysis, f64)>> {
         let _permit = Arc::clone(&self.workers).acquire_owned().await?;
         if job.is_cancelled() {
             return Ok(None);
@@ -444,22 +557,173 @@ impl ReviewService {
         let (job, pool) = (Arc::clone(job), Arc::clone(pool));
         tokio::task::spawn_blocking(move || {
             let mut engine = pool.take()?;
+            let clock = Instant::now();
             let analysis = analyse_game(
                 engine.as_mut(),
                 game.game.start(),
                 game.game.moves(),
                 &settings,
                 |_, _| {
-                    job.update(|p| p.positions_done += 1);
+                    job.advance();
                     !job.is_cancelled()
                 },
             )?;
+            let seconds = clock.elapsed().as_secs_f64();
             // A failed engine is dropped (the process is killed).
             pool.give_back(engine);
-            Ok(analysis)
+            Ok(analysis.map(|analysis| (analysis, seconds)))
         })
         .await?
     }
+
+    fn check_request(&self, username: &str, filter: &GameFilter) -> Result<(), Error> {
+        if self.client.is_none() {
+            return Err(Error::Unavailable(
+                "Chess.com reviews need a User-Agent: set CHESS_REVIEW_USER_AGENT".into(),
+            ));
+        }
+        if !is_valid_username(username) {
+            return Err(Error::Invalid(format!(
+                "invalid Chess.com username {username:?}"
+            )));
+        }
+        let max = self.config.max_games;
+        if !(1..=max).contains(&filter.max_games) {
+            return Err(Error::Invalid(format!("ask for 1 to {max} games")));
+        }
+        Ok(())
+    }
+
+    /// Which of `games` are analysed with the configuration `key`.
+    fn plan(&self, games: &[ApiGame], key: &str) -> Result<Plan, Error> {
+        let mut plan = Plan {
+            cached: 0,
+            pending: Vec::new(),
+            unreadable: 0,
+        };
+        for api in games {
+            if self.store.analysis(api.id(), key)?.is_some() {
+                plan.cached += 1;
+                continue;
+            }
+            match PlayedGame::from_api(api) {
+                Ok(game) => plan.pending.push(game),
+                Err(err) => {
+                    tracing::warn!(game = api.id(), %err, "unreadable game");
+                    plan.unreadable += 1;
+                }
+            }
+        }
+        Ok(plan)
+    }
+
+    /// How long reviewing the games of `username` kept by `filter` with
+    /// `engine` would take, for each of `candidates` (settings). Brings the
+    /// games into the cache (the review then starts at once); the speed of
+    /// settings never used before is measured on a short benchmark (a few
+    /// seconds at most, on a worker).
+    ///
+    /// # Errors
+    ///
+    /// As [`ReviewService::start`], plus Chess.com and engine failures.
+    pub async fn estimate(
+        &self,
+        username: &str,
+        filter: &GameFilter,
+        engine: Option<EngineKind>,
+        candidates: &[SearchSettings],
+    ) -> Result<Vec<Estimate>, Error> {
+        self.check_request(username, filter)?;
+        for settings in candidates {
+            check_settings(settings)?;
+        }
+        let Some(client) = &self.client else {
+            return Ok(Vec::new());
+        };
+        let games = sync_player(
+            client,
+            &self.store,
+            username,
+            filter,
+            self.config.recent_ttl(),
+            |_| {},
+        )
+        .await?;
+        let pool = Arc::clone(&self.pools[&engine.unwrap_or(self.config.analysis.engine)]);
+        let engine = engine_id(&pool).await?;
+        let mut estimates = Vec::with_capacity(candidates.len());
+        for &settings in candidates {
+            let key = analysis_key(&engine, &settings);
+            let plan = self.plan(&games, &key)?;
+            let lengths: Vec<usize> = plan.pending.iter().map(positions_of).collect();
+            let (per_position, measured) = match self.store.speed(&key)? {
+                Some(speed) => (speed, true),
+                None => match self.store.speed(&benchmark_key(&key))? {
+                    Some(speed) => (speed, false),
+                    None => (self.benchmark(&pool, &key, settings).await?, false),
+                },
+            };
+            estimates.push(Estimate {
+                settings,
+                cached_games: plan.cached,
+                pending_games: lengths.len(),
+                positions: lengths.iter().sum(),
+                seconds_per_position: per_position,
+                measured,
+                seconds: seconds(review_time(&lengths, per_position, self.config.workers())),
+            });
+        }
+        Ok(estimates)
+    }
+
+    /// Engine time per position for the configuration `key`: measured on
+    /// real analyses, else on the benchmark, if either was run.
+    fn known_speed(&self, key: &str) -> Result<Option<f64>, Error> {
+        match self.store.speed(key)? {
+            Some(speed) => Ok(Some(speed)),
+            None => self.store.speed(&benchmark_key(key)),
+        }
+    }
+
+    /// Seconds per position of `pool`'s engine with `settings`, measured on
+    /// a worker and recorded apart from real analyses (see [`benchmark_key`]).
+    async fn benchmark(
+        &self,
+        pool: &Arc<EnginePool>,
+        key: &str,
+        settings: SearchSettings,
+    ) -> Result<f64, Error> {
+        let _permit = Arc::clone(&self.workers)
+            .acquire_owned()
+            .await
+            .map_err(|err| Error::Engine(err.to_string()))?;
+        let pool = Arc::clone(pool);
+        let per_position = tokio::task::spawn_blocking(move || {
+            let mut engine = pool.take()?;
+            let per_position = bench::seconds_per_position(engine.as_mut(), &settings)?;
+            pool.give_back(engine);
+            Ok::<_, anyhow::Error>(per_position)
+        })
+        .await
+        .map_err(|err| Error::Engine(err.to_string()))?
+        .map_err(|err| Error::Engine(format!("{err:#}")))?;
+        #[allow(clippy::cast_precision_loss)] // A few positions.
+        let positions = bench::POSITIONS as f64;
+        self.store
+            .record_speed(&benchmark_key(key), positions, per_position * positions)?;
+        Ok(per_position)
+    }
+}
+
+/// Where the benchmark of the configuration `key` is recorded: apart from
+/// real analyses, which replace it as soon as there are some.
+fn benchmark_key(key: &str) -> String {
+    format!("benchmark | {key}")
+}
+
+/// Positions of a game: the start, then one per move.
+fn positions_of(game: &PlayedGame) -> usize {
+    game.game.moves().len() + 1
 }
 
 /// Identity of the engines of `pool`, read from one of them.
@@ -498,6 +762,30 @@ fn check_settings(settings: &SearchSettings) -> Result<(), Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn time_left_uses_the_measured_speed_once_known() {
+        // Nothing known yet.
+        assert_eq!(time_left(0, 100, 0.0, None, 4), None);
+        // Before 20 positions: the prior speed, shared by the workers.
+        assert_eq!(time_left(10, 110, 0.5, Some(0.4), 4), Some(10.0));
+        // Then the speed measured: 50 positions in 10 s, 50 left.
+        assert_eq!(time_left(50, 100, 10.0, Some(9.0), 4), Some(10.0));
+        assert_eq!(time_left(100, 100, 10.0, None, 4), Some(0.0));
+        assert_eq!(seconds(9.2), 10);
+        assert_eq!(seconds(-1.0), 0);
+    }
+
+    #[test]
+    fn review_time_is_bounded_by_the_longest_game() {
+        // 4 games, 4 workers: the longest one sets the pace.
+        assert!((review_time(&[100, 50, 50, 50], 0.5, 4) - 50.0).abs() < 1e-9);
+        // 2 workers: the work shared out.
+        assert!((review_time(&[100, 100, 100, 100], 0.5, 2) - 100.0).abs() < 1e-9);
+        // More workers than games.
+        assert!((review_time(&[80], 0.5, 8) - 40.0).abs() < 1e-9);
+        assert!(review_time(&[], 0.5, 4).abs() < 1e-9);
+    }
 
     #[test]
     fn settings_are_bounded() {

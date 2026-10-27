@@ -120,6 +120,79 @@ async fn analyses_every_game_once() {
     };
     let other = wait(&service.start(request(deeper)).unwrap()).await;
     assert_eq!((other.games_done, other.games_cached), (3, 0));
+    assert_eq!(other.eta_secs, None, "no time left once done");
+}
+
+#[tokio::test]
+async fn estimates_before_and_after_reviewing() {
+    let service = service().await;
+    let deeper = SearchSettings {
+        budget: Budget::Depth(5),
+        ..SHALLOW
+    };
+    let filter = GameFilter::default();
+    let before = service
+        .estimate("alice", &filter, None, &[SHALLOW, deeper])
+        .await
+        .unwrap();
+    assert_eq!(before.len(), 2);
+    for estimate in &before {
+        assert_eq!((estimate.pending_games, estimate.cached_games), (3, 0));
+        assert_eq!(estimate.positions, 23);
+        // Never used: measured on the benchmark.
+        assert!(!estimate.measured);
+        assert!(estimate.seconds_per_position > 0.0);
+    }
+    assert!(before[1].seconds_per_position > before[0].seconds_per_position);
+
+    // The review measures the real speed, and caches the games.
+    let progress = wait(&service.start(request(SHALLOW)).unwrap()).await;
+    assert_eq!(progress.state, JobState::Done);
+    let after = service
+        .estimate("alice", &filter, None, &[SHALLOW])
+        .await
+        .unwrap();
+    assert_eq!((after[0].pending_games, after[0].cached_games), (0, 3));
+    assert_eq!((after[0].positions, after[0].seconds), (0, 0));
+    assert!(after[0].measured);
+
+    let mut bad = filter.clone();
+    bad.max_games = 0;
+    assert!(
+        service
+            .estimate("alice", &bad, None, &[SHALLOW])
+            .await
+            .is_err()
+    );
+}
+
+#[tokio::test]
+async fn reports_the_time_left() {
+    let service = service().await;
+    let slow = SearchSettings {
+        budget: Budget::MoveTimeMs(100),
+        multipv: 1,
+    };
+    let job = service.start(request(slow)).unwrap();
+    let mut updates = job.subscribe();
+    // After 20 of the 23 positions (100 ms each, 2 workers): the measured speed.
+    let progress = updates
+        .wait_for(|p| p.positions_done >= 20 || p.state.is_final())
+        .await
+        .unwrap()
+        .clone();
+    if progress.state.is_final() {
+        // Too fast to be observed while analysing (a very loaded machine).
+        return;
+    }
+    let eta = progress.eta_secs.expect("time left while analysing");
+    let left = progress.positions_total - progress.positions_done;
+    // About 50 ms per position on 2 workers, rounded up.
+    assert!(
+        eta as f64 <= left as f64 * 0.1 + 1.0,
+        "{eta} s for {left} positions"
+    );
+    job.cancel();
 }
 
 #[tokio::test]

@@ -217,8 +217,10 @@ L'API est **sans état** : une partie est toujours envoyée sous la forme `{ "fe
 | `GET /api/bots` | bots sauvegardés |
 | `POST /api/bots`, `DELETE /api/bots/{nom}` | sauvegarde un snapshot comme bot (`{"name", "network", "superbatch"}`), le supprime |
 | `POST /api/tournaments`, `POST /api/tournaments/stop` | lance un tournoi (`{"bots", "gamesPerPair", "limit": {"kind": "nodes" | "depth" | "time", "value"}, "threads", "pairings": [{"a", "b"}] | null}`, où `null` signifie tous les combats), l'arrête |
-| `POST /api/review/jobs` | lance l'analyse des parties Chess.com d'un joueur (`{"username", "timeClasses", "maxGames", "since", "until", "ratedOnly", "engine": "stockfish" \| "native", "depth" \| "movetimeMs", "multipv"}`) ; 202 avec `jobId`, 503 sans User-Agent |
-| `GET /api/review/jobs/{id}`, `DELETE /api/review/jobs/{id}` | progression d'une analyse (mois lus, parties en cache, analysées, positions), l'arrête |
+| `GET /api/review/options` | presets d'analyse (Rapide, Équilibré, Approfondi), moteur et preset par défaut, workers, limites |
+| `POST /api/review/estimate` | durée estimée de l'analyse des parties demandées pour chaque preset (et pour les réglages de la requête) : parties déjà en cache, positions à analyser, secondes par position (mesurées sur de vraies analyses, sinon sur un court benchmark) |
+| `POST /api/review/jobs` | lance l'analyse des parties Chess.com d'un joueur (`{"username", "timeClasses", "maxGames", "since", "until", "ratedOnly", "engine": "stockfish" \| "native", "preset", "depth" \| "movetimeMs", "multipv"}`, les trois derniers remplaçant ceux du preset) ; 202 avec `jobId`, 503 sans User-Agent |
+| `GET /api/review/jobs/{id}`, `DELETE /api/review/jobs/{id}` | progression d'une analyse (mois lus, parties en cache, analysées, positions, temps restant `etaSeconds`), l'arrête |
 | `GET /api/review/jobs/{id}/events` | la même progression en Server-Sent Events (`progress`, au plus toutes les 150 ms, jusqu'à l'état final) |
 | `GET /api/review/players/{pseudo}/games` | parties en cache d'un joueur (`timeClasses`, `maxGames`, `since`, `until`, `ratedOnly`), sans rien télécharger |
 | `GET /api/review/games/{id}` | une partie : coups (SAN, horloges) et dernière analyse (éval et meilleures lignes de chaque position) |
@@ -307,6 +309,8 @@ Au premier démarrage du démon, le top 5 des réseaux entraînés avant cette f
 ```powershell
 just chesscom hikaru -n 20 --time-class blitz,rapid
 cargo run -p chess-reviewer -- fetch hikaru -n 50 --since 2026-01-01 --until 2026-06-30 --rated
+cargo run --release -p chess-reviewer -- estimate hikaru -n 10            # durée par preset
+cargo run --release -p chess-reviewer -- analyse hikaru -n 10 --preset fast
 cargo run --release -p chess-reviewer -- analyse hikaru -n 10 --depth 14 --multipv 2
 docker compose exec server chess-reviewer analyse hikaru -n 10   # avec le Stockfish de l'image
 ```
@@ -317,7 +321,8 @@ docker compose exec server chess-reviewer analyse hikaru -n 10   # avec le Stock
 - **Moteur.** Le trait `AnalysisEngine` (`chess-review`) a deux implémentations : Stockfish à pleine force via UCI (la référence, `engine = "stockfish"`) et notre moteur (`"native"` : le réseau NNUE de l'entraînement s'il existe, PeSTO sinon). Chaque position est analysée en MultiPV (`multipv`, 3 par défaut, au moins 2 pour reconnaître un coup unique), à profondeur fixe (`depth`, reproductible) ou à temps fixe (`movetime_ms`).
 - **Parallélisme.** Un job télécharge les parties puis analyse celles qui ne le sont pas encore, une partie par worker (`workers`, la moitié des cœurs par défaut, partagés par tous les jobs). Les processus Stockfish sont réutilisés d'une partie à l'autre. La progression est publiée au fil de l'eau (SSE côté API).
 - **Pas de ré-analyse.** Une analyse est stockée par partie et par configuration (moteur et version, réseau, budget, MultiPV) : relancer la même analyse ne recalcule rien, changer la profondeur ou le moteur recalcule.
-- **Coût.** Stockfish 19 tourne à environ 0,9 M nœuds/s par cœur sur la machine de référence. À profondeur 16 et MultiPV 3, une position coûte environ 0,2 à 1 s : 10 parties de blitz (800 positions) prennent environ 3 min sur 4 workers. Profondeur 14 et MultiPV 2 divisent ce temps par 2 à 3.
+- **Choix et durée.** L'utilisateur choisit un preset ou ses propres réglages, avec une estimation de la durée pour les parties demandées. Les parties déjà analysées avec ces réglages ne comptent pas, et la durée prend en compte le partage entre workers : jamais moins que la plus longue partie. Le coût d'une position est mesuré sur cette machine : d'abord par un court benchmark (8 positions de milieu de jeu, quelques secondes, une seule fois par réglage), puis par chaque vraie analyse (moyenne glissante, stockée dans le cache). Pendant l'analyse, le temps restant suit la vitesse réellement observée.
+- **Coût.** Stockfish 19 tourne à environ 0,9 M nœuds/s par cœur sur la machine de référence. Par position : environ 0,05 s en Rapide (profondeur 12, 2 lignes), 0,16 s en Équilibré (14, 2) et 0,75 s en Approfondi (16, 3). Mesuré sur 20 parties de blitz (1 625 positions, 4 workers) en Rapide : 27 s estimées, 26,7 s réelles.
 
 Configuration : `config/review.toml` (ou le chemin donné par `CHESS_REVIEW_CONFIG`) < variables `CHESS_REVIEW_*`, avec `__` entre section et clé (`CHESS_REVIEW_CHESSCOM__MAX_RETRIES=3`, `CHESS_REVIEW_ANALYSIS__DEPTH=14`). En Docker, `./config` est monté en lecture seule et le cache vit dans le volume nommé `review-cache` (SQLite sur un bind mount Windows est lent et son verrouillage peu fiable).
 

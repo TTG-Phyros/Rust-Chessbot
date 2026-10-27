@@ -62,20 +62,51 @@ impl std::str::FromStr for EngineKind {
     }
 }
 
-/// Default settings of the searches (a review request may override them).
+/// Settings of the searches: named presets the user picks from (a request
+/// may also set its own depth, time and lines).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AnalysisConfig {
     /// Engine used when the request names none.
     pub engine: EngineKind,
+    /// Preset used when the request names none (one of `presets`).
+    pub preset: String,
+    /// The presets offered, fastest first.
+    pub presets: Vec<Preset>,
+    /// Games analysed at once, one engine each; 0 for half the CPU cores.
+    pub workers: usize,
+}
+
+/// Named search settings, e.g. "fast": depth 12, 2 lines.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Preset {
+    /// Identifier used by requests (`fast`).
+    pub name: String,
+    /// Shown to the user (`Rapide`).
+    pub label: String,
     /// Depth of each search, unless `movetime_ms` is set.
-    pub depth: u32,
-    /// Time of each search, in milliseconds (replaces the depth).
+    #[serde(default)]
+    pub depth: Option<u32>,
+    /// Time of each search, in milliseconds (instead of a depth).
+    #[serde(default)]
     pub movetime_ms: Option<u64>,
     /// Best lines per position (at least 2 to recognise only moves).
     pub multipv: usize,
-    /// Games analysed at once, one engine each; 0 for half the CPU cores.
-    pub workers: usize,
+}
+
+impl Preset {
+    /// Its search settings (depth 16 if it sets neither depth nor time).
+    #[must_use]
+    pub fn settings(&self) -> SearchSettings {
+        SearchSettings {
+            budget: match (self.depth, self.movetime_ms) {
+                (Some(depth), _) => Budget::Depth(depth),
+                (None, Some(ms)) => Budget::MoveTimeMs(ms),
+                (None, None) => Budget::Depth(16),
+            },
+            multipv: self.multipv.max(1),
+        }
+    }
 }
 
 /// Stockfish processes.
@@ -102,11 +133,21 @@ pub struct NativeConfig {
 
 impl Default for AnalysisConfig {
     fn default() -> Self {
+        let preset = |name: &str, label: &str, depth, multipv| Preset {
+            name: name.into(),
+            label: label.into(),
+            depth: Some(depth),
+            movetime_ms: None,
+            multipv,
+        };
         Self {
             engine: EngineKind::Stockfish,
-            depth: 16,
-            movetime_ms: None,
-            multipv: 3,
+            preset: "deep".into(),
+            presets: vec![
+                preset("fast", "Rapide", 12, 2),
+                preset("balanced", "Équilibré", 14, 2),
+                preset("deep", "Approfondi", 16, 3),
+            ],
             workers: 0,
         }
     }
@@ -230,16 +271,28 @@ impl ReviewConfig {
         }
     }
 
-    /// Default search settings.
+    /// The preset `name`.
+    #[must_use]
+    pub fn preset(&self, name: &str) -> Option<&Preset> {
+        self.analysis
+            .presets
+            .iter()
+            .find(|preset| preset.name.eq_ignore_ascii_case(name))
+    }
+
+    /// The default preset (the first one if `analysis.preset` names none).
+    #[must_use]
+    pub fn default_preset(&self) -> Option<&Preset> {
+        self.preset(&self.analysis.preset)
+            .or_else(|| self.analysis.presets.first())
+    }
+
+    /// Default search settings: the default preset's (depth 16, 3 lines
+    /// without any preset).
     #[must_use]
     pub fn search_settings(&self) -> SearchSettings {
-        SearchSettings {
-            budget: match self.analysis.movetime_ms {
-                Some(ms) => Budget::MoveTimeMs(ms),
-                None => Budget::Depth(self.analysis.depth),
-            },
-            multipv: self.analysis.multipv.max(1),
-        }
+        self.default_preset()
+            .map_or_else(SearchSettings::default, Preset::settings)
     }
 
     /// Games analysed at once.
@@ -282,6 +335,20 @@ mod tests {
 
     #[test]
     #[allow(clippy::result_large_err)] // The closure signature is imposed by figment's Jail.
+    fn the_repository_config_is_valid() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../config/review.toml");
+        figment::Jail::expect_with(|jail| {
+            jail.clear_env();
+            let config: ReviewConfig = ReviewConfig::figment(path).extract()?;
+            // Same values as the built-in defaults, which the file documents.
+            assert_eq!(config, ReviewConfig::default());
+            assert_eq!(config.analysis.presets.len(), 3);
+            Ok(())
+        });
+    }
+
+    #[test]
+    #[allow(clippy::result_large_err)] // The closure signature is imposed by figment's Jail.
     fn env_overrides_file() {
         figment::Jail::expect_with(|jail| {
             jail.create_file(
@@ -291,13 +358,18 @@ mod tests {
             jail.set_env("CHESS_REVIEW_USER_AGENT", "app/1 (me@example.com)");
             jail.set_env("CHESS_REVIEW_CHESSCOM__MAX_RETRIES", "7");
             jail.set_env("CHESS_REVIEW_ANALYSIS__ENGINE", "native");
-            jail.set_env("CHESS_REVIEW_ANALYSIS__MOVETIME_MS", "250");
+            jail.set_env("CHESS_REVIEW_ANALYSIS__PRESET", "FAST");
             let config: ReviewConfig = ReviewConfig::figment("review.toml").extract()?;
             assert_eq!(config.user_agent, "app/1 (me@example.com)");
             assert_eq!(config.chesscom.max_retries, 7);
             assert_eq!(config.recent_ttl(), 60);
             assert_eq!(config.analysis.engine, EngineKind::Native);
-            assert_eq!(config.search_settings().budget, Budget::MoveTimeMs(250));
+            assert_eq!(config.search_settings().budget, Budget::Depth(12));
+            assert_eq!(
+                config.default_preset().map(|p| p.label.as_str()),
+                Some("Rapide")
+            );
+            assert_eq!(config.preset("nope"), None);
             assert!(matches!(
                 config.engine_spec(EngineKind::Stockfish),
                 EngineSpec::Stockfish { threads: 1, .. }

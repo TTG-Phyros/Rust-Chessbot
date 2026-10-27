@@ -26,19 +26,39 @@ timeout_secs = 30
 # seconds; past months are never downloaded twice.
 recent_ttl_secs = 600
 
-# Engine searches (a review request may override engine, depth, time and
-# lines). An analysis is cached per engine and settings: changing them here
-# makes the next reviews analyse the games again.
+# Engine searches. The user picks a preset (with an estimate of the time it
+# takes for the games asked: POST /api/review/estimate), or sets a depth or a
+# time and a number of lines. An analysis is cached per engine and settings:
+# other settings analyse the games again.
 [analysis]
 # "stockfish" (the reference) or "native" (our engine).
 engine = "stockfish"
-# Depth of each search, unless movetime_ms is set (then a time per position).
-depth = 16
-# movetime_ms = 300
-# Best lines per position; at least 2 to recognise the only good move.
-multipv = 3
+# Preset of the requests that name none.
+preset = "deep"
 # Games analysed at once, one engine (one CPU core) each; 0 = half the cores.
 workers = 0
+
+# Presets, fastest first: depth (or movetime_ms, a time per position) and
+# lines per position (at least 2 to recognise the only good move).
+# Measured on an i7-9700KF (Stockfish 19, one core per game): about 0.05,
+# 0.16 and 0.75 s per position; a blitz game has about 80 positions.
+[[analysis.presets]]
+name = "fast"
+label = "Rapide"
+depth = 12
+multipv = 2
+
+[[analysis.presets]]
+name = "balanced"
+label = "Équilibré"
+depth = 14
+multipv = 2
+
+[[analysis.presets]]
+name = "deep"
+label = "Approfondi"
+depth = 16
+multipv = 3
 
 [stockfish]
 binary = "stockfish"

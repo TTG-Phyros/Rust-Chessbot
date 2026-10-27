@@ -30,8 +30,9 @@ pub(crate) use daemon::check_name;
         training::engine, training::start, training::stop, training::timer,
         training::network_defaults, training::create_network, training::delete_network,
         arena::arena, arena::list_bots, arena::save_bot, arena::delete_bot,
-        arena::start_tournament, arena::stop_tournament, review::start, review::progress,
-        review::events, review::cancel, review::player_games, review::game,
+        arena::start_tournament, arena::stop_tournament, review::options, review::estimate,
+        review::start, review::progress, review::events, review::cancel, review::player_games,
+        review::game,
     ),
     tags(
         (name = "system", description = "Server status"),
@@ -75,6 +76,8 @@ pub fn router(state: AppState) -> Router {
         .route("/api/bots/{name}", delete(arena::delete_bot))
         .route("/api/tournaments", post(arena::start_tournament))
         .route("/api/tournaments/stop", post(arena::stop_tournament))
+        .route("/api/review/options", get(review::options))
+        .route("/api/review/estimate", post(review::estimate))
         .route("/api/review/jobs", post(review::start))
         .route(
             "/api/review/jobs/{id}",

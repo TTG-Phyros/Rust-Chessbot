@@ -2,7 +2,8 @@
 //!
 //! ```text
 //! chess-reviewer fetch hikaru -n 20 --time-class blitz   # sync and list games
-//! chess-reviewer analyse hikaru -n 10 --depth 14         # analyse them too
+//! chess-reviewer estimate hikaru -n 10                   # how long, per preset
+//! chess-reviewer analyse hikaru -n 10 --preset fast       # analyse them too
 //! ```
 //!
 //! Settings come from `config/review.toml`, `CHESS_REVIEW_*` variables (a
@@ -38,19 +39,57 @@ enum Command {
     Analyse {
         #[command(flatten)]
         selection: Selection,
-        /// Engine: `stockfish` or `native` (the configured one by default).
-        #[arg(long)]
-        engine: Option<EngineKind>,
-        /// Depth of each search.
-        #[arg(long, conflicts_with = "movetime")]
-        depth: Option<u32>,
-        /// Time of each search, in milliseconds.
-        #[arg(long)]
-        movetime: Option<u64>,
-        /// Best lines per position.
-        #[arg(long)]
-        multipv: Option<usize>,
+        #[command(flatten)]
+        search: Search,
     },
+    /// How long analysing a player's games would take with each preset.
+    Estimate {
+        #[command(flatten)]
+        selection: Selection,
+        #[command(flatten)]
+        search: Search,
+    },
+}
+
+/// Engine and search settings.
+#[derive(Debug, clap::Args)]
+struct Search {
+    /// Engine: `stockfish` or `native` (the configured one by default).
+    #[arg(long)]
+    engine: Option<EngineKind>,
+    /// Preset (see config/review.toml: fast, balanced, deep); the
+    /// configured one by default. The options below override it.
+    #[arg(long)]
+    preset: Option<String>,
+    /// Depth of each search.
+    #[arg(long, conflicts_with = "movetime")]
+    depth: Option<u32>,
+    /// Time of each search, in milliseconds.
+    #[arg(long)]
+    movetime: Option<u64>,
+    /// Best lines per position.
+    #[arg(long)]
+    multipv: Option<usize>,
+}
+
+impl Search {
+    fn settings(&self, config: &ReviewConfig) -> Result<SearchSettings> {
+        let base = match &self.preset {
+            Some(name) => config
+                .preset(name)
+                .with_context(|| format!("unknown preset {name:?}"))?
+                .settings(),
+            None => config.search_settings(),
+        };
+        Ok(SearchSettings {
+            budget: match (self.depth, self.movetime) {
+                (Some(depth), _) => Budget::Depth(depth),
+                (None, Some(ms)) => Budget::MoveTimeMs(ms),
+                (None, None) => base.budget,
+            },
+            multipv: self.multipv.unwrap_or(base.multipv),
+        })
+    }
 }
 
 /// Which games of which player.
@@ -112,30 +151,75 @@ async fn main() -> Result<()> {
         Command::Fetch(selection) => {
             fetch(&config, &selection.username, &selection.filter()?).await
         }
-        Command::Analyse {
-            selection,
-            engine,
-            depth,
-            movetime,
-            multipv,
-        } => {
-            let defaults = config.search_settings();
-            let settings = SearchSettings {
-                budget: match (depth, movetime) {
-                    (Some(depth), _) => Budget::Depth(depth),
-                    (None, Some(ms)) => Budget::MoveTimeMs(ms),
-                    (None, None) => defaults.budget,
-                },
-                multipv: multipv.unwrap_or(defaults.multipv),
-            };
+        Command::Analyse { selection, search } => {
             let request = JobRequest {
                 username: selection.username.clone(),
                 filter: selection.filter()?,
-                engine,
-                settings: Some(settings),
+                engine: search.engine,
+                settings: Some(search.settings(&config)?),
             };
             analyse(config, request).await
         }
+        Command::Estimate { selection, search } => estimate(config, &selection, &search).await,
+    }
+}
+
+async fn estimate(config: ReviewConfig, selection: &Selection, search: &Search) -> Result<()> {
+    let mut candidates: Vec<(String, SearchSettings)> = config
+        .analysis
+        .presets
+        .iter()
+        .map(|preset| {
+            (
+                format!("{} ({})", preset.label, preset.name),
+                preset.settings(),
+            )
+        })
+        .collect();
+    let own = search.settings(&config)?;
+    if candidates.iter().all(|(_, settings)| *settings != own) {
+        candidates.push(("custom".to_owned(), own));
+    }
+    let workers = config.workers();
+    let service = ReviewService::new(config)?;
+    let settings: Vec<SearchSettings> = candidates.iter().map(|(_, s)| *s).collect();
+    eprintln!("timing the settings never used before (a few seconds each)...");
+    let estimates = service
+        .estimate(
+            &selection.username,
+            &selection.filter()?,
+            search.engine,
+            &settings,
+        )
+        .await?;
+    println!("{workers} worker(s)");
+    for ((name, settings), estimate) in candidates.iter().zip(&estimates) {
+        println!(
+            "{name:<24} {:<10} multipv {}  {:>3} game(s) to analyse ({} cached), {:>5} positions, \
+             {:.2} s/position ({}): {}",
+            settings.budget.to_string(),
+            settings.multipv,
+            estimate.pending_games,
+            estimate.cached_games,
+            estimate.positions,
+            estimate.seconds_per_position,
+            if estimate.measured {
+                "measured"
+            } else {
+                "benchmark"
+            },
+            duration(estimate.seconds),
+        );
+    }
+    Ok(())
+}
+
+/// `1 h 05 min`, `3 min 20 s`, `45 s`.
+fn duration(seconds: u64) -> String {
+    match seconds {
+        0..60 => format!("{seconds} s"),
+        60..3600 => format!("{} min {:02} s", seconds / 60, seconds % 60),
+        _ => format!("{} h {:02} min", seconds / 3600, seconds / 60 % 60),
     }
 }
 
@@ -154,7 +238,7 @@ async fn analyse(config: ReviewConfig, request: JobRequest) -> Result<()> {
                 progress.months_done, progress.months_total
             ),
             _ => format!(
-                "{:?}: {} game(s), {} cached, {} analysed, {} failed; positions {}/{} ({})",
+                "{:?}: {} game(s), {} cached, {} analysed, {} failed; positions {}/{} ({}), {}",
                 progress.state,
                 progress.games.len(),
                 progress.games_cached,
@@ -163,6 +247,9 @@ async fn analyse(config: ReviewConfig, request: JobRequest) -> Result<()> {
                 progress.positions_done,
                 progress.positions_total,
                 progress.engine.as_deref().unwrap_or("-"),
+                progress
+                    .eta_secs
+                    .map_or_else(|| "-".to_owned(), |eta| format!("{} left", duration(eta))),
             ),
         };
         // One line per change of stage or game, not per position.

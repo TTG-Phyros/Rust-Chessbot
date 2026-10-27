@@ -50,7 +50,17 @@ const MIGRATIONS: &[&str] = &[
         data       TEXT NOT NULL,      -- chess_review::GameAnalysis (JSON)
         PRIMARY KEY (game_id, engine_key)
     );",
+    // Time the engines take per position, per configuration, for estimates.
+    "CREATE TABLE speeds (
+        engine_key TEXT PRIMARY KEY,
+        positions  REAL NOT NULL,
+        seconds    REAL NOT NULL       -- engine time (one worker) for those positions
+    );",
 ];
+
+/// Above this many positions, older speed measurements weigh less: the
+/// totals are halved, so the average follows changes of the machine.
+const SPEED_HISTORY: f64 = 5_000.0;
 
 /// Version of the stored analyses: bump it when their meaning changes, so
 /// that older ones are not reused.
@@ -436,6 +446,45 @@ impl Store {
         )?;
         Ok(())
     }
+
+    /// Average engine time per position (seconds, one worker) measured
+    /// for the configuration `key`, if any.
+    ///
+    /// # Errors
+    ///
+    /// When SQLite fails.
+    pub fn speed(&self, key: &str) -> Result<Option<f64>, Error> {
+        let totals: Option<(f64, f64)> = self
+            .connection()
+            .query_row(
+                "SELECT positions, seconds FROM speeds WHERE engine_key = ?1",
+                [key],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
+        Ok(totals
+            .filter(|(positions, _)| *positions > 0.0)
+            .map(|(positions, seconds)| seconds / positions))
+    }
+
+    /// Adds a measurement: `positions` analysed in `seconds` of engine time.
+    ///
+    /// # Errors
+    ///
+    /// When SQLite fails.
+    pub fn record_speed(&self, key: &str, positions: f64, seconds: f64) -> Result<(), Error> {
+        if positions <= 0.0 || !seconds.is_finite() || seconds < 0.0 {
+            return Ok(());
+        }
+        self.connection().execute(
+            "INSERT INTO speeds (engine_key, positions, seconds) VALUES (?1, ?2, ?3)
+             ON CONFLICT (engine_key) DO UPDATE SET
+                 positions = CASE WHEN positions > ?4 THEN positions / 2 ELSE positions END + ?2,
+                 seconds   = CASE WHEN positions > ?4 THEN seconds / 2 ELSE seconds END + ?3",
+            params![key, positions, seconds, SPEED_HISTORY],
+        )?;
+        Ok(())
+    }
 }
 
 /// Usernames are compared lowercase.
@@ -621,6 +670,22 @@ mod tests {
             store.latest_analysis("g1").unwrap().map(|a| a.engine),
             Some("chess-bot classic".into())
         );
+    }
+
+    #[test]
+    fn averages_engine_speeds() {
+        let store = Store::in_memory().unwrap();
+        assert_eq!(store.speed("sf").unwrap(), None);
+        store.record_speed("sf", 100.0, 50.0).unwrap();
+        store.record_speed("sf", 100.0, 30.0).unwrap();
+        assert_eq!(store.speed("sf").unwrap(), Some(0.4));
+        store.record_speed("sf", 0.0, 9.0).unwrap();
+        assert_eq!(store.speed("sf").unwrap(), Some(0.4));
+        // A long history: the old measurements count half.
+        store.record_speed("big", 6_000.0, 6_000.0).unwrap();
+        store.record_speed("big", 1_000.0, 4_000.0).unwrap();
+        assert_eq!(store.speed("big").unwrap(), Some(7_000.0 / 4_000.0));
+        assert_eq!(store.speed("other").unwrap(), None);
     }
 
     #[test]

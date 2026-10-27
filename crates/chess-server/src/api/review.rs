@@ -16,6 +16,7 @@ use axum::response::sse::{Event, KeepAlive, Sse};
 use chess_chesscom::{ApiGame, GameFilter, PlayedGame, TimeClass, parse_date};
 use chess_core::{Color, Position};
 use chess_review::{Budget, GameAnalysis, Score, SearchSettings};
+use chess_reviewer::jobs::{MAX_DEPTH, MAX_MULTIPV};
 use chess_reviewer::{EngineKind, Job, JobProgress, JobRequest, JobState, ReviewService};
 use futures_util::Stream;
 use serde::Deserialize;
@@ -23,15 +24,17 @@ use utoipa::IntoParams;
 
 use super::error::ApiError;
 use super::types::review::{
-    ReviewAnalysis, ReviewEngine, ReviewGameSummary, ReviewGameView, ReviewJobState, ReviewJobView,
-    ReviewLine, ReviewMove, ReviewPlayer, ReviewPosition, ReviewRequest, ReviewStarted,
-    TimeClassView,
+    ReviewAnalysis, ReviewEngine, ReviewEstimate, ReviewEstimates, ReviewGameSummary,
+    ReviewGameView, ReviewJobState, ReviewJobView, ReviewLine, ReviewMove, ReviewOptions,
+    ReviewPlayer, ReviewPosition, ReviewPreset, ReviewRequest, ReviewStarted, TimeClassView,
 };
 use super::types::{ErrorResponse, ScoreView};
 use crate::AppState;
 
 /// Games of a review when the request does not say.
 const DEFAULT_GAMES: usize = 20;
+/// Label of the request's own settings among the presets.
+const CUSTOM_LABEL: &str = "Personnalisé";
 /// Least time between two progress events of a stream.
 const EVENT_INTERVAL: Duration = Duration::from_millis(150);
 
@@ -84,24 +87,16 @@ const fn time_class_view(class: TimeClass) -> TimeClassView {
     }
 }
 
-/// Starts reviewing a player's games.
-#[utoipa::path(
-    post,
-    path = "/api/review/jobs",
-    tag = "review",
-    request_body = ReviewRequest,
-    responses(
-        (status = 202, description = "Job started", body = ReviewStarted),
-        (status = 422, description = "Invalid username, dates or settings", body = ErrorResponse),
-        (status = 503, description = "No User-Agent configured for Chess.com", body = ErrorResponse),
-    )
-)]
-pub(super) async fn start(
-    State(state): State<AppState>,
-    Json(request): Json<ReviewRequest>,
-) -> Result<(StatusCode, Json<ReviewStarted>), ApiError> {
-    let service = service(&state)?;
-    let filter = GameFilter {
+const fn engine_kind(engine: ReviewEngine) -> EngineKind {
+    match engine {
+        ReviewEngine::Stockfish => EngineKind::Stockfish,
+        ReviewEngine::Native => EngineKind::Native,
+    }
+}
+
+/// The games a request designates.
+fn filter(request: &ReviewRequest) -> Result<GameFilter, ApiError> {
+    Ok(GameFilter {
         time_classes: request
             .time_classes
             .iter()
@@ -115,27 +110,55 @@ pub(super) async fn start(
         // Inclusive: up to the end of that day.
         until: day(request.until.as_deref(), "until")?.map(|start| start + 86_400),
         rated_only: request.rated_only.unwrap_or(false),
+    })
+}
+
+/// The search settings of a request: its preset (the default one if it
+/// names none), overridden by its own depth, time and lines.
+fn settings(service: &ReviewService, request: &ReviewRequest) -> Result<SearchSettings, ApiError> {
+    let config = service.config();
+    let base = match request.preset.as_deref() {
+        Some(name) => config
+            .preset(name)
+            .ok_or_else(|| ApiError::unprocessable(format!("unknown preset {name:?}")))?
+            .settings(),
+        None => config.search_settings(),
     };
-    let defaults = service.config().search_settings();
-    let settings = SearchSettings {
+    Ok(SearchSettings {
         budget: match (request.depth, request.movetime_ms) {
             (Some(depth), _) => Budget::Depth(depth),
             (None, Some(ms)) => Budget::MoveTimeMs(ms),
-            (None, None) => defaults.budget,
+            (None, None) => base.budget,
         },
         multipv: request
             .multipv
-            .map_or(defaults.multipv, |n| usize::try_from(n).unwrap_or(0)),
-    };
+            .map_or(base.multipv, |n| usize::try_from(n).unwrap_or(0)),
+    })
+}
+
+/// Starts reviewing a player's games.
+#[utoipa::path(
+    post,
+    path = "/api/review/jobs",
+    tag = "review",
+    request_body = ReviewRequest,
+    responses(
+        (status = 202, description = "Job started", body = ReviewStarted),
+        (status = 422, description = "Invalid username, dates, preset or settings", body = ErrorResponse),
+        (status = 503, description = "No User-Agent configured for Chess.com", body = ErrorResponse),
+    )
+)]
+pub(super) async fn start(
+    State(state): State<AppState>,
+    Json(request): Json<ReviewRequest>,
+) -> Result<(StatusCode, Json<ReviewStarted>), ApiError> {
+    let service = service(&state)?;
     let job = service
         .start(JobRequest {
             username: request.username.trim().to_owned(),
-            filter,
-            engine: request.engine.map(|engine| match engine {
-                ReviewEngine::Stockfish => EngineKind::Stockfish,
-                ReviewEngine::Native => EngineKind::Native,
-            }),
-            settings: Some(settings),
+            filter: filter(&request)?,
+            engine: request.engine.map(engine_kind),
+            settings: Some(settings(service, &request)?),
         })
         .map_err(api_error)?;
     Ok((StatusCode::ACCEPTED, Json(ReviewStarted { job_id: job.id })))
@@ -143,6 +166,142 @@ pub(super) async fn start(
 
 fn count(n: usize) -> u32 {
     u32::try_from(n).unwrap_or(u32::MAX)
+}
+
+/// Depth and time of a budget, as the API spells them.
+const fn budget_fields(budget: Budget) -> (Option<u32>, Option<u64>) {
+    match budget {
+        Budget::Depth(depth) => (Some(depth), None),
+        Budget::MoveTimeMs(ms) => (None, Some(ms)),
+        // Not offered by the API: shown as neither.
+        Budget::Nodes(_) => (None, None),
+    }
+}
+
+/// What a review request may choose: presets, engine, limits.
+#[utoipa::path(
+    get,
+    path = "/api/review/options",
+    tag = "review",
+    responses(
+        (status = 200, description = "Presets and limits", body = ReviewOptions),
+        (status = 503, description = "Reviews unavailable", body = ErrorResponse),
+    )
+)]
+pub(super) async fn options(
+    State(state): State<AppState>,
+) -> Result<Json<ReviewOptions>, ApiError> {
+    let service = service(&state)?;
+    let config = service.config();
+    let presets = config
+        .analysis
+        .presets
+        .iter()
+        .map(|preset| {
+            let settings = preset.settings();
+            let (depth, movetime_ms) = budget_fields(settings.budget);
+            ReviewPreset {
+                name: preset.name.clone(),
+                label: preset.label.clone(),
+                depth,
+                movetime_ms,
+                multipv: count(settings.multipv),
+            }
+        })
+        .collect();
+    Ok(Json(ReviewOptions {
+        chesscom_enabled: service.chesscom_enabled(),
+        default_engine: match config.analysis.engine {
+            EngineKind::Stockfish => ReviewEngine::Stockfish,
+            EngineKind::Native => ReviewEngine::Native,
+        },
+        presets,
+        default_preset: config
+            .default_preset()
+            .map(|preset| preset.name.clone())
+            .unwrap_or_default(),
+        workers: count(config.workers()),
+        max_games: count(config.max_games),
+        max_multipv: count(MAX_MULTIPV),
+        max_depth: MAX_DEPTH,
+    }))
+}
+
+/// How long reviewing the requested games would take with each preset
+/// (and with the request's own settings). Brings the games into the cache;
+/// settings never used before are timed on a short benchmark first (a few
+/// seconds).
+#[utoipa::path(
+    post,
+    path = "/api/review/estimate",
+    tag = "review",
+    request_body = ReviewRequest,
+    responses(
+        (status = 200, description = "One estimate per preset", body = ReviewEstimates),
+        (status = 422, description = "Invalid username, dates, preset or settings", body = ErrorResponse),
+        (status = 503, description = "No User-Agent configured for Chess.com", body = ErrorResponse),
+    )
+)]
+pub(super) async fn estimate(
+    State(state): State<AppState>,
+    Json(request): Json<ReviewRequest>,
+) -> Result<Json<ReviewEstimates>, ApiError> {
+    let service = service(&state)?;
+    let config = service.config();
+    let mut candidates: Vec<(Option<String>, String, SearchSettings)> = config
+        .analysis
+        .presets
+        .iter()
+        .map(|preset| {
+            (
+                Some(preset.name.clone()),
+                preset.label.clone(),
+                preset.settings(),
+            )
+        })
+        .collect();
+    let own = settings(service, &request)?;
+    if candidates.iter().all(|(_, _, settings)| *settings != own) {
+        candidates.push((None, CUSTOM_LABEL.to_owned(), own));
+    }
+    let settings: Vec<SearchSettings> = candidates.iter().map(|(_, _, s)| *s).collect();
+    let estimates = service
+        .estimate(
+            request.username.trim(),
+            &filter(&request)?,
+            request.engine.map(engine_kind),
+            &settings,
+        )
+        .await
+        .map_err(api_error)?;
+    let games = estimates
+        .first()
+        .map_or(0, |e| e.cached_games + e.pending_games);
+    let options = candidates
+        .into_iter()
+        .zip(estimates)
+        .map(|((preset, label, settings), estimate)| {
+            let (depth, movetime_ms) = budget_fields(settings.budget);
+            ReviewEstimate {
+                preset,
+                label,
+                depth,
+                movetime_ms,
+                multipv: count(settings.multipv),
+                cached_games: count(estimate.cached_games),
+                pending_games: count(estimate.pending_games),
+                positions: count(estimate.positions),
+                seconds_per_position: estimate.seconds_per_position,
+                measured: estimate.measured,
+                seconds: estimate.seconds,
+            }
+        })
+        .collect();
+    Ok(Json(ReviewEstimates {
+        games: count(games),
+        workers: count(config.workers()),
+        options,
+    }))
 }
 
 fn job_view(job: &Job, progress: JobProgress) -> ReviewJobView {
@@ -165,6 +324,7 @@ fn job_view(job: &Job, progress: JobProgress) -> ReviewJobView {
         positions_done: count(progress.positions_done),
         positions_total: count(progress.positions_total),
         engine: progress.engine,
+        eta_seconds: progress.eta_secs,
         error: progress.error,
     }
 }

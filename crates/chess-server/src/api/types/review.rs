@@ -55,6 +55,9 @@ pub struct ReviewRequest {
     pub rated_only: Option<bool>,
     /// Engine.
     pub engine: Option<ReviewEngine>,
+    /// Preset (`name` of a [`ReviewPreset`]); the default one if absent.
+    /// `depth`, `movetimeMs` and `multipv` override its values.
+    pub preset: Option<String>,
     /// Depth of each search.
     pub depth: Option<u32>,
     /// Time of each search, in milliseconds (instead of a depth).
@@ -62,6 +65,92 @@ pub struct ReviewRequest {
     pub movetime_ms: Option<u64>,
     /// Best lines per position (1 to 5).
     pub multipv: Option<u32>,
+}
+
+/// Named search settings offered to the user.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
+pub struct ReviewPreset {
+    /// Identifier, for requests (`fast`).
+    pub name: String,
+    /// Label (`Rapide`).
+    pub label: String,
+    /// Depth of each search.
+    pub depth: Option<u32>,
+    /// Time of each search, in milliseconds.
+    #[ts(type = "number", optional = nullable)]
+    pub movetime_ms: Option<u64>,
+    /// Best lines per position.
+    pub multipv: u32,
+}
+
+/// `GET /api/review/options`: what a review request may choose.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ReviewOptions {
+    /// Whether Chess.com can be reached (a User-Agent is configured).
+    pub chesscom_enabled: bool,
+    /// Engine used by default.
+    pub default_engine: ReviewEngine,
+    /// The presets, fastest first.
+    pub presets: Vec<ReviewPreset>,
+    /// Preset used by default.
+    pub default_preset: String,
+    /// Games analysed at once.
+    pub workers: u32,
+    /// Most games per review.
+    pub max_games: u32,
+    /// Most lines per position.
+    pub max_multipv: u32,
+    /// Deepest search.
+    pub max_depth: u32,
+}
+
+/// Estimated duration of a review with some settings.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
+pub struct ReviewEstimate {
+    /// The preset, or `null` for the request's own settings.
+    pub preset: Option<String>,
+    /// Label of the preset (`Personnalisé` for the request's own settings).
+    pub label: String,
+    /// Depth of each search.
+    pub depth: Option<u32>,
+    /// Time of each search, in milliseconds.
+    #[ts(type = "number", optional = nullable)]
+    pub movetime_ms: Option<u64>,
+    /// Best lines per position.
+    pub multipv: u32,
+    /// Games already analysed with these settings.
+    pub cached_games: u32,
+    /// Games to analyse.
+    pub pending_games: u32,
+    /// Positions of the games to analyse.
+    pub positions: u32,
+    /// Engine time per position (one worker), in seconds.
+    pub seconds_per_position: f64,
+    /// Whether that time comes from real analyses (else a short benchmark).
+    pub measured: bool,
+    /// Estimated duration, in seconds.
+    #[ts(type = "number")]
+    pub seconds: u64,
+}
+
+/// Reply of `POST /api/review/estimate`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ReviewEstimates {
+    /// Games of the request (cached now: the review starts at once).
+    pub games: u32,
+    /// Workers sharing the analyses.
+    pub workers: u32,
+    /// One estimate per preset, then the request's own settings if they
+    /// differ from every preset.
+    pub options: Vec<ReviewEstimate>,
 }
 
 /// Reply of `POST /api/review/jobs`.
@@ -121,6 +210,9 @@ pub struct ReviewJobView {
     pub positions_total: u32,
     /// Engine analysing the games.
     pub engine: Option<String>,
+    /// Estimated time left while analysing, in seconds.
+    #[ts(type = "number", optional = nullable)]
+    pub eta_seconds: Option<u64>,
     /// Why the job failed.
     pub error: Option<String>,
 }

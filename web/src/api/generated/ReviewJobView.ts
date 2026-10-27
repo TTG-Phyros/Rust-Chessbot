@@ -54,6 +54,10 @@ positionsTotal: number,
  */
 engine?: string | null, 
 /**
+ * Estimated time left while analysing, in seconds.
+ */
+etaSeconds?: number, 
+/**
  * Why the job failed.
  */
 error?: string | null, };

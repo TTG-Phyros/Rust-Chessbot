@@ -89,8 +89,8 @@ Sous Windows : `winget install Rustlang.Rustup Casey.Just OpenJS.NodeJS.LTS`, pl
 | Commande | Effet |
 | --- | --- |
 | `docker compose up` / `just up` | serveur + UI sur <http://localhost:8080> |
-| `just train` (`docker compose --profile train up -d --build`) | UI + entraînement sur GPU (image CUDA), en arrière-plan |
-| `just train-cpu` | UI + entraînement sur CPU (image sans CUDA), en arrière-plan |
+| `just train` (`docker compose --profile train up -d --build`) | UI + démon d'entraînement sur GPU (image CUDA), en arrière-plan ; rien ne démarre avant le lancement depuis l'UI |
+| `just train-cpu` | UI + démon d'entraînement sur CPU (image sans CUDA), en arrière-plan |
 | `just logs [service]` | suit les logs de `train` (par défaut), `train-cpu`, `server` ou `web` |
 | `just down` | arrête tout, entraînement compris (checkpoint écrit) |
 | `just train-run <commande>` | une commande `chess-train` ponctuelle dans l'image CUDA (`match`, `export`…) |
@@ -257,7 +257,7 @@ docker compose --profile train-cpu up    # même chose sans CUDA
 docker compose --profile train stop      # arrêt propre : l'étape en cours se termine, checkpoint écrit
 ```
 
-Le service `train` lance le **démon de contrôle** (`chess-train serve --autostart`). Celui-ci démarre aussitôt le pipeline du dernier réseau ; ensuite, les pages **Entraînement** et **Arène** de l'UI le pilotent via `chess-server`. C'est le démon qui écrit dans `data/` ; le serveur ne fait que lire. Le pipeline fait tourner **le self-play sur les cœurs CPU** (producteur) et **l'entraînement sur le GPU** (consommateur) en même temps :
+Le service `train` lance le **démon de contrôle** (`chess-train serve`). Celui-ci reste en attente : rien ne s'entraîne tant qu'on ne lance pas un run depuis la page **Entraînement** ; les pages **Entraînement** et **Arène** de l'UI le pilotent via `chess-server`. Avec `--autostart`, le démon démarre aussitôt le pipeline du dernier réseau. C'est le démon qui écrit dans `data/` ; le serveur ne fait que lire. Le pipeline fait tourner **le self-play sur les cœurs CPU** (producteur) et **l'entraînement sur le GPU** (consommateur) en même temps :
 
 1. **Self-play.** Le moteur joue contre lui-même (rayon, un searcher par thread) après 6 à 10 coups aléatoires, à 5 000 nœuds par coup, **avec le dernier réseau exporté**. Il le recharge dès qu'un nouvel export paraît, et utilise PeSTO tant qu'il n'y en a pas. On ne garde que les positions calmes : pas d'échec, meilleur coup non tactique. Une partie s'arrête par adjudication quand les deux camps s'accordent sur le résultat.
 2. **Dataset.** Chaque position est un enregistrement fixe de 32 octets (format `CBDS` v1, décrit dans `crates/chess-train/src/dataset/mod.rs`), écrit par fichiers d'un million de positions publiés de façon atomique. Les datasets vivent dans le volume Docker `datasets`.

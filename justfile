@@ -38,11 +38,11 @@ up:
 down:
     docker compose --profile train --profile train-cpu down
 
-# UI + API + training on the NVIDIA GPU, in the background (start/stop from the Training page)
+# UI + API + training daemon on the NVIDIA GPU, in the background; idle until started from the Training page
 train:
     docker compose --profile train up -d --build
 
-# UI + API + training on the CPU (image without CUDA), in the background
+# UI + API + training daemon on the CPU (image without CUDA), in the background; idle until started
 train-cpu:
     docker compose --profile train-cpu up -d --build
 

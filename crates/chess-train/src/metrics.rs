@@ -1,8 +1,8 @@
 //! Training metrics for `chess-server` and the UI.
 //!
 //! Two files in `<data_dir>/metrics/`:
-//! - `events.jsonl`: one JSON object per line (`selfplay`, `superbatch`,
-//!   `checkpoint`, ... events), appended;
+//! - `events.jsonl`: one JSON object per line (`dataset`, `superbatch`,
+//!   `checkpoint`, `export` and `match` events), appended;
 //! - `status.json`: the current state of the run, rewritten atomically.
 
 use std::fs::{File, OpenOptions};

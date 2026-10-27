@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { ApiError, api } from './client';
+import { api } from './client';
 import type { AnalysisInfo } from './generated/AnalysisInfo';
 import type { ArenaView } from './generated/ArenaView';
 import type { EngineLimits } from './generated/EngineLimits';
@@ -178,8 +178,6 @@ export function useAnalysis(): AnalysisState & {
 
   return { ...state, socket: status, analyze, stop };
 }
-
-export { ApiError };
 
 const TRAINING_POLL_MS = 3_000;
 

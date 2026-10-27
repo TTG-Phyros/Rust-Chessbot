@@ -11,7 +11,7 @@
 //! - `GET /networks/defaults` → the hyperparameters of a new network
 //! - `POST /networks` (`{"name", "params"}`) → 201; `DELETE /networks/{name}` → 204
 //! - `POST /bots` (`{"name", "network", "superbatch"}`) → 201; `DELETE /bots/{name}` → 204
-//! - `POST /tournaments` (`{"bots", "gamesPerPair", "limit", "threads"}`) → 202
+//! - `POST /tournaments` (`{"bots", "gamesPerPair", "limit", "threads", "pairings"}`) → 202
 //! - `POST /tournaments/stop` → 202
 //!
 //! Errors are `{"error": "..."}` with 404, 409 or 422. Progress itself is

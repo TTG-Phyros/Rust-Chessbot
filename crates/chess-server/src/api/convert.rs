@@ -102,7 +102,7 @@ pub(crate) fn position_view(replayed: &Replayed) -> PositionView {
     }
 }
 
-/// Converts a score of the side to move of `pos` into White's point of view.
+/// Converts a score for `side_to_move` into White's point of view.
 pub(crate) const fn white_score(score: Score, side_to_move: Color) -> ScoreView {
     let sign = side_to_move.sign();
     match score {

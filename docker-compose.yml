@@ -13,7 +13,8 @@ x-train-common: &train-common
     RUST_LOG:
     # Name of the training run (datasets, checkpoints, weights); default "main".
     CHESS_TRAIN_RUN:
-    # Any setting of chess-train.toml, e.g. CHESS_TRAIN_SELFPLAY__NODES=8000.
+    # Configuration file inside the container, e.g. /data/chess-train.toml (./data
+    # on the host). Other CHESS_TRAIN_* settings only reach the container if listed here.
     CHESS_TRAIN_CONFIG:
   # SIGTERM finishes the current step and writes a checkpoint: give it time.
   stop_grace_period: 2m

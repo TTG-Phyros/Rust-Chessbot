@@ -17,7 +17,7 @@ import type { EloPoint } from '../../api/generated/EloPoint';
 import type { LossPoint } from '../../api/generated/LossPoint';
 import { eloBand, formatCount, formatElo } from './format';
 
-/** Categorical slot 1 (dark step), validated on the panel surface. */
+/** Color of the data series (lines and Elo band), readable on the dark panels. */
 const SERIES = '#3987e5';
 const GRID = '#334155';
 const AXIS = '#94a3b8';

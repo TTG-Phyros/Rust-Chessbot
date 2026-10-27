@@ -9,7 +9,6 @@ use anyhow::{Context, Result};
 use burn::optim::{AdamWConfig, GradientsParams, ModuleOptimizer, OptimizerRecord};
 use burn::prelude::*;
 use burn::tensor::activation::sigmoid;
-
 use chess_search::StopFlag;
 use serde::{Deserialize, Serialize};
 use serde_json::json;

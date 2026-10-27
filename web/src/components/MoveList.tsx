@@ -1,5 +1,4 @@
-import type { MoveCell } from '../lib/game';
-import { moveRows } from '../lib/game';
+import { type MoveCell, moveRows } from '../lib/game';
 
 type MoveListProps = {
   history: readonly string[];

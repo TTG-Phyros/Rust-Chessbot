@@ -18,7 +18,7 @@ test:
     cargo test --workspace
     npm --prefix web test
 
-# Run the full perft suite (deep reference counts, ~760M nodes) in release mode
+# Run the full perft suite (deep reference counts, ~790M nodes) in release mode
 perft:
     cargo test --release -p chess-core --test perft -- --include-ignored
 

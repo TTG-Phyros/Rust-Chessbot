@@ -38,7 +38,7 @@ export function stockfishLevel(name: string): number | null {
   return match ? Number(match[1]) : null;
 }
 
-/** `niveau 5 : skill 8, profondeur 5, 300 ms par coup`. */
+/** `niveau 5 : skill 8/20, profondeur 5, 300 ms par coup`. */
 export function describeLevel({ level, skill, depth, movetimeMs }: StockfishLevel): string {
   return `niveau ${String(level)} : skill ${String(skill)}/20, profondeur ${String(depth)}, ${String(movetimeMs)} ms par coup`;
 }

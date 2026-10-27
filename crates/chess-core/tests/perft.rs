@@ -6,7 +6,7 @@
 //!
 //! `cargo test` runs the fast depths; `just perft` (or
 //! `cargo test --release -p chess-core --test perft -- --include-ignored`)
-//! also runs the deep ones (about 1 billion leaf nodes).
+//! also runs the deep ones (about 790 million leaf nodes).
 
 // Test helpers outside `#[test]` functions are not covered by clippy.toml.
 #![allow(clippy::panic, clippy::unwrap_used, clippy::expect_used)]

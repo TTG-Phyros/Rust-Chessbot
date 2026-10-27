@@ -22,7 +22,7 @@ export function ServerStatus() {
         : 'API hors ligne';
 
   return (
-    <div className="flex items-center gap-4 text-xs text-slate-400" data-testid="server-status">
+    <div className="flex items-center gap-4 text-xs text-slate-400">
       <span
         className="flex items-center gap-1.5"
         title={health.kind === 'error' ? health.message : ''}

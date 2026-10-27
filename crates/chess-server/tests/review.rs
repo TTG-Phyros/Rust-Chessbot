@@ -16,7 +16,7 @@ use chess_server::AppState;
 use chess_server::api::router;
 use chess_server::api::types::ScoreView;
 use chess_server::api::types::review::{
-    ReviewEstimates, ReviewGameSummary, ReviewGameView, ReviewJobState, ReviewJobView,
+    ReviewClass, ReviewEstimates, ReviewGameSummary, ReviewGameView, ReviewJobState, ReviewJobView,
     ReviewOptions, ReviewStarted,
 };
 use serde::de::DeserializeOwned;
@@ -184,6 +184,18 @@ async fn reviews_a_player_and_streams_the_progress() {
     assert_eq!(before_mate.score, ScoreView::Mate { moves: -1 });
     assert_eq!(before_mate.lines[0].san[0], "Qh4#");
     assert!(analysis.positions[4].checkmated);
+    // White's chances are gone once Black mates in one.
+    assert!(analysis.positions[3].win.abs() < 1e-9);
+    assert!(analysis.positions[4].win.abs() < 1e-9);
+    // Every move is theory, but 2. g4?? still costs White the game.
+    assert_eq!(analysis.moves.len(), 4);
+    assert!(analysis.moves.iter().all(|m| m.class == ReviewClass::Book));
+    assert!(analysis.moves[2].win_after.abs() < 1e-9);
+    assert!(analysis.moves[2].accuracy < 10.0);
+    assert_eq!(analysis.white.moves, 2);
+    assert_eq!(analysis.white.counts.book, 2);
+    assert!(analysis.white.accuracy.unwrap() < analysis.black.accuracy.unwrap());
+    assert!(analysis.white.acpl.unwrap() > 400.0);
 }
 
 #[tokio::test]

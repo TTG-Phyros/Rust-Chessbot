@@ -309,21 +309,107 @@ pub struct ReviewLine {
 }
 
 /// Analysis of one position (the start, then after each move).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, ToSchema)]
 #[ts(export)]
 pub struct ReviewPosition {
     /// FEN of the position.
     pub fen: String,
     /// Evaluation, from White's point of view (the best line's).
     pub score: ScoreView,
+    /// White's winning chances, from 0 to 100 (the evaluation graph).
+    pub win: f64,
     /// The side to move is checkmated (then `score` is a mate in 0).
     pub checkmated: bool,
     /// The best lines, best first (none when the game is over).
     pub lines: Vec<ReviewLine>,
 }
 
+/// Class of a move, from the best to the worst.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum ReviewClass {
+    /// A sound sacrifice.
+    Brilliant,
+    /// The only good move.
+    Great,
+    /// The engine's best move, or as good.
+    Best,
+    /// Nearly as good as the best.
+    Excellent,
+    /// A sound move.
+    Good,
+    /// Opening theory.
+    Book,
+    /// Some advantage lost.
+    Inaccuracy,
+    /// A clear advantage lost.
+    Mistake,
+    /// A winning chance offered by the opponent, let go.
+    Miss,
+    /// A decisive advantage lost.
+    Blunder,
+}
+
+/// How good a move was.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ReviewVerdict {
+    /// Its class.
+    pub class: ReviewClass,
+    /// Winning chances (0-100) of the player before the move, with the best move.
+    pub win_before: f64,
+    /// Their winning chances after it.
+    pub win_after: f64,
+    /// Accuracy of the move, from 0 to 100.
+    pub accuracy: f64,
+    /// Centipawns lost.
+    pub cp_loss: i32,
+}
+
+/// Number of moves of each class.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
+#[ts(export)]
+pub struct ReviewClassCounts {
+    /// Brilliant moves.
+    pub brilliant: u32,
+    /// Great moves.
+    pub great: u32,
+    /// Best moves.
+    pub best: u32,
+    /// Excellent moves.
+    pub excellent: u32,
+    /// Good moves.
+    pub good: u32,
+    /// Book moves.
+    pub book: u32,
+    /// Inaccuracies.
+    pub inaccuracy: u32,
+    /// Mistakes.
+    pub mistake: u32,
+    /// Misses.
+    pub miss: u32,
+    /// Blunders.
+    pub blunder: u32,
+}
+
+/// How one player played a game.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, ToSchema)]
+#[ts(export, optional_fields = nullable)]
+pub struct ReviewPlayerStats {
+    /// Moves played.
+    pub moves: u32,
+    /// Accuracy over the game, from 0 to 100 (as on Lichess).
+    pub accuracy: Option<f64>,
+    /// Average centipawn loss.
+    pub acpl: Option<f64>,
+    /// Moves of each class.
+    pub counts: ReviewClassCounts,
+}
+
 /// The engine analysis of a game.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, ToSchema)]
 #[ts(export)]
 pub struct ReviewAnalysis {
     /// Engine that analysed it.
@@ -334,10 +420,16 @@ pub struct ReviewAnalysis {
     pub multipv: u32,
     /// One entry per position: one more than the moves.
     pub positions: Vec<ReviewPosition>,
+    /// One verdict per move.
+    pub moves: Vec<ReviewVerdict>,
+    /// How White played.
+    pub white: ReviewPlayerStats,
+    /// How Black played.
+    pub black: ReviewPlayerStats,
 }
 
 /// `GET /api/review/games/{id}`: a game with its analysis, if any.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, optional_fields = nullable)]
 pub struct ReviewGameView {

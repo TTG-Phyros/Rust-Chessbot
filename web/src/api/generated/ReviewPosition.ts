@@ -15,6 +15,10 @@ fen: string,
  */
 score: ScoreView, 
 /**
+ * White's winning chances, from 0 to 100 (the evaluation graph).
+ */
+win: number, 
+/**
  * The side to move is checkmated (then `score` is a mate in 0).
  */
 checkmated: boolean, 

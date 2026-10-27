@@ -69,3 +69,32 @@ hash_mb = 64
 # Network used when it exists; classical evaluation otherwise.
 eval_file = "data/weights/main.nnue"
 hash_mb = 64
+
+# Classification of the moves. Every move is judged by the winning chances
+# (0-100, Lichess's curve over the evaluation) it loses against the best
+# move; the bands are Chess.com's (0.02, 0.05, 0.10 and 0.20 expected points).
+[classification]
+# Most a move may lose to be Best, Excellent, Good, an Inaccuracy, a Mistake;
+# a Blunder loses more.
+best = 0.5
+excellent = 2.0
+good = 5.0
+inaccuracy = 10.0
+mistake = 20.0
+# Chances from which a position is won, and up to which it is lost.
+winning = 70.0
+losing = 30.0
+# Great: the best move, ahead of the second line by at least this much, the
+# second line leading to another outcome (won, drawn, lost). Obvious moves
+# are never Great: recaptures, taking a hanging piece, saving an attacked
+# piece, answering a check that leaves two moves at most.
+only_move = 10.0
+# Brilliant: a move losing at most brilliant_loss that gives away at least
+# `sacrifice` centipawns of material (what the opponent can then win by a
+# capture, less what the move takes, less what was hanging already); not
+# when the chances were `won` already, nor when they are still lost after.
+sacrifice = 200
+brilliant_loss = 2.0
+won = 90.0
+# Miss: after an opponent's Mistake or Blunder had given a won position, a
+# move losing more than an Inaccuracy, without losing the game.

@@ -16,7 +16,9 @@ use axum::response::sse::{Event, KeepAlive, Sse};
 use chess_chesscom::{ApiGame, GameFilter, PlayedGame, TimeClass, parse_date};
 use chess_core::{Color, Position};
 use chess_openings::Book;
-use chess_review::{Budget, GameAnalysis, Score, SearchSettings};
+use chess_review::{
+    Budget, GameAnalysis, GameReview, MoveClass, PlayerReview, Score, SearchSettings, review_game,
+};
 use chess_reviewer::jobs::{MAX_DEPTH, MAX_MULTIPV};
 use chess_reviewer::{EngineKind, Job, JobProgress, JobRequest, JobState, ReviewService};
 use futures_util::Stream;
@@ -25,10 +27,10 @@ use utoipa::IntoParams;
 
 use super::error::ApiError;
 use super::types::review::{
-    ReviewAnalysis, ReviewEngine, ReviewEstimate, ReviewEstimates, ReviewGameSummary,
-    ReviewGameView, ReviewJobState, ReviewJobView, ReviewLine, ReviewMove, ReviewOpening,
-    ReviewOptions, ReviewPlayer, ReviewPosition, ReviewPreset, ReviewRequest, ReviewStarted,
-    TimeClassView,
+    ReviewAnalysis, ReviewClass, ReviewClassCounts, ReviewEngine, ReviewEstimate, ReviewEstimates,
+    ReviewGameSummary, ReviewGameView, ReviewJobState, ReviewJobView, ReviewLine, ReviewMove,
+    ReviewOpening, ReviewOptions, ReviewPlayer, ReviewPlayerStats, ReviewPosition, ReviewPreset,
+    ReviewRequest, ReviewStarted, ReviewVerdict, TimeClassView,
 };
 use super::types::{ErrorResponse, ScoreView};
 use crate::AppState;
@@ -547,7 +549,8 @@ pub(super) async fn game(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<ReviewGameView>, ApiError> {
-    let store = service(&state)?.store();
+    let service = service(&state)?;
+    let store = service.store();
     let api = store
         .game(&id)
         .map_err(api_error)?
@@ -571,9 +574,20 @@ pub(super) async fn game(
         });
         position.make_move(mv);
     }
-    let analysis = analysis
-        .filter(|analysis| analysis.positions.len() == moves.len() + 1)
-        .map(|analysis| analysis_view(&played, &analysis));
+    let analysis = match analysis.filter(|analysis| analysis.positions.len() == moves.len() + 1) {
+        Some(analysis) => {
+            let review = review_game(
+                &start,
+                played.game.moves(),
+                &analysis.positions,
+                book,
+                &service.config().classification,
+            )
+            .map_err(|err| ApiError::internal(format!("cannot review game {id}: {err}")))?;
+            Some(analysis_view(&played, &analysis, &review))
+        }
+        None => None,
+    };
     Ok(Json(ReviewGameView {
         game: summary(&api, analysis.is_some()),
         start_fen: start.to_fen(),
@@ -595,7 +609,11 @@ const fn white_view(score: Score, to_move: Color) -> ScoreView {
     }
 }
 
-fn analysis_view(played: &PlayedGame, analysis: &GameAnalysis) -> ReviewAnalysis {
+fn analysis_view(
+    played: &PlayedGame,
+    analysis: &GameAnalysis,
+    review: &GameReview,
+) -> ReviewAnalysis {
     let mut position = played.game.start().clone();
     let mut positions = Vec::with_capacity(analysis.positions.len());
     for (ply, eval) in analysis.positions.iter().enumerate() {
@@ -606,6 +624,7 @@ fn analysis_view(played: &PlayedGame, analysis: &GameAnalysis) -> ReviewAnalysis
         positions.push(ReviewPosition {
             fen: position.to_fen(),
             score: white_view(eval.score(), to_move),
+            win: review.white_wins.get(ply).copied().unwrap_or(50.0),
             checkmated: eval.checkmated,
             lines: eval
                 .lines
@@ -624,6 +643,55 @@ fn analysis_view(played: &PlayedGame, analysis: &GameAnalysis) -> ReviewAnalysis
         budget: analysis.settings.budget.to_string(),
         multipv: count(analysis.settings.multipv),
         positions,
+        moves: review
+            .moves
+            .iter()
+            .map(|verdict| ReviewVerdict {
+                class: class_view(verdict.class),
+                win_before: verdict.win_before,
+                win_after: verdict.win_after,
+                accuracy: verdict.accuracy,
+                cp_loss: verdict.cp_loss,
+            })
+            .collect(),
+        white: player_stats(review.player(Color::White)),
+        black: player_stats(review.player(Color::Black)),
+    }
+}
+
+const fn class_view(class: MoveClass) -> ReviewClass {
+    match class {
+        MoveClass::Brilliant => ReviewClass::Brilliant,
+        MoveClass::Great => ReviewClass::Great,
+        MoveClass::Best => ReviewClass::Best,
+        MoveClass::Excellent => ReviewClass::Excellent,
+        MoveClass::Good => ReviewClass::Good,
+        MoveClass::Book => ReviewClass::Book,
+        MoveClass::Inaccuracy => ReviewClass::Inaccuracy,
+        MoveClass::Mistake => ReviewClass::Mistake,
+        MoveClass::Miss => ReviewClass::Miss,
+        MoveClass::Blunder => ReviewClass::Blunder,
+    }
+}
+
+fn player_stats(player: &PlayerReview) -> ReviewPlayerStats {
+    let counts = &player.counts;
+    ReviewPlayerStats {
+        moves: player.moves,
+        accuracy: player.accuracy,
+        acpl: player.acpl,
+        counts: ReviewClassCounts {
+            brilliant: counts.get(MoveClass::Brilliant),
+            great: counts.get(MoveClass::Great),
+            best: counts.get(MoveClass::Best),
+            excellent: counts.get(MoveClass::Excellent),
+            good: counts.get(MoveClass::Good),
+            book: counts.get(MoveClass::Book),
+            inaccuracy: counts.get(MoveClass::Inaccuracy),
+            mistake: counts.get(MoveClass::Mistake),
+            miss: counts.get(MoveClass::Miss),
+            blunder: counts.get(MoveClass::Blunder),
+        },
     }
 }
 

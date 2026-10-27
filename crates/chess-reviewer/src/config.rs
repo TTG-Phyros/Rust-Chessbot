@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use chess_chesscom::ClientConfig;
-use chess_review::{Budget, EngineSpec, SearchSettings};
+use chess_review::{Budget, EngineSpec, SearchSettings, Thresholds};
 use figment::Figment;
 use figment::providers::{Env, Format, Serialized, Toml};
 use serde::{Deserialize, Serialize};
@@ -18,7 +18,7 @@ pub const CONFIG_PATH_ENV: &str = "CHESS_REVIEW_CONFIG";
 pub const DEFAULT_CONFIG_PATH: &str = "config/review.toml";
 
 /// Settings of the reviews.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ReviewConfig {
     /// `User-Agent` sent to Chess.com: the application and a contact
@@ -37,6 +37,8 @@ pub struct ReviewConfig {
     pub stockfish: StockfishConfig,
     /// Our own engine.
     pub native: NativeConfig,
+    /// Classification of the moves.
+    pub classification: Thresholds,
 }
 
 /// Which engine analyses the games.
@@ -203,6 +205,7 @@ impl Default for ReviewConfig {
             analysis: AnalysisConfig::default(),
             stockfish: StockfishConfig::default(),
             native: NativeConfig::default(),
+            classification: Thresholds::default(),
         }
     }
 }
@@ -231,7 +234,12 @@ impl ReviewConfig {
     /// When the file or a variable holds an invalid value.
     pub fn load() -> Result<Self, Box<figment::Error>> {
         let path = std::env::var(CONFIG_PATH_ENV).unwrap_or_else(|_| DEFAULT_CONFIG_PATH.into());
-        Self::figment(&path).extract().map_err(Box::new)
+        let config: Self = Self::figment(&path).extract().map_err(Box::new)?;
+        config
+            .classification
+            .check()
+            .map_err(|message| Box::new(figment::Error::from(message)))?;
+        Ok(config)
     }
 
     fn figment(path: &str) -> Figment {
@@ -359,6 +367,7 @@ mod tests {
             jail.set_env("CHESS_REVIEW_CHESSCOM__MAX_RETRIES", "7");
             jail.set_env("CHESS_REVIEW_ANALYSIS__ENGINE", "native");
             jail.set_env("CHESS_REVIEW_ANALYSIS__PRESET", "FAST");
+            jail.set_env("CHESS_REVIEW_CLASSIFICATION__MISTAKE", "25");
             let config: ReviewConfig = ReviewConfig::figment("review.toml").extract()?;
             assert_eq!(config.user_agent, "app/1 (me@example.com)");
             assert_eq!(config.chesscom.max_retries, 7);
@@ -370,6 +379,8 @@ mod tests {
                 Some("Rapide")
             );
             assert_eq!(config.preset("nope"), None);
+            assert!((config.classification.mistake - 25.0).abs() < f64::EPSILON);
+            assert_eq!(config.classification.check(), Ok(()));
             assert!(matches!(
                 config.engine_spec(EngineKind::Stockfish),
                 EngineSpec::Stockfish { threads: 1, .. }

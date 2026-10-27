@@ -15,10 +15,10 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result, bail};
 use chess_chesscom::{ApiGame, Client, GameFilter, PlayedGame, TimeClass, parse_date};
 use chess_core::Color;
-use chess_review::{Budget, Score, SearchSettings};
+use chess_review::{Budget, MoveClass, PlayerReview, Score, SearchSettings, review_game};
 use chess_reviewer::{
     EngineKind, JobRequest, JobState, MonthSource, ReviewConfig, ReviewService, Store, SyncEvent,
-    sync_player,
+    analysis_key, sync_player,
 };
 use clap::{Parser, Subcommand};
 use tracing_subscriber::EnvFilter;
@@ -225,6 +225,7 @@ fn duration(seconds: u64) -> String {
 
 async fn analyse(config: ReviewConfig, request: JobRequest) -> Result<()> {
     let workers = config.workers();
+    let settings = request.settings.unwrap_or_else(|| config.search_settings());
     let service = Arc::new(ReviewService::new(config)?);
     let started = Instant::now();
     let job = service.start(request)?;
@@ -271,29 +272,68 @@ async fn analyse(config: ReviewConfig, request: JobRequest) -> Result<()> {
     if let Some(error) = &progress.error {
         bail!("{error}");
     }
-    let Some(id) = progress.games.first() else {
+    // The analyses of these settings, by this engine.
+    let Some(key) = progress
+        .engine
+        .as_deref()
+        .map(|engine| analysis_key(engine, &settings))
+    else {
         return Ok(());
     };
-    let (Some(api), Some(analysis)) = (
-        service.store().game(id)?,
-        service.store().latest_analysis(id)?,
-    ) else {
+    let store = service.store();
+    let mut reviewed = Vec::new();
+    for id in &progress.games {
+        let (Some(api), Some(analysis)) = (store.game(id)?, store.analysis(id, &key)?) else {
+            continue;
+        };
+        let game = PlayedGame::from_api(&api)?;
+        let book = chess_openings::Book::lichess()
+            .classify(game.game.start(), game.game.moves())
+            .book_plies;
+        let review = review_game(
+            game.game.start(),
+            game.game.moves(),
+            &analysis.positions,
+            book,
+            &service.config().classification,
+        )?;
+        let accuracy = |color| {
+            review
+                .player(color)
+                .accuracy
+                .map_or_else(|| "-".to_owned(), |accuracy| format!("{accuracy:.1}"))
+        };
+        println!(
+            "{}  {} {} - {} {}  {:<7}  accuracy {} / {}{}",
+            game.url,
+            game.white.username,
+            game.white.rating,
+            game.black.username,
+            game.black.rating,
+            game.result.as_str(),
+            accuracy(Color::White),
+            accuracy(Color::Black),
+            game.chesscom_accuracies
+                .map_or_else(String::new, |(white, black)| format!(
+                    "  (Chess.com {white:.1} / {black:.1})"
+                )),
+        );
+        reviewed.push((game, analysis, review));
+    }
+    let Some((game, analysis, review)) = reviewed.into_iter().next() else {
         return Ok(());
     };
-    let game = PlayedGame::from_api(&api)?;
     println!(
-        "{}  ({} {} - {} {})  {}\n{} | {}",
+        "\n{}  ({} - {})\n{} | {}",
         game.url,
         game.white.username,
-        game.white.rating,
         game.black.username,
-        game.black.rating,
-        game.result.as_str(),
         analysis.engine,
         analysis.settings.budget,
     );
     let mut position = game.game.start().clone();
     for (ply, &mv) in game.game.moves().iter().enumerate() {
+        let verdict = &review.moves[ply];
         let before = &analysis.positions[ply];
         let after = &analysis.positions[ply + 1];
         let mover = position.side_to_move();
@@ -315,12 +355,40 @@ async fn analyse(config: ReviewConfig, request: JobRequest) -> Result<()> {
             format!("{}...", ply / 2 + 1)
         };
         println!(
-            "{number:>6} {san:<8} eval {:>8}   best was {best:<8} ({})",
+            "{number:>6} {san:<8} {:<10} eval {:>8}   best was {best:<8} ({})  accuracy {:>5.1}",
+            verdict.class.name(),
             show(white(after.score(), !mover)),
             show(white(before.score(), mover)),
+            verdict.accuracy,
         );
     }
+    for (color, name) in [
+        (Color::White, &game.white.username),
+        (Color::Black, &game.black.username),
+    ] {
+        println!("{name}: {}", player_summary(review.player(color)));
+    }
     Ok(())
+}
+
+/// Accuracy, ACPL and the number of moves of each class.
+fn player_summary(player: &PlayerReview) -> String {
+    let mut summary = format!(
+        "accuracy {}, ACPL {}",
+        player
+            .accuracy
+            .map_or_else(|| "-".to_owned(), |accuracy| format!("{accuracy:.1}")),
+        player
+            .acpl
+            .map_or_else(|| "-".to_owned(), |acpl| format!("{acpl:.0}")),
+    );
+    for class in MoveClass::ALL {
+        let count = player.counts.get(class);
+        if count > 0 {
+            summary.push_str(&format!(", {count} {}", class.name()));
+        }
+    }
+    summary
 }
 
 fn show(score: Score) -> String {

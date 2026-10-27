@@ -6,9 +6,9 @@ Moteur d'échecs en Rust qui apprend en jouant contre lui-même :
 2. **Entraînement** : self-play et entraînement d'un réseau NNUE avec [burn](https://burn.dev), sur GPU NVIDIA avec repli automatique sur le CPU.
 3. **Visualisation** : interface web (React + TypeScript) pour jouer, analyser et piloter l'entraînement.
 
-| Jouer | Analyser | Entraîner |
-| --- | --- | --- |
-| [![Jouer](docs/screenshots/play.png)](docs/screenshots/play.png) | [![Analyser](docs/screenshots/analysis.png)](docs/screenshots/analysis.png) | [![Entraîner](docs/screenshots/training.png)](docs/screenshots/training.png) |
+| Jouer | Analyser | Entraîner | Arène |
+| --- | --- | --- | --- |
+| [![Jouer](docs/screenshots/play.png)](docs/screenshots/play.png) | [![Analyser](docs/screenshots/analysis.png)](docs/screenshots/analysis.png) | [![Entraîner](docs/screenshots/training.png)](docs/screenshots/training.png) | [![Arène](docs/screenshots/arena.png)](docs/screenshots/arena.png) |
 
 ## Sommaire
 
@@ -163,15 +163,16 @@ Le niveau de log se règle avec `RUST_LOG` (ex. `RUST_LOG=debug`).
 
 <http://localhost:8080> (Docker) ou <http://localhost:5173> (`just web-dev`).
 
-- **Jouer** : échiquier en glisser-déposer ou clic-clic, choix de la couleur (blancs, noirs, aléatoire), niveau réglable en profondeur (1 à 20) ou en temps par coup (0,1 à 10 s), annulation de coup, import/export FEN et PGN.
-- **Analyse** : barre d'évaluation, score, ligne principale en SAN, flèche du meilleur coup, infos de recherche en direct (profondeur, nœuds, vitesse, remplissage de la table). L'analyse est relancée à chaque coup. On navigue dans la partie avec les flèches ← → (Origine et Fin pour aller au début ou à la fin), ou en cliquant dans la liste des coups.
-- **Entraînement** : liste des réseaux de neurones, avec leurs hyperparamètres et leur meilleur Elo. « Nouveau réseau » ouvre un formulaire : nom, hyperparamètres (pré-remplis avec les valeurs par défaut ou celles d'un autre réseau, ou **tirés au hasard** avec « Hyperparamètres aléatoires ») et réseaux dont on réutilise les parties. Pour le réseau sélectionné, on trouve :
-  - son état (device, phase, parties, positions, superbatchs, perte, vitesse, VRAM) ;
+- **Jouer** : échiquier en perspective (clic-clic) ou à plat (glisser-déposer aussi), choix de la couleur (blancs, noirs, aléatoire), niveau réglable en profondeur (1 à 20) ou en temps par coup (0,1 à 10 s), annulation de coup, **indice** (flèche du meilleur coup), import/export FEN et PGN. Autour du plateau : le réseau joué par le bot, son inférence (profondeur, nœuds, vitesse, suite prévue, masquable jusqu'à votre coup), son évaluation coup après coup et le temps de réflexion de chaque camp.
+- **Analyse** : barre d'évaluation, score, ligne principale en SAN, flèches du meilleur coup et de la réponse attendue, infos de recherche en direct (profondeur, nœuds, vitesse, remplissage de la table), nœuds par profondeur et courbe d'évaluation de la partie (un clic y amène). L'analyse est relancée à chaque coup. On navigue dans la partie avec les flèches ← → (Origine et Fin pour aller au début ou à la fin), ou en cliquant dans la liste des coups.
+- **Entraînement** : les réseaux de neurones en cartes, avec leur meilleur Elo. Si le service est arrêté, un bandeau donne la commande pour le lancer. « Nouveau réseau » ouvre un formulaire : nom, hyperparamètres (pré-remplis avec les valeurs par défaut ou celles d'un autre réseau, ou **tirés au hasard** avec « Hyperparamètres aléatoires ») et réseaux dont on réutilise les parties. Pour le réseau sélectionné, on trouve :
+  - son meilleur Elo contre PeSTO et son état (device, phase, parties, positions, superbatchs, perte, vitesse, VRAM) ;
+  - sa fiche technique (hyperparamètres) ;
   - son **top 5** des snapshots, chacun sauvegardable comme bot ;
   - ses courbes de perte et d'Elo contre PeSTO ;
   - les boutons « Démarrer / reprendre », « Arrêter », « Repartir de zéro » et « Supprimer » ;
   - un **minuteur** : on démarre pour une durée donnée (15 min à 24 h, ou un nombre de minutes au choix, jusqu'à une semaine). À l'échéance, l'entraînement s'arrête comme avec « Arrêter » : il finit l'étape en cours, écrit un checkpoint et exporte le réseau. Pendant l'entraînement, un compte à rebours indique l'heure d'arrêt ; on peut la modifier ou retirer le minuteur.
-- **Arène** : les bots sauvegardés, plus PeSTO et **Stockfish niveaux 1 à 10**, et les **tournois** toutes-rondes entre eux : choix des participants, des parties par paire et de la réflexion de nos bots (nœuds, profondeur ou temps par coup). La **table croisée des participants** permet d'activer ou de désactiver chaque combat avant le lancement, par exemple pour ne faire jouer tes réseaux que contre Stockfish. Un clic sur un nom bascule tous ses combats, et des boutons permettent de tout activer ou de tout désactiver. Avant le lancement, le formulaire affiche la **durée estimée** du tournoi. Une fois lancé, un tournoi affiche sa progression en direct, un classement Elo, une table croisée et l'historique des tournois.
+- **Arène** : les bots sauvegardés, plus PeSTO et **Stockfish niveaux 1 à 10**, et les **tournois** toutes-rondes entre eux : choix des participants, des parties par paire et de la réflexion de nos bots (nœuds, profondeur ou temps par coup). La **table croisée des participants** permet d'activer ou de désactiver chaque combat avant le lancement, par exemple pour ne faire jouer tes réseaux que contre Stockfish. Un clic sur un nom bascule tous ses combats, et des boutons permettent de tout activer ou de tout désactiver. Avant le lancement, le formulaire affiche la **durée estimée** du tournoi. Une fois lancé, un tournoi affiche sa progression en direct, un résumé (par exemple « main-sb305 bat Stockfish 6 et ne cède qu'au niveau 7 »), un podium, un classement Elo, une table croisée et l'historique des tournois.
 
 Les boutons de ces deux pages passent par le démon de contrôle : il faut le profil `train` ou `train-cpu`. Sans lui, réseaux, bots et résultats restent consultables.
 

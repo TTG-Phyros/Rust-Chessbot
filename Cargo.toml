@@ -9,6 +9,7 @@ members = [
     "crates/chess-train",
     "crates/chess-server",
     "crates/chess-chesscom",
+    "crates/chess-review",
     "crates/chess-reviewer",
 ]
 
@@ -26,6 +27,8 @@ chess-eval = { path = "crates/chess-eval", default-features = false }
 chess-search = { path = "crates/chess-search" }
 chess-stockfish = { path = "crates/chess-stockfish" }
 chess-chesscom = { path = "crates/chess-chesscom" }
+chess-review = { path = "crates/chess-review" }
+chess-reviewer = { path = "crates/chess-reviewer" }
 
 # Errors
 thiserror = "2.0.21"

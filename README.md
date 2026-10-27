@@ -111,12 +111,13 @@ crates/
   chess-core/    plateau, bitboards, coups, FEN/PGN, Zobrist (aucune I/O, aucune dépendance projet)
   chess-eval/    trait Evaluator + évaluation classique (PeSTO) + inférence NNUE (AVX2 / portable)
   chess-search/  alpha-beta générique sur Evaluator (ne voit que le trait), multi-PV
-  chess-stockfish/ pilote d'un Stockfish bridé en 10 niveaux (arène et comparaisons)
+  chess-stockfish/ pilote UCI de Stockfish : bridé en 10 niveaux (arène, comparaisons) ou pleine force en MultiPV (analyses)
   chess-uci/     binaire UCI
   chess-train/   binaire : self-play, entraînement burn (CUDA ou CPU), matchs, démon de contrôle
   chess-server/  binaire : API REST (OpenAPI) + WebSocket (axum)
   chess-chesscom/ client de l'API publique Chess.com (requêtes en série, retry, PGN + horloges)
-  chess-reviewer/ cache SQLite des parties et des analyses, synchronisation, binaire CLI
+  chess-review/  analyse d'une partie : trait AnalysisEngine (Stockfish UCI, notre moteur), MultiPV
+  chess-reviewer/ cache SQLite des parties et des analyses, synchronisation, jobs et workers, CLI
 web/             React + TypeScript + Vite + Tailwind
 docker/          Dockerfiles (engine, train, web) + nginx.conf
 config/          configuration de l'analyse Chess.com (review.toml)
@@ -216,6 +217,11 @@ L'API est **sans état** : une partie est toujours envoyée sous la forme `{ "fe
 | `GET /api/bots` | bots sauvegardés |
 | `POST /api/bots`, `DELETE /api/bots/{nom}` | sauvegarde un snapshot comme bot (`{"name", "network", "superbatch"}`), le supprime |
 | `POST /api/tournaments`, `POST /api/tournaments/stop` | lance un tournoi (`{"bots", "gamesPerPair", "limit": {"kind": "nodes" | "depth" | "time", "value"}, "threads", "pairings": [{"a", "b"}] | null}`, où `null` signifie tous les combats), l'arrête |
+| `POST /api/review/jobs` | lance l'analyse des parties Chess.com d'un joueur (`{"username", "timeClasses", "maxGames", "since", "until", "ratedOnly", "engine": "stockfish" \| "native", "depth" \| "movetimeMs", "multipv"}`) ; 202 avec `jobId`, 503 sans User-Agent |
+| `GET /api/review/jobs/{id}`, `DELETE /api/review/jobs/{id}` | progression d'une analyse (mois lus, parties en cache, analysées, positions), l'arrête |
+| `GET /api/review/jobs/{id}/events` | la même progression en Server-Sent Events (`progress`, au plus toutes les 150 ms, jusqu'à l'état final) |
+| `GET /api/review/players/{pseudo}/games` | parties en cache d'un joueur (`timeClasses`, `maxGames`, `since`, `until`, `ratedOnly`), sans rien télécharger |
+| `GET /api/review/games/{id}` | une partie : coups (SAN, horloges) et dernière analyse (éval et meilleures lignes de chaque position) |
 | `GET /ws` | WebSocket : `analyze` (avec `limits.multipv` et `bot` en option) puis un message `info` par profondeur, avec ses lignes, et un `done` final ; `stop` interrompt l'analyse |
 
 Les scores renvoyés sont du point de vue des blancs. Les limites sont plafonnées côté serveur (profondeur 64, 60 s par coup, 10 min d'analyse), et le nombre de recherches simultanées est borné par `max_searches`.
@@ -294,20 +300,26 @@ Au premier démarrage du démon, le top 5 des réseaux entraînés avant cette f
 
 ## Analyse Chess.com
 
-À partir d'un pseudo Chess.com : analyse de chaque partie (style *Game Review*) et bilan du profil sur les N dernières parties. Fonctionnalité en cours de construction ; disponible pour l'instant : la récupération et le cache des parties.
+À partir d'un pseudo Chess.com : analyse de chaque partie (style *Game Review*) et bilan du profil sur les N dernières parties. Fonctionnalité en cours de construction ; disponible pour l'instant : la récupération et le cache des parties, et leur analyse par Stockfish (ou notre moteur).
 
 **User-Agent obligatoire.** Chess.com demande à tout client de son API publique un `User-Agent` explicite, avec un moyen de contacter son auteur. Copiez `.env.example` en `.env` et renseignez `CHESS_REVIEW_USER_AGENT`. Sans lui, rien n'est envoyé.
 
 ```powershell
 just chesscom hikaru -n 20 --time-class blitz,rapid
 cargo run -p chess-reviewer -- fetch hikaru -n 50 --since 2026-01-01 --until 2026-06-30 --rated
+cargo run --release -p chess-reviewer -- analyse hikaru -n 10 --depth 14 --multipv 2
+docker compose exec server chess-reviewer analyse hikaru -n 10   # avec le Stockfish de l'image
 ```
 
 - **Requêtes en série.** Chess.com autorise un accès illimité en série mais répond `429` aux requêtes parallèles. Le client n'envoie qu'une requête à la fois, espacées de `min_interval_ms`. Les réponses `429` et `5xx` et les erreurs réseau sont retentées avec un backoff exponentiel (avec jitter, en respectant `Retry-After`).
 - **Cache** (`data/review/cache.sqlite`). Les mois passés ne changent plus : lus une fois après leur fin, ils ne sont plus jamais téléchargés à nouveau. La liste des mois et le mois en cours sont revalidés après `recent_ttl_secs` par requête conditionnelle (`ETag`, réponse `304`). La lecture va du mois le plus récent au plus ancien et s'arrête dès que le nombre de parties demandé est atteint. Seules les parties d'échecs standard sont gardées (pas de 960 ni de variantes).
 - **PGN.** `chess-core` garde le commentaire de chaque coup. Les horloges `[%clk]` et le tag `TimeControl` (`180+2`, `1/86400` pour le Daily) sont décodés.
+- **Moteur.** Le trait `AnalysisEngine` (`chess-review`) a deux implémentations : Stockfish à pleine force via UCI (la référence, `engine = "stockfish"`) et notre moteur (`"native"` : le réseau NNUE de l'entraînement s'il existe, PeSTO sinon). Chaque position est analysée en MultiPV (`multipv`, 3 par défaut, au moins 2 pour reconnaître un coup unique), à profondeur fixe (`depth`, reproductible) ou à temps fixe (`movetime_ms`).
+- **Parallélisme.** Un job télécharge les parties puis analyse celles qui ne le sont pas encore, une partie par worker (`workers`, la moitié des cœurs par défaut, partagés par tous les jobs). Les processus Stockfish sont réutilisés d'une partie à l'autre. La progression est publiée au fil de l'eau (SSE côté API).
+- **Pas de ré-analyse.** Une analyse est stockée par partie et par configuration (moteur et version, réseau, budget, MultiPV) : relancer la même analyse ne recalcule rien, changer la profondeur ou le moteur recalcule.
+- **Coût.** Stockfish 19 tourne à environ 0,9 M nœuds/s par cœur sur la machine de référence. À profondeur 16 et MultiPV 3, une position coûte environ 0,2 à 1 s : 10 parties de blitz (800 positions) prennent environ 3 min sur 4 workers. Profondeur 14 et MultiPV 2 divisent ce temps par 2 à 3.
 
-Configuration : `config/review.toml` (ou le chemin donné par `CHESS_REVIEW_CONFIG`) < variables `CHESS_REVIEW_*`, avec `__` entre section et clé (`CHESS_REVIEW_CHESSCOM__MAX_RETRIES=3`).
+Configuration : `config/review.toml` (ou le chemin donné par `CHESS_REVIEW_CONFIG`) < variables `CHESS_REVIEW_*`, avec `__` entre section et clé (`CHESS_REVIEW_CHESSCOM__MAX_RETRIES=3`, `CHESS_REVIEW_ANALYSIS__DEPTH=14`). En Docker, `./config` est monté en lecture seule et le cache vit dans le volume nommé `review-cache` (SQLite sur un bind mount Windows est lent et son verrouillage peu fiable).
 
 ## Performances
 

@@ -6,7 +6,9 @@ pub mod config;
 pub mod engine;
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
+use chess_reviewer::ReviewService;
 use engine::EngineService;
 
 /// State shared by every request handler.
@@ -20,6 +22,8 @@ pub struct AppState {
     pub trainer_url: Option<String>,
     /// HTTP client used to reach the training daemon.
     pub http: reqwest::Client,
+    /// Chess.com reviews, when their cache could be opened.
+    pub review: Option<Arc<ReviewService>>,
 }
 
 impl AppState {
@@ -41,18 +45,27 @@ impl AppState {
                 .map(|url| url.trim_end_matches('/').to_owned())
                 .filter(|url| !url.is_empty()),
             http: reqwest::Client::new(),
+            review: None,
         }
+    }
+
+    /// Serves the Chess.com reviews of `service`.
+    #[must_use]
+    pub fn with_review(mut self, service: Arc<ReviewService>) -> Self {
+        self.review = Some(service);
+        self
     }
 }
 
 impl Default for AppState {
-    /// Classical evaluation, no training daemon, `data` directory.
+    /// Classical evaluation, no training daemon, `data` directory, no reviews.
     fn default() -> Self {
         Self {
             engine: EngineService::default(),
             data_dir: PathBuf::from("data"),
             trainer_url: None,
             http: reqwest::Client::new(),
+            review: None,
         }
     }
 }

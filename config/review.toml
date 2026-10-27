@@ -10,6 +10,8 @@
 
 # SQLite cache of games and analyses (a named volume in Docker).
 cache = "data/review/cache.sqlite"
+# Most games one review may ask for.
+max_games = 200
 
 [chesscom]
 base_url = "https://api.chess.com/pub"
@@ -23,3 +25,27 @@ timeout_secs = 30
 # The list of months and the current month are revalidated after this many
 # seconds; past months are never downloaded twice.
 recent_ttl_secs = 600
+
+# Engine searches (a review request may override engine, depth, time and
+# lines). An analysis is cached per engine and settings: changing them here
+# makes the next reviews analyse the games again.
+[analysis]
+# "stockfish" (the reference) or "native" (our engine).
+engine = "stockfish"
+# Depth of each search, unless movetime_ms is set (then a time per position).
+depth = 16
+# movetime_ms = 300
+# Best lines per position; at least 2 to recognise the only good move.
+multipv = 3
+# Games analysed at once, one engine (one CPU core) each; 0 = half the cores.
+workers = 0
+
+[stockfish]
+binary = "stockfish"
+threads = 1
+hash_mb = 64
+
+[native]
+# Network used when it exists; classical evaluation otherwise.
+eval_file = "data/weights/main.nnue"
+hash_mb = 64

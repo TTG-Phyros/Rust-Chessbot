@@ -46,6 +46,7 @@ fn state(data_dir: PathBuf, trainer_url: Option<String>, eval_file: Option<PathB
         data_dir,
         trainer_url,
         http: reqwest::Client::new(),
+        review: None,
     }
 }
 

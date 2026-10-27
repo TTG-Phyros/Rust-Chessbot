@@ -8,6 +8,7 @@ use std::path::Path;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use chess_chesscom::{ApiGame, GameFilter, Month, Validators};
+use chess_review::{GameAnalysis, SearchSettings};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::Error;
@@ -41,7 +42,31 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX games_by_white ON games (white, end_time);
     CREATE INDEX games_by_black ON games (black, end_time);",
+    // One analysis per game and engine configuration (see `analysis_key`).
+    "CREATE TABLE analyses (
+        game_id    TEXT NOT NULL,
+        engine_key TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        data       TEXT NOT NULL,      -- chess_review::GameAnalysis (JSON)
+        PRIMARY KEY (game_id, engine_key)
+    );",
 ];
+
+/// Version of the stored analyses: bump it when their meaning changes, so
+/// that older ones are not reused.
+const ANALYSIS_FORMAT: u32 = 1;
+
+/// Cache key of the analyses made by `engine` (its [`AnalysisEngine::id`])
+/// with `settings`: two analyses with the same key are interchangeable.
+///
+/// [`AnalysisEngine::id`]: chess_review::AnalysisEngine::id
+#[must_use]
+pub fn analysis_key(engine: &str, settings: &SearchSettings) -> String {
+    format!(
+        "{engine} | {} | multipv {} | v{ANALYSIS_FORMAT}",
+        settings.budget, settings.multipv
+    )
+}
 
 /// Cached list of a player's months.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -352,6 +377,65 @@ impl Store {
         data.map(|data| serde_json::from_str(&data).map_err(|err| Error::Corrupt(err.to_string())))
             .transpose()
     }
+
+    /// The analysis of game `id` with cache key `key` ([`analysis_key`]).
+    ///
+    /// # Errors
+    ///
+    /// When SQLite fails or the row is corrupt.
+    pub fn analysis(&self, id: &str, key: &str) -> Result<Option<GameAnalysis>, Error> {
+        let data: Option<String> = self
+            .connection()
+            .query_row(
+                "SELECT data FROM analyses WHERE game_id = ?1 AND engine_key = ?2",
+                [id, key],
+                |row| row.get(0),
+            )
+            .optional()?;
+        data.map(|data| serde_json::from_str(&data).map_err(|err| Error::Corrupt(err.to_string())))
+            .transpose()
+    }
+
+    /// The most recent analysis of game `id`, whatever its engine.
+    ///
+    /// # Errors
+    ///
+    /// When SQLite fails or the row is corrupt.
+    pub fn latest_analysis(&self, id: &str) -> Result<Option<GameAnalysis>, Error> {
+        let data: Option<String> = self
+            .connection()
+            .query_row(
+                "SELECT data FROM analyses WHERE game_id = ?1
+                 ORDER BY created_at DESC, rowid DESC LIMIT 1",
+                [id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        data.map(|data| serde_json::from_str(&data).map_err(|err| Error::Corrupt(err.to_string())))
+            .transpose()
+    }
+
+    /// Stores the analysis of game `id` (replacing one with the same key).
+    ///
+    /// # Errors
+    ///
+    /// When SQLite fails.
+    pub fn save_analysis(
+        &self,
+        id: &str,
+        analysis: &GameAnalysis,
+        created_at: i64,
+    ) -> Result<(), Error> {
+        let key = analysis_key(&analysis.engine, &analysis.settings);
+        let data =
+            serde_json::to_string(analysis).map_err(|err| Error::Corrupt(err.to_string()))?;
+        self.connection().execute(
+            "INSERT INTO analyses (game_id, engine_key, created_at, data) VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT (game_id, engine_key) DO UPDATE SET created_at = ?3, data = ?4",
+            params![id, key, created_at, data],
+        )?;
+        Ok(())
+    }
 }
 
 /// Usernames are compared lowercase.
@@ -491,6 +575,52 @@ mod tests {
         store.touch_month("alice", OCTOBER, 400).unwrap();
         let month = store.month("alice", OCTOBER).unwrap().unwrap();
         assert_eq!((month.validators, month.fetched_at), (validators, 400));
+    }
+
+    #[test]
+    fn caches_analyses_by_engine_and_settings() {
+        use chess_review::{Budget, Line, PositionEval, Score};
+
+        let store = Store::in_memory().unwrap();
+        let analysis = |engine: &str, depth| GameAnalysis {
+            engine: engine.into(),
+            settings: SearchSettings {
+                budget: Budget::Depth(depth),
+                multipv: 2,
+            },
+            positions: vec![PositionEval {
+                lines: vec![Line {
+                    score: Score::Cp(depth.try_into().unwrap()),
+                    depth,
+                    pv: vec!["e2e4".into()],
+                }],
+                checkmated: false,
+            }],
+        };
+        let deep = analysis("Stockfish 19", 16);
+        store.save_analysis("g1", &deep, 10).unwrap();
+        store
+            .save_analysis("g1", &analysis("chess-bot classic", 8), 20)
+            .unwrap();
+
+        let key = analysis_key("Stockfish 19", &deep.settings);
+        assert_eq!(key, "Stockfish 19 | depth 16 | multipv 2 | v1");
+        assert_eq!(store.analysis("g1", &key).unwrap(), Some(deep));
+        assert_eq!(store.analysis("g2", &key).unwrap(), None);
+        let other = SearchSettings {
+            budget: Budget::Depth(12),
+            multipv: 2,
+        };
+        assert_eq!(
+            store
+                .analysis("g1", &analysis_key("Stockfish 19", &other))
+                .unwrap(),
+            None
+        );
+        assert_eq!(
+            store.latest_analysis("g1").unwrap().map(|a| a.engine),
+            Some("chess-bot classic".into())
+        );
     }
 
     #[test]

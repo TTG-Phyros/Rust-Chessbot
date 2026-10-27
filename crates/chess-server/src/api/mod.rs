@@ -6,6 +6,7 @@ mod daemon;
 pub mod error;
 mod game;
 mod health;
+mod review;
 mod stockfish;
 mod training;
 pub mod types;
@@ -29,7 +30,8 @@ pub(crate) use daemon::check_name;
         training::engine, training::start, training::stop, training::timer,
         training::network_defaults, training::create_network, training::delete_network,
         arena::arena, arena::list_bots, arena::save_bot, arena::delete_bot,
-        arena::start_tournament, arena::stop_tournament,
+        arena::start_tournament, arena::stop_tournament, review::start, review::progress,
+        review::events, review::cancel, review::player_games, review::game,
     ),
     tags(
         (name = "system", description = "Server status"),
@@ -37,6 +39,7 @@ pub(crate) use daemon::check_name;
         (name = "engine", description = "Engine moves and evaluation"),
         (name = "training", description = "Networks: NNUE training progress and control"),
         (name = "arena", description = "Bots and tournaments between them"),
+        (name = "review", description = "Reviews of Chess.com games"),
     )
 )]
 pub struct ApiDoc;
@@ -72,6 +75,17 @@ pub fn router(state: AppState) -> Router {
         .route("/api/bots/{name}", delete(arena::delete_bot))
         .route("/api/tournaments", post(arena::start_tournament))
         .route("/api/tournaments/stop", post(arena::stop_tournament))
+        .route("/api/review/jobs", post(review::start))
+        .route(
+            "/api/review/jobs/{id}",
+            get(review::progress).delete(review::cancel),
+        )
+        .route("/api/review/jobs/{id}/events", get(review::events))
+        .route(
+            "/api/review/players/{username}/games",
+            get(review::player_games),
+        )
+        .route("/api/review/games/{id}", get(review::game))
         .route("/ws", get(ws::upgrade))
         .layer(TraceLayer::new_for_http())
         .with_state(state)

@@ -1326,6 +1326,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "chess-review"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chess-core",
+ "chess-eval",
+ "chess-search",
+ "chess-stockfish",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "chess-reviewer"
 version = "0.1.0"
 dependencies = [
@@ -1333,6 +1346,7 @@ dependencies = [
  "axum",
  "chess-chesscom",
  "chess-core",
+ "chess-review",
  "clap",
  "dotenvy",
  "figment",
@@ -1360,8 +1374,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum",
+ "chess-chesscom",
  "chess-core",
  "chess-eval",
+ "chess-review",
+ "chess-reviewer",
  "chess-search",
  "chess-stockfish",
  "figment",

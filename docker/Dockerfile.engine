@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1.7
 #
-# chess-server (HTTP/WebSocket API) and chess-uci, multi-arch (amd64, arm64),
-# with Stockfish for the comparisons of the Play page.
+# chess-server (HTTP/WebSocket API), chess-uci and chess-reviewer (Chess.com
+# reviews from the command line), multi-arch (amd64, arm64), with Stockfish
+# for the comparisons of the Play page and the game reviews.
 #
 #   docker build -f docker/Dockerfile.engine -t chess-bot/server .
 #
@@ -23,11 +24,12 @@ RUN cargo chef prepare --recipe-path recipe.json
 FROM chef AS builder
 COPY --from=planner /app/recipe.json recipe.json
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
-    cargo chef cook --release --recipe-path recipe.json -p chess-server -p chess-uci
+    cargo chef cook --release --recipe-path recipe.json -p chess-server -p chess-uci -p chess-reviewer
 COPY . .
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
-    cargo build --release --locked -p chess-server -p chess-uci \
-    && cp target/release/chess-server target/release/chess-uci /usr/local/bin/
+    cargo build --release --locked -p chess-server -p chess-uci -p chess-reviewer \
+    && cp target/release/chess-server target/release/chess-uci target/release/chess-reviewer \
+       /usr/local/bin/
 
 # ---------------------------------------------------------------- Stockfish
 # Same build as the training image (see Dockerfile.train): the official
@@ -56,14 +58,22 @@ RUN --mount=type=cache,target=/root/.cache/stockfish,sharing=locked \
 
 FROM debian:trixie-slim AS runtime
 ARG UID=10001
+# CA certificates: the reviews call the Chess.com API over HTTPS.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+# /cache holds the review cache (SQLite): a named volume mounted there takes
+# the owner of this directory, so the unprivileged user can write to it.
 RUN useradd --system --uid ${UID} --home-dir /data --shell /usr/sbin/nologin chess \
-    && mkdir -p /data && chown chess /data
-COPY --from=builder /usr/local/bin/chess-server /usr/local/bin/chess-uci /usr/local/bin/
+    && mkdir -p /data /cache && chown chess /data /cache
+COPY --from=builder /usr/local/bin/chess-server /usr/local/bin/chess-uci \
+     /usr/local/bin/chess-reviewer /usr/local/bin/
 COPY --from=stockfish /usr/local/bin/stockfish /usr/local/bin/
 USER chess
 WORKDIR /data
 ENV CHESS_SERVER_BIND=0.0.0.0:3000 \
-    CHESS_SERVER_DATA_DIR=/data
+    CHESS_SERVER_DATA_DIR=/data \
+    CHESS_REVIEW_CACHE=/cache/review.sqlite
 EXPOSE 3000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
     CMD ["chess-server", "--healthcheck"]

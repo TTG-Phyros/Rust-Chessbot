@@ -64,10 +64,21 @@ async fn openapi_documents_every_route() {
         "/api/pgn/export",
         "/api/engine/explain",
         "/api/stockfish/compare",
+        "/api/review/jobs",
     ] {
         assert!(doc["paths"][path]["post"].is_object(), "{path}");
     }
+    for path in [
+        "/api/review/jobs/{id}",
+        "/api/review/jobs/{id}/events",
+        "/api/review/players/{username}/games",
+        "/api/review/games/{id}",
+    ] {
+        assert!(doc["paths"][path]["get"].is_object(), "{path}");
+    }
+    assert!(doc["paths"]["/api/review/jobs/{id}"]["delete"].is_object());
     assert!(doc["components"]["schemas"]["PositionView"].is_object());
+    assert!(doc["components"]["schemas"]["ReviewGameView"].is_object());
 }
 
 #[tokio::test]

@@ -89,12 +89,27 @@ pub struct Analysis {
     pub pv: Vec<String>,
 }
 
+/// One line of a multi-PV search.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Line {
+    /// Score for the side to move.
+    pub score: UciScore,
+    /// Depth at which the line was reported.
+    pub depth: u32,
+    /// The line, in UCI notation, starting with its first move.
+    pub pv: Vec<String>,
+}
+
 /// A running Stockfish.
 pub struct Stockfish {
     child: Child,
     stdin: ChildStdin,
     stdout: BufReader<ChildStdout>,
     level: Level,
+    /// `id name` of its UCI greeting, e.g. `Stockfish 19`.
+    name: String,
+    /// Current `MultiPV` option.
+    multipv: usize,
 }
 
 impl Stockfish {
@@ -104,6 +119,27 @@ impl Stockfish {
     ///
     /// When the binary cannot be started or does not speak UCI.
     pub fn spawn(binary: &Path, level_number: u8) -> Result<Self> {
+        let level = level(level_number);
+        Self::start(binary, level, 1, 16, Some(level.skill))
+    }
+
+    /// Starts `binary` at full strength (no `Skill Level`), for analysis,
+    /// with `threads` search threads and a `hash_mb` MiB hash table.
+    ///
+    /// # Errors
+    ///
+    /// When the binary cannot be started or does not speak UCI.
+    pub fn spawn_full(binary: &Path, threads: usize, hash_mb: usize) -> Result<Self> {
+        Self::start(binary, level(10), threads.max(1), hash_mb.max(1), None)
+    }
+
+    fn start(
+        binary: &Path,
+        level: Level,
+        threads: usize,
+        hash_mb: usize,
+        skill: Option<u8>,
+    ) -> Result<Self> {
         let mut child = Command::new(binary)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -113,20 +149,102 @@ impl Stockfish {
         let (Some(stdin), Some(stdout)) = (child.stdin.take(), child.stdout.take()) else {
             bail!("no pipe to Stockfish");
         };
-        let level = level(level_number);
         let mut engine = Self {
             child,
             stdin,
             stdout: BufReader::new(stdout),
             level,
+            name: String::from("Stockfish"),
+            multipv: 1,
         };
         engine.send("uci")?;
-        engine.wait_for("uciok")?;
-        engine.send("setoption name Threads value 1")?;
-        engine.send("setoption name Hash value 16")?;
-        engine.send(&format!("setoption name Skill Level value {}", level.skill))?;
+        let mut line = String::new();
+        loop {
+            engine.read_line(&mut line)?;
+            if let Some(name) = line.strip_prefix("id name ") {
+                engine.name = name.trim().to_owned();
+            }
+            if line.starts_with("uciok") {
+                break;
+            }
+        }
+        engine.send(&format!("setoption name Threads value {threads}"))?;
+        engine.send(&format!("setoption name Hash value {hash_mb}"))?;
+        if let Some(skill) = skill {
+            engine.send(&format!("setoption name Skill Level value {skill}"))?;
+        }
         engine.ready()?;
         Ok(engine)
+    }
+
+    /// `id name` of the engine, e.g. `Stockfish 19`.
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn set_multipv(&mut self, multipv: usize) -> Result<()> {
+        let multipv = multipv.max(1);
+        if multipv != self.multipv {
+            self.send(&format!("setoption name MultiPV value {multipv}"))?;
+            self.multipv = multipv;
+        }
+        Ok(())
+    }
+
+    /// Sends the position reached by `moves` from `fen` and starts the search.
+    fn go(&mut self, fen: Option<&str>, moves: &[String], budget: Budget) -> Result<()> {
+        let mut position = match fen {
+            Some(fen) => format!("position fen {fen}"),
+            None => String::from("position startpos"),
+        };
+        if !moves.is_empty() {
+            position.push_str(" moves ");
+            position.push_str(&moves.join(" "));
+        }
+        self.send(&position)?;
+        self.send(&match budget {
+            Budget::Level => format!(
+                "go depth {} movetime {}",
+                self.level.depth,
+                self.level.movetime.as_millis()
+            ),
+            Budget::Depth(depth) => format!("go depth {}", depth.max(1)),
+            Budget::Nodes(nodes) => format!("go nodes {}", nodes.max(1)),
+            Budget::MoveTime(time) => format!("go movetime {}", time.as_millis().max(1)),
+        })
+    }
+
+    /// The `multipv` best lines (fewer if there are fewer legal moves) of
+    /// the position reached by `moves` (UCI) from `fen` (the starting
+    /// position if `None`), best first, as last reported within `budget`.
+    /// Empty when the side to move has no legal move.
+    ///
+    /// # Errors
+    ///
+    /// When Stockfish has stopped.
+    pub fn analyse_lines(
+        &mut self,
+        fen: Option<&str>,
+        moves: &[String],
+        budget: Budget,
+        multipv: usize,
+    ) -> Result<Vec<Line>> {
+        self.set_multipv(multipv)?;
+        self.go(fen, moves, budget)?;
+        let mut lines: Vec<Option<Line>> = vec![None; self.multipv];
+        let mut text = String::new();
+        loop {
+            self.read_line(&mut text)?;
+            if text.starts_with("bestmove") {
+                return Ok(lines.into_iter().flatten().collect());
+            }
+            if let Some((index, line)) = parse_line(&text)
+                && let Some(slot) = lines.get_mut(index)
+            {
+                *slot = Some(line);
+            }
+        }
     }
 
     fn send(&mut self, command: &str) -> Result<()> {
@@ -194,25 +312,8 @@ impl Stockfish {
         moves: &[String],
         budget: Budget,
     ) -> Result<Analysis> {
-        let mut position = match fen {
-            Some(fen) => format!("position fen {fen}"),
-            None => String::from("position startpos"),
-        };
-        if !moves.is_empty() {
-            position.push_str(" moves ");
-            position.push_str(&moves.join(" "));
-        }
-        self.send(&position)?;
-        self.send(&match budget {
-            Budget::Level => format!(
-                "go depth {} movetime {}",
-                self.level.depth,
-                self.level.movetime.as_millis()
-            ),
-            Budget::Depth(depth) => format!("go depth {}", depth.max(1)),
-            Budget::Nodes(nodes) => format!("go nodes {}", nodes.max(1)),
-            Budget::MoveTime(time) => format!("go movetime {}", time.as_millis().max(1)),
-        })?;
+        self.set_multipv(1)?;
+        self.go(fen, moves, budget)?;
         let mut analysis = Analysis {
             best_move: String::new(),
             score: None,
@@ -270,6 +371,34 @@ fn update(analysis: &mut Analysis, line: &str) {
     if let Some(start) = words.iter().position(|word| *word == "pv") {
         analysis.pv = words[start + 1..].iter().map(|&mv| mv.to_owned()).collect();
     }
+}
+
+/// The 0-based multi-PV index and the line of an `info` line, if it holds
+/// an exact score and a PV (aspiration-window bounds are skipped).
+fn parse_line(text: &str) -> Option<(usize, Line)> {
+    let words: Vec<&str> = text.split_whitespace().collect();
+    if words.first() != Some(&"info")
+        || words
+            .iter()
+            .any(|word| *word == "lowerbound" || *word == "upperbound")
+    {
+        return None;
+    }
+    let after = |key: &str| {
+        words
+            .iter()
+            .position(|word| *word == key)
+            .and_then(|i| words.get(i + 1))
+    };
+    let index: usize = after("multipv").map_or(Some(1), |n| n.parse().ok())?;
+    let depth = after("depth")?.parse().ok()?;
+    let score = parse_score(text)?;
+    let start = words.iter().position(|word| *word == "pv")?;
+    let pv: Vec<String> = words[start + 1..].iter().map(|&mv| mv.to_owned()).collect();
+    if pv.is_empty() || index == 0 {
+        return None;
+    }
+    Some((index - 1, Line { score, depth, pv }))
 }
 
 /// `score cp 34` or `score mate -3` of an `info` line.
@@ -365,6 +494,65 @@ mod tests {
         assert_eq!(analysis.score, Some(UciScore::Centipawns(41)));
         assert_eq!(analysis.depth, 12);
         assert_eq!(analysis.pv, ["e2e4", "e7e5", "g1f3"]);
+    }
+
+    #[test]
+    fn multipv_lines_are_parsed() {
+        assert_eq!(
+            parse_line("info depth 18 seldepth 25 multipv 2 score cp -12 nodes 1 pv d2d4 g8f6"),
+            Some((
+                1,
+                Line {
+                    score: UciScore::Centipawns(-12),
+                    depth: 18,
+                    pv: vec!["d2d4".into(), "g8f6".into()],
+                }
+            ))
+        );
+        // Without `multipv`: the first line.
+        assert_eq!(
+            parse_line("info depth 3 score mate 2 pv h5f7").map(|(i, _)| i),
+            Some(0)
+        );
+        assert_eq!(
+            parse_line("info depth 18 multipv 1 score cp 30 lowerbound nodes 9 pv e2e4"),
+            None
+        );
+        assert_eq!(
+            parse_line("info depth 18 currmove e2e4 currmovenumber 1"),
+            None
+        );
+        assert_eq!(parse_line("info string NNUE evaluation enabled"), None);
+    }
+
+    /// Needs a Stockfish on the `PATH` (in the Docker images); skipped otherwise.
+    #[test]
+    fn full_strength_multipv_search() {
+        let binary = Path::new("stockfish");
+        if probe(binary).is_none() {
+            return;
+        }
+        let mut engine = Stockfish::spawn_full(binary, 1, 16).unwrap();
+        assert!(engine.name().starts_with("Stockfish"));
+        // Scholar's mate threat: Qxf7# is the only mate.
+        let fen = "r1bqkbnr/pppp1ppp/2n5/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4";
+        let moves = ["h5f7".to_owned()];
+        assert!(
+            engine
+                .analyse_lines(Some(fen), &moves, Budget::Depth(5), 3)
+                .unwrap()
+                .is_empty()
+        );
+        let lines = engine
+            .analyse_lines(Some(fen), &[], Budget::Depth(8), 3)
+            .unwrap();
+        assert_eq!(lines.len(), 3);
+        assert_eq!(lines[0].pv[0], "h5f7");
+        assert_eq!(lines[0].score, UciScore::Mate(1));
+        assert!(!lines[1].score.eq(&UciScore::Mate(1)));
+        // Back to one line.
+        let single = engine.analyse(Some(fen), &[], Budget::Depth(4)).unwrap();
+        assert_eq!(single.best_move, "h5f7");
     }
 
     #[test]

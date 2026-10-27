@@ -47,9 +47,20 @@ services:
       CHESS_SERVER_EVAL_FILE: /data/weights/${CHESS_TRAIN_RUN:-main}.nnue
       # Training control daemon (only reachable with --profile train or train-cpu).
       CHESS_SERVER_TRAINER_URL: http://trainer:4000
+      # Chess.com reviews: engine and analysis settings in ./config/review.toml.
+      # The User-Agent (required by Chess.com) comes from .env (see .env.example).
+      CHESS_REVIEW_CONFIG: /config/review.toml
+      CHESS_REVIEW_USER_AGENT: ${CHESS_REVIEW_USER_AGENT:-}
+      CHESS_REVIEW_CACHE: /cache/review.sqlite
+      # Reviews by our own engine use the network of this run.
+      CHESS_REVIEW_NATIVE__EVAL_FILE: /data/weights/${CHESS_TRAIN_RUN:-main}.nnue
       RUST_LOG:
     volumes:
       - ./data:/data
+      - ./config:/config:ro
+      # SQLite cache of games and analyses: a named volume (SQLite on a
+      # Windows bind mount is slow and its locking unreliable).
+      - review-cache:/cache
     restart: unless-stopped
 
   web:
@@ -91,3 +102,4 @@ services:
 
 volumes:
   datasets:
+  review-cache:

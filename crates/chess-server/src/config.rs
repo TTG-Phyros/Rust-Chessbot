@@ -81,11 +81,14 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(clippy::result_large_err)] // The closure signature is imposed by figment's Jail.
     fn defaults_apply_without_file() {
-        let config: ServerConfig = ServerConfig::figment("does-not-exist.toml")
-            .extract()
-            .unwrap();
-        assert_eq!(config.bind.port(), 3000);
+        // In a jail too: the other test sets variables of the process meanwhile.
+        figment::Jail::expect_with(|_| {
+            let config: ServerConfig = ServerConfig::figment("does-not-exist.toml").extract()?;
+            assert_eq!(config.bind.port(), 3000);
+            Ok(())
+        });
     }
 
     #[test]

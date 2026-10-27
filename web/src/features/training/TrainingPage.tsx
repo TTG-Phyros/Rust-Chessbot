@@ -6,7 +6,8 @@ import type { ControllerView } from '../../api/generated/ControllerView';
 import type { NetworkSummary } from '../../api/generated/NetworkSummary';
 import type { RankedSnapshot } from '../../api/generated/RankedSnapshot';
 import type { TrainingView } from '../../api/generated/TrainingView';
-import { useTraining } from '../../api/hooks';
+import { useSelfplay, useTraining } from '../../api/hooks';
+import { MiniBoard } from '../../components/MiniBoard';
 import { Button, Card, Dot, ErrorText, Eyebrow, INPUT, Stat } from '../../components/ui';
 import { DataTable, EloChart, LossChart } from './charts';
 import {
@@ -377,6 +378,48 @@ function ParamSheet({ network }: { network: NetworkSummary }) {
   );
 }
 
+/** One board per self-play worker, live while the service trains. */
+function SelfplayWall() {
+  const { view } = useSelfplay();
+  const games = view?.games ?? [];
+  const live = view?.live ?? false;
+  return (
+    <Card
+      title="Self-play · mur de parties"
+      aside={
+        <span className="font-sans">
+          {live
+            ? 'En direct — un plateau par worker'
+            : view?.updatedAt
+              ? `Dernier état connu · ${formatDate(view.updatedAt)}`
+              : 'En direct quand le service entraîne un réseau'}
+        </span>
+      }
+    >
+      {games.length === 0 ? (
+        <p className="text-sm text-dim">
+          Aucune partie en cours : le mur s’anime dès que le pipeline joue ses parties de self-play.
+        </p>
+      ) : (
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+          {games.map((game) => (
+            <figure key={game.worker} className={live ? '' : 'opacity-60'}>
+              <MiniBoard fen={game.fen} lastMove={game.lastMove} />
+              <figcaption className="mt-2 flex items-center justify-between font-mono text-[11px] text-dim">
+                <span>worker {game.worker + 1}</span>
+                <span className="flex items-center gap-1.5" title={`partie ${game.game}`}>
+                  {game.ply} ½c
+                  <Dot tone={live ? 'signal' : 'idle'} />
+                </span>
+              </figcaption>
+            </figure>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 /** Stacked layers of the network: input, accumulator, output. */
 function LayerStack() {
   const plane = 'absolute left-1/2 rounded-md border';
@@ -725,6 +768,8 @@ export function TrainingPage() {
           <ParamSheet network={network} />
         </div>
       )}
+
+      <SelfplayWall />
     </div>
   );
 }

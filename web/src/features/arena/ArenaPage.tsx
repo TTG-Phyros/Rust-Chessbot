@@ -410,6 +410,12 @@ function Stable({
         <p className="mt-1 text-sm text-mute">
           Évaluation classique (tables pièce-case), toujours disponible.
         </p>
+        <Link
+          to="/play?bot=classic"
+          className="mt-3 inline-block text-sm font-medium text-signal underline underline-offset-4 hover:text-bone"
+        >
+          Jouer contre PeSTO
+        </Link>
       </div>
       {bots.map((bot) => (
         <div key={bot.name} className="rounded-2xl border border-signal/25 bg-ink-900 p-4">
@@ -435,13 +441,20 @@ function Stable({
             )}
             <span className={chip}>{formatDate(bot.createdAt)}</span>
           </div>
-          <div className="mt-4 flex items-center justify-between">
+          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+            <Link
+              to={`/play?bot=${encodeURIComponent(bot.name)}`}
+              className="text-sm font-medium text-signal underline underline-offset-4 hover:text-bone"
+            >
+              Jouer contre ce bot
+            </Link>
             <Link
               to={`/training?network=${encodeURIComponent(bot.network)}`}
-              className="text-sm font-medium text-signal underline underline-offset-4 hover:text-bone"
+              className="text-sm text-mute hover:text-bone"
             >
               Voir le réseau
             </Link>
+            <span className="flex-1" />
             <Button
               variant="danger"
               size="sm"

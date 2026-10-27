@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { type CSSProperties, useEffect, useMemo, useState } from 'react';
 import type { Arrow } from 'react-chessboard';
 
+import { api } from '../../api/client';
 import type { AnalysisInfo } from '../../api/generated/AnalysisInfo';
+import type { EvalExplanation } from '../../api/generated/EvalExplanation';
 import type { GameRequest } from '../../api/generated/GameRequest';
 import type { Side } from '../../api/generated/Side';
 import { useAnalysis, usePosition } from '../../api/hooks';
@@ -11,21 +13,86 @@ import { EvalGraph } from '../../components/EvalGraph';
 import { GameIO } from '../../components/GameIO';
 import { MoveList } from '../../components/MoveList';
 import { Button, Card, Dot, ErrorText, Modal, Segmented, Stat } from '../../components/ui';
-import { formatLine, moveLabel, newGame } from '../../lib/game';
+import { fenSquares, formatLine, moveLabel, newGame } from '../../lib/game';
 import { clampedPawns, formatScore } from '../../lib/score';
 import { SIDE_NAME, describeStatus } from '../../lib/status';
+import { contributionColors } from './nnue';
 
-const BEST_MOVE_COLOR = 'rgba(200, 245, 96, 0.9)';
+/** Arrows of the best lines, best last (drawn on top), fading with rank. */
+const LINE_COLORS = [
+  'rgba(200, 245, 96, 0.9)',
+  'rgba(200, 245, 96, 0.5)',
+  'rgba(200, 245, 96, 0.28)',
+];
 const REPLY_COLOR = 'rgba(157, 140, 255, 0.85)';
 /** Bound of the evaluation graph, in pawns. */
 const GRAPH_CAP = 3;
+/** Lines analysed at once. */
+const MULTIPV = 3;
+const FILES = 'abcdefgh';
 
-type ArrowMode = 'pv' | 'none';
+type BoardMode = 'pv' | 'nnue' | 'none';
 
-const ARROW_OPTIONS = [
-  { value: 'pv', label: 'Flèches PV' },
-  { value: 'none', label: 'Sans flèches' },
+const BOARD_OPTIONS = [
+  { value: 'pv', label: 'Flèches multi-PV' },
+  { value: 'nnue', label: 'Carte NNUE' },
+  { value: 'none', label: 'Plateau seul' },
 ] as const;
+
+/** What each piece brings to the NNUE evaluation, as an 8 × 8 grid. */
+function ContributionMap({
+  explanation,
+  fen,
+  orientation,
+}: {
+  explanation: EvalExplanation | null;
+  fen: string | null;
+  orientation: 'white' | 'black';
+}) {
+  if (!explanation || !fen) return <p className="text-sm text-dim">Calcul en cours…</p>;
+  if (explanation.pieces.length === 0) {
+    return (
+      <p className="text-sm text-dim">
+        Pas de carte avec PeSTO : elle montre ce que chaque pièce apporte au réseau NNUE.
+      </p>
+    );
+  }
+  const colors = contributionColors(explanation.pieces);
+  const byCp = Object.fromEntries(explanation.pieces.map((p) => [p.square, p.cp]));
+  const pieces = fenSquares(fen);
+  const cells = Array.from({ length: 64 }, (_, i) => (orientation === 'white' ? i : 63 - i));
+  return (
+    <>
+      <div className="grid grid-cols-8 gap-0.5 overflow-hidden rounded-lg">
+        {cells.map((index) => {
+          const square = `${FILES[index % 8] ?? ''}${8 - Math.floor(index / 8)}`;
+          const cp = byCp[square];
+          return (
+            <span
+              key={square}
+              title={
+                cp === undefined
+                  ? square
+                  : `${square} · ${pieces[index] ?? ''} : ${cp > 0 ? '+' : ''}${cp} cp`
+              }
+              className="aspect-square rounded-[3px]"
+              style={{ background: colors[square] ?? '#14171e' }}
+            />
+          );
+        })}
+      </div>
+      <p className="mt-3 flex justify-between text-xs">
+        <span className="text-signal">● gain des Blancs</span>
+        <span className="text-think">● gain des Noirs</span>
+      </p>
+      <p className="mt-1 font-mono text-xs text-dim">
+        statique {explanation.staticCp > 0 ? '+' : ''}
+        {explanation.staticCp} cp · G {Math.round(explanation.wdl.win / 10)} · N{' '}
+        {Math.round(explanation.wdl.draw / 10)} · P {Math.round(explanation.wdl.loss / 10)} %
+      </p>
+    </>
+  );
+}
 
 /** Bars of the nodes searched at each completed depth, on a log scale. */
 function NodesPerDepth({ depths }: { depths: readonly AnalysisInfo[] }) {
@@ -60,7 +127,10 @@ export function AnalysisPage() {
   const [shown, setShown] = useState(0);
   const [orientation, setOrientation] = useState<Side>('white');
   const [enabled, setEnabled] = useState(true);
-  const [arrowMode, setArrowMode] = useState<ArrowMode>('pv');
+  const [boardMode, setBoardMode] = useState<BoardMode>('pv');
+  const [explanation, setExplanation] = useState<{ key: string; value: EvalExplanation } | null>(
+    null,
+  );
   const [io, setIo] = useState(false);
   // Latest evaluation of each position analysed, by game (JSON).
   const [evals, setEvals] = useState<Record<string, number>>({});
@@ -78,11 +148,29 @@ export function AnalysisPage() {
   useEffect(() => {
     if (!enabled || analysis.socket !== 'open' || loading || !status) return;
     if (status === 'ongoing') {
-      analyze(JSON.parse(gameKey) as GameRequest);
+      analyze(JSON.parse(gameKey) as GameRequest, { multipv: MULTIPV });
     } else {
       stop();
     }
   }, [enabled, analysis.socket, loading, status, gameKey, analyze, stop]);
+
+  // The NNUE piece map of the position on the board.
+  const positionShown = view !== null;
+  useEffect(() => {
+    if (!positionShown) return;
+    const controller = new AbortController();
+    api
+      .explain({ game: JSON.parse(gameKey) as GameRequest }, controller.signal)
+      .then((value) => {
+        setExplanation({ key: gameKey, value });
+      })
+      .catch(() => {
+        // Only a help.
+      });
+    return () => {
+      controller.abort();
+    };
+  }, [positionShown, gameKey]);
 
   // Keep each new depth's evaluation for the graph, under the game it belongs to.
   const info = analysis.info;
@@ -137,8 +225,8 @@ export function AnalysisPage() {
   const current = info && status === 'ongoing' && JSON.stringify(analysis.game) === gameKey;
   const live = current ? info : null;
   const arrows: Arrow[] = [];
-  if (enabled && live && arrowMode === 'pv') {
-    const [best, reply] = live.pv;
+  if (enabled && live && boardMode === 'pv') {
+    const reply = live.pv[1];
     if (reply) {
       arrows.push({
         startSquare: reply.slice(0, 2),
@@ -146,14 +234,26 @@ export function AnalysisPage() {
         color: REPLY_COLOR,
       });
     }
-    if (best) {
-      arrows.push({
-        startSquare: best.slice(0, 2),
-        endSquare: best.slice(2, 4),
-        color: BEST_MOVE_COLOR,
+    // Worst first: the best line's arrow ends up on top.
+    live.lines
+      .map((pvLine, rank) => ({ move: pvLine.pv[0], color: LINE_COLORS[rank] }))
+      .reverse()
+      .forEach(({ move, color }) => {
+        if (move && color) {
+          arrows.push({ startSquare: move.slice(0, 2), endSquare: move.slice(2, 4), color });
+        }
       });
-    }
   }
+  const explained = explanation?.key === gameKey ? explanation.value : null;
+  const squareTints: Record<string, CSSProperties> =
+    boardMode === 'nnue' && explained
+      ? Object.fromEntries(
+          Object.entries(contributionColors(explained.pieces)).map(([square, color]) => [
+            square,
+            { boxShadow: `inset 0 0 0 100vmax ${color}` },
+          ]),
+        )
+      : {};
 
   const history = fullLine.view?.history ?? [];
   const startFen = line.fen ?? undefined;
@@ -168,10 +268,10 @@ export function AnalysisPage() {
       <div className="min-w-0 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Segmented
-            label="Flèches"
-            value={arrowMode}
-            options={ARROW_OPTIONS}
-            onChange={setArrowMode}
+            label="Affichage du plateau"
+            value={boardMode}
+            options={BOARD_OPTIONS}
+            onChange={setBoardMode}
           />
           {view && (
             <button
@@ -194,6 +294,7 @@ export function AnalysisPage() {
               interactive={!loading}
               onMove={playMove}
               arrows={arrows}
+              squareTints={squareTints}
             />
           </div>
         </div>
@@ -335,16 +436,29 @@ export function AnalysisPage() {
           {error && <ErrorText>{error}</ErrorText>}
         </Card>
 
-        <Card title="Ligne principale">
+        <Card title="Lignes principales" aside={`MultiPV ${MULTIPV}`}>
           {live && view ? (
-            <div className="flex items-start gap-3 rounded-xl border border-signal/25 bg-signal/[0.04] p-3">
-              <span className="rounded-md bg-signal px-2 py-0.5 font-mono text-xs font-medium text-ink-950">
-                {formatScore(live.score)}
-              </span>
-              <p className="font-mono text-xs leading-relaxed text-mute">
-                {formatLine(live.pvSan, view.fen)}
-              </p>
-            </div>
+            <ol className="space-y-2">
+              {(live.lines.length > 0 ? live.lines : [live]).map((pvLine, rank) => (
+                <li
+                  key={pvLine.pv[0] ?? rank}
+                  className={`flex items-start gap-3 rounded-xl border p-3 ${
+                    rank === 0 ? 'border-signal/25 bg-signal/[0.04]' : 'border-line'
+                  }`}
+                >
+                  <span
+                    className={`rounded-md px-2 py-0.5 font-mono text-xs font-medium ${
+                      rank === 0 ? 'bg-signal text-ink-950' : 'bg-bone text-ink-950'
+                    }`}
+                  >
+                    {formatScore(pvLine.score)}
+                  </span>
+                  <p className="font-mono text-xs leading-relaxed text-mute">
+                    {formatLine(pvLine.pvSan, view.fen)}
+                  </p>
+                </li>
+              ))}
+            </ol>
           ) : (
             <p className="text-sm text-dim">
               {enabled && status === 'ongoing' ? 'Calcul en cours…' : 'Analyse arrêtée.'}
@@ -354,6 +468,14 @@ export function AnalysisPage() {
 
         <Card title="Nœuds par profondeur">
           <NodesPerDepth depths={current ? analysis.depths : []} />
+        </Card>
+
+        <Card title="Contribution NNUE" aside="par pièce">
+          <ContributionMap
+            explanation={explained}
+            fen={view?.fen ?? null}
+            orientation={orientation}
+          />
         </Card>
 
         <Card

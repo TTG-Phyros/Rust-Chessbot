@@ -9,8 +9,11 @@ export function EvalGraph({
   onSelect,
   height = 160,
   labels = true,
+  overlays = [],
 }: {
   points: readonly (number | null)[];
+  /** Other series drawn as plain lines over the main one (same scale). */
+  overlays?: readonly { points: readonly (number | null)[]; color: string }[];
   cap: number;
   /** Index of the position on the board: a cursor and a lit dot. */
   current?: number;
@@ -24,7 +27,9 @@ export function EvalGraph({
   // Top 4 %, bottom 96 %: dots at the bounds stay whole.
   const y = (pawns: number) => 50 - (pawns / cap) * 46;
   const known = points.flatMap((pawns, index) => (pawns === null ? [] : [{ index, pawns }]));
-  const line = known.map(({ index, pawns }) => `${x(index)},${y(pawns)}`).join(' ');
+  const polyline = (series: readonly (number | null)[]) =>
+    series.flatMap((pawns, index) => (pawns === null ? [] : [`${x(index)},${y(pawns)}`])).join(' ');
+  const line = polyline(points);
   const first = known[0];
   const last = known[known.length - 1];
   const area = first && last ? `${x(first.index)},50 ${line} ${x(last.index)},50` : '';
@@ -80,6 +85,18 @@ export function EvalGraph({
             vectorEffect="non-scaling-stroke"
           />
         )}
+        {overlays.map((overlay, i) => (
+          <polyline
+            key={i}
+            points={polyline(overlay.points)}
+            fill="none"
+            stroke={overlay.color}
+            strokeWidth="1.5"
+            strokeDasharray="3 3"
+            strokeLinejoin="round"
+            vectorEffect="non-scaling-stroke"
+          />
+        ))}
         {current !== undefined && (
           <line
             x1={x(current)}

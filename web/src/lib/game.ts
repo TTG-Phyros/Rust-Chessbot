@@ -5,6 +5,7 @@
 import type { GameRequest } from '../api/generated/GameRequest';
 import type { MoveView } from '../api/generated/MoveView';
 import type { Side } from '../api/generated/Side';
+import { frenchSan } from './san';
 
 export const STARTPOS_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
@@ -47,14 +48,14 @@ export type MoveCell = {
 export type MoveRow = { number: number; white: MoveCell | null; black: MoveCell | null };
 
 /**
- * Groups a SAN history into numbered rows (`1. e4 e5`); a game starting with
- * Black to move gets an empty white cell (`12. … Kd7`).
+ * Groups a SAN history into numbered rows, in French notation (`1. e4 e5`); a game starting with
+ * Black to move gets an empty white cell (`12. … Rd7`).
  */
 export function moveRows(history: readonly string[], startFen: string = STARTPOS_FEN): MoveRow[] {
   const start = fenMoveNumber(startFen);
   const cell = (ply: number): MoveCell | null => {
     const san = history[ply];
-    return san === undefined ? null : { san, ply };
+    return san === undefined ? null : { san: frenchSan(san), ply };
   };
   const rows: MoveRow[] = [];
   let ply = 0;
@@ -71,7 +72,7 @@ export function moveRows(history: readonly string[], startFen: string = STARTPOS
   return rows;
 }
 
-/** A line of SAN moves with move numbers, from position `fen`: `12... Kd7 13. e4`. */
+/** A line of SAN moves with move numbers, from position `fen`: `12... Rd7 13. e4`. */
 export function formatLine(moves: readonly string[], fen: string): string {
   return moveRows(moves, fen)
     .map((row) => {
@@ -98,4 +99,17 @@ export function moveLabel(
 /** Color of a react-chessboard piece code (`wP`, `bK`). */
 export function pieceSide(pieceType: string): Side {
   return pieceType.startsWith('w') ? 'white' : 'black';
+}
+
+/** The 64 squares of a FEN's placement field, a8 first: a piece letter or `''`. */
+export function fenSquares(fen: string): string[] {
+  const placement = fen.split(' ')[0] ?? '';
+  const squares: string[] = [];
+  for (const rank of placement.split('/')) {
+    for (const char of rank) {
+      if (/\d/.test(char)) squares.push(...Array<string>(Number(char)).fill(''));
+      else squares.push(char);
+    }
+  }
+  return squares.length === 64 ? squares : Array<string>(64).fill('');
 }

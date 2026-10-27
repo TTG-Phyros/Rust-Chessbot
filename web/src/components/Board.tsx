@@ -14,6 +14,8 @@ type BoardProps = {
   interactive: boolean;
   onMove: (uci: string) => void;
   arrows?: Arrow[];
+  /** Background of some squares (a heat map), under the move highlights. */
+  squareTints?: Record<string, CSSProperties>;
   /**
    * Tilts the board in perspective, pieces standing up. Moves are then
    * played by clicks only: dragging does not follow a tilted board.
@@ -88,6 +90,7 @@ export function Board({
   interactive,
   onMove,
   arrows = [],
+  squareTints = {},
   tilted = false,
 }: BoardProps) {
   // react-chessboard v5 has no 'start' shorthand: always pass a real FEN.
@@ -112,10 +115,10 @@ export function Board({
     return true;
   };
 
-  const squareStyles: Record<string, CSSProperties> = {};
+  const squareStyles: Record<string, CSSProperties> = { ...squareTints };
   if (view?.lastMove) {
-    squareStyles[view.lastMove.from] = LAST_MOVE;
-    squareStyles[view.lastMove.to] = LAST_MOVE;
+    squareStyles[view.lastMove.from] = { ...squareStyles[view.lastMove.from], ...LAST_MOVE };
+    squareStyles[view.lastMove.to] = { ...squareStyles[view.lastMove.to], ...LAST_MOVE };
   }
   if (view?.checkSquare) squareStyles[view.checkSquare] = CHECK;
   if (selected) {

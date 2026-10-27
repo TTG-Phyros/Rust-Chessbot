@@ -96,7 +96,7 @@ Sous Windows : `winget install Rustlang.Rustup Casey.Just OpenJS.NodeJS.LTS`, pl
 | `just gpu-check` | `nvidia-smi` dans un conteneur, puis un matmul et une rétropropagation burn sur le GPU, comparés au CPU |
 | `just web-dev` | Vite (rechargement à chaud) + `chess-server` natif, sans reconstruire d'image |
 | `just test` / `just lint` / `just ci` | tests, vérifications de la CI (rustfmt, clippy `-D warnings`, ESLint, tsc, Prettier), ou les deux |
-| `just perft` | perft profond en release (positions CPW + cas limites, ~760M nœuds, quelques secondes) |
+| `just perft` | perft profond en release (positions CPW + cas limites, ~790M nœuds, quelques secondes) |
 | `just bench` | benchmarks criterion : génération de coups, recherche, inférence NNUE |
 | `just engine-bench` | signature et vitesse (nœuds/s) du moteur, via `chess-uci bench` |
 | `just play` | moteur UCI sur stdin/stdout |
@@ -237,7 +237,7 @@ chess-train match data/weights/main.nnue stockfish-5 --games 100 --movetime 100 
 chess-train serve --port 4000                  # démon de contrôle (GET /status, POST /start, POST /stop)
 ```
 
-`match` joue des paires de parties sur la même ouverture aléatoire, couleurs inversées, à nombre de nœuds fixe. Il affiche l'Elo avec son intervalle à 95 % et la LOS. Avec `--sprt`, il s'arrête dès que le test conclut (approximation normale du modèle trinomial, comme fishtest ; α = β = 0,05 par défaut). `classic` désigne l'évaluation PeSTO, et `stockfish-1` à `stockfish-10` les niveaux de Stockfish.
+`match` joue des paires de parties sur la même ouverture aléatoire, couleurs inversées, avec la même réflexion pour nos moteurs : un nombre de nœuds par coup fixe par défaut, ou `--depth` / `--movetime` (Stockfish joue à son niveau). Il affiche l'Elo avec son intervalle à 95 % et la LOS. Avec `--sprt`, il s'arrête dès que le test conclut (approximation normale du modèle trinomial, comme fishtest ; α = β = 0,05 par défaut). `classic` désigne l'évaluation PeSTO, et `stockfish-1` à `stockfish-10` les niveaux de Stockfish.
 
 La configuration se fait par `chess-train.toml` (voir [`chess-train.example.toml`](chess-train.example.toml)), par les variables `CHESS_TRAIN_*` (`CHESS_TRAIN_SELFPLAY__NODES=8000`) ou par les options de la ligne de commande.
 
@@ -250,7 +250,7 @@ La configuration se fait par `chess-train.toml` (voir [`chess-train.example.toml
   - **Réutiliser les parties de** : le nouveau réseau s'entraîne aussi sur les parties d'autres réseaux. Il démarre ainsi sans attendre 2 M positions de son propre self-play, ce qui est pratique pour comparer des hyperparamètres d'entraînement sur les mêmes données.
 - **Bot.** Un bot est un snapshot copié dans `data/bots/<nom>.nnue`, avec sa description (`<nom>.json` : réseau d'origine, superbatch, Elo mesuré, hyperparamètres). Il ne bouge plus, même si le réseau continue de s'entraîner ou est supprimé.
 - **Tournoi.** Chaque paire de bots joue les mêmes ouvertures aléatoires avec les deux couleurs, et tous nos bots réfléchissent pareil : seule l'évaluation les distingue. La réflexion se règle de trois façons :
-  - **Nœuds** (par défaut) : chaque bot examine le même nombre de positions avant de jouer, soit environ 4 M nœuds/s par thread. Les résultats sont reproductibles quelle que soit la charge de la machine.
+  - **Nœuds** (par défaut) : chaque bot examine le même nombre de positions avant de jouer, soit environ 3,5 M nœuds/s par thread. Les résultats sont reproductibles quelle que soit la charge de la machine.
   - **Profondeur** : chaque bot cherche jusqu'à la même profondeur (1 à 30 demi-coups). Le temps par coup varie beaucoup selon la position.
   - **Temps** : chaque bot réfléchit le même temps par coup (10 ms à 60 s). Une évaluation plus rapide cherche alors plus loin, ce qui correspond aux conditions de jeu réelles, mais un entraînement en parallèle ralentit tout le monde.
 

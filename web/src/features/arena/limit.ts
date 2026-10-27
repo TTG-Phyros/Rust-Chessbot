@@ -29,7 +29,7 @@ export const LIMIT_OPTIONS: readonly LimitOption[] = [
     max: 10_000_000,
     step: 100,
     initial: 5000,
-    help: 'Chaque bot examine ce nombre de positions avant de jouer : même effort pour tous, résultats reproductibles quelle que soit la charge de la machine. Environ 4 M nœuds/s par thread.',
+    help: 'Chaque bot examine ce nombre de positions avant de jouer : même effort pour tous, résultats reproductibles quelle que soit la charge de la machine. Environ 3,5 M nœuds/s par thread.',
   },
   {
     kind: 'depth',

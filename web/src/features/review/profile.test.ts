@@ -8,6 +8,7 @@ import {
   filtersQuery,
   filtersToSearch,
   formatDuration,
+  formatElo,
   gameLink,
   reviewRequest,
   scoreShare,
@@ -66,6 +67,7 @@ const PROFILE: ReviewProfile = {
   conversion: { winning: 4, converted: 1, losing: 0, saved: 0 },
   motifs: [],
   weaknesses: [],
+  elo: [],
   perGame: [],
 };
 
@@ -114,6 +116,17 @@ describe('filters', () => {
 });
 
 describe('formats', () => {
+  it('format estimated ratings', () => {
+    expect(formatElo({ rating: 1849.6, low: 1612.2, high: 2087.1, games: 1 })).toBe(
+      '1850 (1612–2087)',
+    );
+    // At the limits of the calibration.
+    expect(formatElo({ rating: 2569, low: 2094, high: 2569, games: 20 })).toBe(
+      '≥ 2569 (2094–2569)',
+    );
+    expect(formatElo({ rating: 400, low: 400, high: 900, games: 3 })).toBe('≤ 400 (400–900)');
+  });
+
   it('format durations and scores', () => {
     expect(formatDuration(45.4)).toBe('45 s');
     expect(formatDuration(200)).toBe('3 min 20 s');

@@ -15,6 +15,7 @@ import { formatLine, moveLabel, newGame } from '../../lib/game';
 import { frenchSan } from '../../lib/san';
 import { formatScore } from '../../lib/score';
 import { ClassBadge } from './ClassBadge';
+import { formatElo } from './profile';
 import {
   BEST_ARROW,
   CLASSES,
@@ -93,6 +94,14 @@ function PlayerStrip({
           {stats.accuracy.toFixed(1)} %
         </span>
       )}
+      {stats?.elo && (
+        <span
+          className="font-mono text-xs text-think"
+          title={`Elo estimé sur cette partie, intervalle à 95 % : ${formatElo(stats.elo)}`}
+        >
+          ≈ {Math.round(stats.elo.rating)}
+        </span>
+      )}
       <span className="flex-1" />
       {clock !== null && (
         <span
@@ -112,20 +121,29 @@ function Accuracies({ view }: { view: ReviewGameView }) {
   const analysis = view.analysis;
   if (!analysis) return null;
   const sides = [
-    { name: view.game.white.username, stats: analysis.white },
-    { name: view.game.black.username, stats: analysis.black },
+    { player: view.game.white, stats: analysis.white },
+    { player: view.game.black, stats: analysis.black },
   ];
   return (
     <Card title="Précision" aside={`${analysis.engine} · ${analysis.budget}`}>
       <div className="grid grid-cols-2 gap-4">
-        {sides.map(({ name, stats }) => (
-          <div key={name} className="min-w-0">
-            <p className="truncate text-sm text-mute">{name}</p>
+        {sides.map(({ player, stats }) => (
+          <div key={player.username} className="min-w-0">
+            <p className="truncate text-sm text-mute">
+              {player.username} <span className="font-mono text-xs text-dim">{player.rating}</span>
+            </p>
             <p className="font-display text-5xl">
               {stats.accuracy != null ? stats.accuracy.toFixed(1) : '—'}
             </p>
             <p className="font-mono text-xs text-dim">
               ACPL {stats.acpl != null ? Math.round(stats.acpl) : '—'}
+            </p>
+            <p
+              className="mt-1 text-xs text-mute"
+              title="Intervalle à 95 % : une seule partie dit peu"
+            >
+              Elo estimé{' '}
+              <span className="font-mono text-think">{stats.elo ? formatElo(stats.elo) : '—'}</span>
             </p>
           </div>
         ))}

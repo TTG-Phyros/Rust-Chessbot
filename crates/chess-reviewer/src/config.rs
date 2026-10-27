@@ -43,6 +43,9 @@ pub struct ReviewConfig {
     pub classification: Thresholds,
     /// Profiles of the players.
     pub profile: ProfileConfig,
+    /// Elo model fitted by `chess-reviewer calibrate fit` (estimates are
+    /// left out while it does not exist).
+    pub elo_model: PathBuf,
 }
 
 /// Which engine analyses the games.
@@ -211,6 +214,7 @@ impl Default for ReviewConfig {
             native: NativeConfig::default(),
             classification: Thresholds::default(),
             profile: ProfileConfig::default(),
+            elo_model: PathBuf::from("config/elo-model.json"),
         }
     }
 }

@@ -1,3 +1,4 @@
+import type { ReviewElo } from '../../api/generated/ReviewElo';
 import type { ReviewGameRef } from '../../api/generated/ReviewGameRef';
 import type { ReviewMotif } from '../../api/generated/ReviewMotif';
 import type { ReviewPhase } from '../../api/generated/ReviewPhase';
@@ -90,6 +91,23 @@ export function formatDuration(seconds: number): string {
   if (total < 60) return `${total} s`;
   if (total < 3600) return `${Math.floor(total / 60)} min ${String(total % 60).padStart(2, '0')} s`;
   return `${Math.floor(total / 3600)} h ${String(Math.floor((total % 3600) / 60)).padStart(2, '0')} min`;
+}
+
+/**
+ * Where an estimate stands against the ratings of the calibration: at its
+ * highest or lowest, the model can only say the rating is beyond.
+ */
+export function eloBound(elo: ReviewElo): 'high' | 'low' | null {
+  if (elo.high - elo.rating < 1) return 'high';
+  if (elo.rating - elo.low < 1) return 'low';
+  return null;
+}
+
+/** `1850 (1612–2087)`: the estimate and its 95 % interval; `≥ 2569 (2094–2569)` at the top of the calibration. */
+export function formatElo(elo: ReviewElo): string {
+  const bound = eloBound(elo);
+  const prefix = bound === 'high' ? '≥ ' : bound === 'low' ? '≤ ' : '';
+  return `${prefix}${String(Math.round(elo.rating))} (${String(Math.round(elo.low))}–${String(Math.round(elo.high))})`;
 }
 
 /** Points scored, out of the games: `62 %`. */

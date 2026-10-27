@@ -5,11 +5,12 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::time::Duration;
 
-use chess_chesscom::PlayedGame;
+use chess_chesscom::{PlayedGame, TimeClass};
 use chess_core::pgn::TimeControl;
 use chess_core::{Color, Position};
 use chess_openings::Book;
 use chess_review::classify::ClassCounts;
+use chess_review::elo::{EloEstimate, EloFeatures, EloModel};
 use chess_review::motifs::{Motif, Phase, PhaseRules, motif, phase};
 use chess_review::{GameAnalysis, MoveClass, Thresholds, review_game};
 use serde::{Deserialize, Serialize};
@@ -239,6 +240,21 @@ pub struct Weakness {
     pub examples: Vec<GameRef>,
 }
 
+/// Estimated and real rating in one time class.
+#[derive(Debug, Clone, PartialEq)]
+pub struct EloStats {
+    /// The time class.
+    pub time_class: TimeClass,
+    /// Games long enough to rate the player.
+    pub games: u32,
+    /// Rating estimated from their play; `None` without a calibrated model.
+    pub estimate: Option<EloEstimate>,
+    /// Their rating after the most recent of these games.
+    pub rating: i32,
+    /// Their mean rating over these games.
+    pub mean_rating: f64,
+}
+
 /// One game in the profile.
 #[derive(Debug, Clone, PartialEq)]
 pub struct GameStats {
@@ -289,6 +305,8 @@ pub struct Profile {
     pub motifs: Vec<MotifStats>,
     /// Their three main weaknesses, costliest first.
     pub weaknesses: Vec<Weakness>,
+    /// Estimated and real rating, by time class (most games first).
+    pub elo: Vec<EloStats>,
     /// Each game, as given.
     pub per_game: Vec<GameStats>,
 }
@@ -359,19 +377,27 @@ struct GameContext<'a> {
 }
 
 /// Builds the profile of `username` from their analysed games (most recent
-/// first).
+/// first); `elo` rates their play, when calibrated.
 #[must_use]
 pub fn build_profile(
     username: &str,
     games: &[(PlayedGame, GameAnalysis)],
     thresholds: &Thresholds,
     config: &ProfileConfig,
+    elo: Option<&EloModel>,
 ) -> Profile {
     let mut builder = Builder::new(thresholds, config);
     for (game, analysis) in games {
         builder.add(username, game, analysis);
     }
-    builder.finish(username)
+    builder.finish(username, elo)
+}
+
+#[derive(Default)]
+struct EloAcc {
+    features: Vec<EloFeatures>,
+    latest: Option<i32>,
+    ratings: (f64, u32),
 }
 
 struct Builder<'a> {
@@ -397,6 +423,7 @@ struct Builder<'a> {
     wasted: f64,
     wasted_examples: Vec<GameRef>,
     motifs: BTreeMap<Motif, MotifAcc>,
+    elo: BTreeMap<TimeClass, EloAcc>,
     per_game: Vec<GameStats>,
 }
 
@@ -428,6 +455,7 @@ impl<'a> Builder<'a> {
             wasted: 0.0,
             wasted_examples: Vec::new(),
             motifs: BTreeMap::new(),
+            elo: BTreeMap::new(),
             per_game: Vec::new(),
         }
     }
@@ -467,6 +495,13 @@ impl<'a> Builder<'a> {
             acpl: player.acpl,
         });
         self.rating.get_or_insert(game.player(side).rating);
+        if let Some(features) = EloFeatures::of(player) {
+            let acc = self.elo.entry(game.time_class).or_default();
+            acc.features.push(features);
+            acc.latest.get_or_insert(game.player(side).rating);
+            acc.ratings.0 += f64::from(game.player(side).rating);
+            acc.ratings.1 += 1;
+        }
         self.opponents.0 += f64::from(game.player(!side).rating);
         self.opponents.1 += 1;
 
@@ -682,7 +717,7 @@ impl<'a> Builder<'a> {
         }
     }
 
-    fn finish(self, username: &str) -> Profile {
+    fn finish(self, username: &str, elo: Option<&EloModel>) -> Profile {
         let games = f64::from(self.games.max(1));
         let examples = self.config.examples;
         let mean = |(sum, count): (f64, u32)| (count > 0).then(|| sum / f64::from(count));
@@ -820,6 +855,21 @@ impl<'a> Builder<'a> {
         weaknesses.sort_by(|a, b| b.lost_per_game.total_cmp(&a.lost_per_game));
         weaknesses.truncate(3);
 
+        let mut elo_stats: Vec<EloStats> = self
+            .elo
+            .into_iter()
+            .map(|(time_class, acc)| EloStats {
+                time_class,
+                games: u32::try_from(acc.features.len()).unwrap_or(u32::MAX),
+                estimate: elo
+                    .and_then(|model| model.get(time_class.as_str()))
+                    .and_then(|model| model.estimate(&acc.features)),
+                rating: acc.latest.unwrap_or_default(),
+                mean_rating: mean(acc.ratings).unwrap_or_default(),
+            })
+            .collect();
+        elo_stats.sort_by_key(|stats| std::cmp::Reverse(stats.games));
+
         Profile {
             username: username.to_owned(),
             games: self.games,
@@ -838,6 +888,7 @@ impl<'a> Builder<'a> {
             conversion: self.conversion,
             motifs,
             weaknesses,
+            elo: elo_stats,
             per_game: self.per_game,
         }
     }
@@ -967,6 +1018,7 @@ mod tests {
             &games(),
             &Thresholds::default(),
             &ProfileConfig::default(),
+            None,
         )
     }
 

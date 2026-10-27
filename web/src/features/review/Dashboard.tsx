@@ -1,6 +1,7 @@
 import { Link } from 'react-router';
 
 import type { ReviewClassCounts } from '../../api/generated/ReviewClassCounts';
+import type { ReviewElo } from '../../api/generated/ReviewElo';
 import type { ReviewGameRef } from '../../api/generated/ReviewGameRef';
 import type { ReviewOpeningStats } from '../../api/generated/ReviewOpeningStats';
 import type { ReviewProfile } from '../../api/generated/ReviewProfile';
@@ -8,8 +9,16 @@ import { Card, Stat } from '../../components/ui';
 import { STARTPOS_FEN, formatLine } from '../../lib/game';
 import { frenchSan } from '../../lib/san';
 import { ClassBadge } from './ClassBadge';
-import { MOTIF_NAME, PHASE_NAME, describeWeakness, gameLink, scoreShare } from './profile';
-import { CLASSES, CLASS_ORDER } from './review';
+import {
+  MOTIF_NAME,
+  PHASE_NAME,
+  describeWeakness,
+  eloBound,
+  formatElo,
+  gameLink,
+  scoreShare,
+} from './profile';
+import { CLASSES, CLASS_ORDER, TIME_CLASS_NAME } from './review';
 
 const percent = (value: number | null | undefined, digits = 1) =>
   value === null || value === undefined ? '—' : value.toFixed(digits);
@@ -100,6 +109,103 @@ function Summary({ profile }: { profile: ReviewProfile }) {
       <div className="mt-5">
         <ClassBar counts={profile.counts} moves={profile.moves} />
       </div>
+    </Card>
+  );
+}
+
+/** The 95 % interval of an estimate, its centre, and the real rating. */
+function RangeBar({ estimate, rating }: { estimate: ReviewElo; rating: number }) {
+  const low = Math.min(estimate.low, rating) - 100;
+  const high = Math.max(estimate.high, rating) + 100;
+  const x = (value: number) => ((value - low) / (high - low)) * 100;
+  return (
+    <div className="relative mt-2 h-5" aria-hidden>
+      <div className="absolute inset-x-0 top-1/2 h-px bg-ink-700" />
+      <div
+        className="absolute top-1/2 h-2 -translate-y-1/2 rounded-full bg-think/35"
+        style={{
+          left: `${String(x(estimate.low))}%`,
+          width: `${String(x(estimate.high) - x(estimate.low))}%`,
+        }}
+      />
+      <div
+        className="absolute top-1/2 h-3.5 w-0.5 -translate-x-1/2 -translate-y-1/2 bg-think"
+        style={{ left: `${String(x(estimate.rating))}%` }}
+      />
+      <div
+        className="absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 rotate-45 bg-bone"
+        style={{ left: `${String(x(rating))}%` }}
+      />
+    </div>
+  );
+}
+
+/** Estimated rating by time class, against the real one. */
+function Ratings({ profile }: { profile: ReviewProfile }) {
+  if (profile.elo.length === 0) return null;
+  const calibrated = profile.elo.some((stats) => stats.estimate);
+  return (
+    <Card title="Elo estimé" aside="d'après la qualité du jeu · intervalle à 95 %">
+      {!calibrated && (
+        <p className="mb-3 text-sm text-dim">
+          Pas de modèle calibré : lancez <code>chess-reviewer calibrate</code>.
+        </p>
+      )}
+      <ul className="space-y-4">
+        {profile.elo.map((stats) => {
+          const estimate = stats.estimate;
+          const gap = estimate ? Math.round(estimate.rating - stats.rating) : null;
+          const inside = estimate
+            ? estimate.low <= stats.rating && stats.rating <= estimate.high
+            : false;
+          // The real rating beyond the calibration, which the estimate cannot pass.
+          const bound = estimate ? eloBound(estimate) : null;
+          const beyond =
+            estimate !== null &&
+            estimate !== undefined &&
+            ((bound === 'high' && stats.rating > estimate.high) ||
+              (bound === 'low' && stats.rating < estimate.low));
+          return (
+            <li key={stats.timeClass}>
+              <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-sm">
+                <span>
+                  {TIME_CLASS_NAME[stats.timeClass]}{' '}
+                  <span className="text-dim">· {stats.games} parties</span>
+                </span>
+                <span className="font-mono">
+                  <span className="text-think">{estimate ? formatElo(estimate) : '—'}</span>
+                  <span className="text-mute"> · réel {stats.rating}</span>
+                  {gap !== null && beyond && (
+                    <span className="text-dim"> (au-delà de la calibration)</span>
+                  )}
+                  {gap !== null && !beyond && (
+                    <span className={inside ? 'text-dim' : 'text-warn'}>
+                      {' '}
+                      ({gap > 0 ? '+' : ''}
+                      {gap}
+                      {inside ? '' : ', hors intervalle'})
+                    </span>
+                  )}
+                </span>
+              </div>
+              {estimate && <RangeBar estimate={estimate} rating={stats.rating} />}
+            </li>
+          );
+        })}
+      </ul>
+      {calibrated && (
+        <p className="mt-4 flex gap-4 text-xs text-dim">
+          <span className="flex items-center gap-1.5">
+            <span className="h-2 w-4 rounded-full bg-think/35" /> intervalle
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-3 w-0.5 bg-think" /> estimation
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="size-2 rotate-45 bg-bone" /> Elo réel
+          </span>
+        </p>
+      )}
     </Card>
   );
 }
@@ -356,6 +462,7 @@ export function Dashboard({ profile, player }: { profile: ReviewProfile; player:
   return (
     <div className="space-y-4">
       <Summary profile={profile} />
+      <Ratings profile={profile} />
       <Weaknesses profile={profile} player={player} />
       <div className="grid gap-4 lg:grid-cols-2">
         <Phases profile={profile} />

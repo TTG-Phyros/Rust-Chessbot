@@ -52,6 +52,7 @@ services:
       CHESS_REVIEW_CONFIG: /config/review.toml
       CHESS_REVIEW_USER_AGENT: ${CHESS_REVIEW_USER_AGENT:-}
       CHESS_REVIEW_CACHE: /cache/review.sqlite
+      CHESS_REVIEW_ELO_MODEL: /config/elo-model.json
       # Reviews by our own engine use the network of this run.
       CHESS_REVIEW_NATIVE__EVAL_FILE: /data/weights/${CHESS_TRAIN_RUN:-main}.nnue
       RUST_LOG:

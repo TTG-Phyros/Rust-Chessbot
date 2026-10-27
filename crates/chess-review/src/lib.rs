@@ -8,6 +8,7 @@
 //!   included, by such an engine.
 //! - [`classify`]: the class of each move (Brilliant, Great, Best… Miss,
 //!   Blunder) and the accuracy of the players, from such an analysis.
+//! - [`elo`]: the rating estimated from how a player played.
 //! - [`accuracy`]: the formulas of Lichess for winning chances and accuracy.
 //! - [`exchange`]: material at stake on the board (sacrifices).
 //! - [`motifs`]: the phase of a position and the tactical motif of a mistake.
@@ -19,6 +20,7 @@ pub mod accuracy;
 pub mod analysis;
 pub mod bench;
 pub mod classify;
+pub mod elo;
 pub mod engine;
 pub mod exchange;
 pub mod motifs;

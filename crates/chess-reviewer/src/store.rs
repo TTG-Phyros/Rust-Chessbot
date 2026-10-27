@@ -713,7 +713,16 @@ mod tests {
 
     #[test]
     fn reopens_an_existing_database() {
-        let dir = std::env::temp_dir().join(format!("chess-reviewer-test-{}", std::process::id()));
+        // Not under the system temp dir: the config tests clear the
+        // environment (TEMP included) while they run. Unique: a previous run
+        // may still be deleting its directory.
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target/test-tmp")
+            .join(format!("reviewer-{}-{nanos}", std::process::id()));
         let path = dir.join("cache.sqlite");
         {
             let store = Store::open(&path).unwrap();

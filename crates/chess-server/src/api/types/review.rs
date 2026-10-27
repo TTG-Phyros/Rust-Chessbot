@@ -394,6 +394,20 @@ pub struct ReviewClassCounts {
     pub blunder: u32,
 }
 
+/// A rating estimated from the play, with its 95 % interval.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS, ToSchema)]
+#[ts(export)]
+pub struct ReviewElo {
+    /// The estimate.
+    pub rating: f64,
+    /// Lower bound of the 95 % interval.
+    pub low: f64,
+    /// Upper bound.
+    pub high: f64,
+    /// Games it rests on.
+    pub games: u32,
+}
+
 /// How one player played a game.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, ToSchema)]
 #[ts(export, optional_fields = nullable)]
@@ -406,6 +420,9 @@ pub struct ReviewPlayerStats {
     pub acpl: Option<f64>,
     /// Moves of each class.
     pub counts: ReviewClassCounts,
+    /// Rating their play in this game suggests (wide: one game says
+    /// little); `None` for short games or without a calibrated model.
+    pub elo: Option<ReviewElo>,
 }
 
 /// The engine analysis of a game.
@@ -662,6 +679,23 @@ pub struct ReviewWeakness {
     pub examples: Vec<ReviewGameRef>,
 }
 
+/// Estimated and real rating in one time class.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
+pub struct ReviewEloStats {
+    /// The time class.
+    pub time_class: TimeClassView,
+    /// Games long enough to rate the player.
+    pub games: u32,
+    /// Rating estimated from their play; `None` without a calibrated model.
+    pub estimate: Option<ReviewElo>,
+    /// Their rating after the most recent of these games.
+    pub rating: i32,
+    /// Their mean rating over these games.
+    pub mean_rating: f64,
+}
+
 /// One game of the profile.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, ToSchema)]
 #[ts(export, optional_fields = nullable)]
@@ -728,6 +762,8 @@ pub struct ReviewProfile {
     pub motifs: Vec<ReviewMotifStats>,
     /// Their three main weaknesses, costliest first.
     pub weaknesses: Vec<ReviewWeakness>,
+    /// Estimated and real rating by time class, most games first.
+    pub elo: Vec<ReviewEloStats>,
     /// Each game, most recent first.
     pub per_game: Vec<ReviewProfileGame>,
 }

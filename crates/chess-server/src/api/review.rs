@@ -17,6 +17,7 @@ use chess_chesscom::{ApiGame, GameFilter, PlayedGame, TimeClass, parse_date};
 use chess_core::{Color, Position};
 use chess_openings::Book;
 use chess_review::classify::ClassCounts;
+use chess_review::elo::{EloEstimate, EloFeatures, EloModel};
 use chess_review::motifs::{Motif, Phase};
 use chess_review::{
     Budget, GameAnalysis, GameReview, MoveClass, PlayerReview, Score, SearchSettings, review_game,
@@ -30,13 +31,14 @@ use utoipa::IntoParams;
 
 use super::error::ApiError;
 use super::types::review::{
-    ReviewAnalysis, ReviewClass, ReviewClassCounts, ReviewConversion, ReviewEngine, ReviewEstimate,
-    ReviewEstimates, ReviewGameRef, ReviewGameSummary, ReviewGameView, ReviewJobState,
-    ReviewJobView, ReviewLine, ReviewLineStats, ReviewMotif, ReviewMotifStats, ReviewMove,
-    ReviewOpening, ReviewOpeningStats, ReviewOptions, ReviewPhase, ReviewPhaseStats,
-    ReviewPlayedMove, ReviewPlayer, ReviewPlayerStats, ReviewPosition, ReviewPreset, ReviewProfile,
-    ReviewProfileGame, ReviewRecord, ReviewRepertoire, ReviewRequest, ReviewStarted,
-    ReviewTimeStats, ReviewVerdict, ReviewWeakness, ReviewWeaknessKind, TimeClassView,
+    ReviewAnalysis, ReviewClass, ReviewClassCounts, ReviewConversion, ReviewElo, ReviewEloStats,
+    ReviewEngine, ReviewEstimate, ReviewEstimates, ReviewGameRef, ReviewGameSummary,
+    ReviewGameView, ReviewJobState, ReviewJobView, ReviewLine, ReviewLineStats, ReviewMotif,
+    ReviewMotifStats, ReviewMove, ReviewOpening, ReviewOpeningStats, ReviewOptions, ReviewPhase,
+    ReviewPhaseStats, ReviewPlayedMove, ReviewPlayer, ReviewPlayerStats, ReviewPosition,
+    ReviewPreset, ReviewProfile, ReviewProfileGame, ReviewRecord, ReviewRepertoire, ReviewRequest,
+    ReviewStarted, ReviewTimeStats, ReviewVerdict, ReviewWeakness, ReviewWeaknessKind,
+    TimeClassView,
 };
 use super::types::{ErrorResponse, ScoreView, Side};
 use crate::AppState;
@@ -595,7 +597,12 @@ pub(super) async fn game(
                 &service.config().classification,
             )
             .map_err(|err| ApiError::internal(format!("cannot review game {id}: {err}")))?;
-            Some(analysis_view(&played, &analysis, &review))
+            Some(analysis_view(
+                &played,
+                &analysis,
+                &review,
+                service.elo_model(),
+            ))
         }
         None => None,
     };
@@ -624,6 +631,7 @@ fn analysis_view(
     played: &PlayedGame,
     analysis: &GameAnalysis,
     review: &GameReview,
+    elo: Option<&EloModel>,
 ) -> ReviewAnalysis {
     let mut position = played.game.start().clone();
     let mut positions = Vec::with_capacity(analysis.positions.len());
@@ -665,8 +673,8 @@ fn analysis_view(
                 cp_loss: verdict.cp_loss,
             })
             .collect(),
-        white: player_stats(review.player(Color::White)),
-        black: player_stats(review.player(Color::Black)),
+        white: player_stats(review.player(Color::White), played, elo),
+        black: player_stats(review.player(Color::Black), played, elo),
     }
 }
 
@@ -685,12 +693,30 @@ const fn class_view(class: MoveClass) -> ReviewClass {
     }
 }
 
-fn player_stats(player: &PlayerReview) -> ReviewPlayerStats {
+fn player_stats(
+    player: &PlayerReview,
+    played: &PlayedGame,
+    elo: Option<&EloModel>,
+) -> ReviewPlayerStats {
+    let estimate = elo
+        .and_then(|model| model.get(played.time_class.as_str()))
+        .zip(EloFeatures::of(player))
+        .and_then(|(model, features)| model.estimate(&[features]));
     ReviewPlayerStats {
         moves: player.moves,
         accuracy: player.accuracy,
         acpl: player.acpl,
         counts: counts_view(&player.counts),
+        elo: estimate.map(elo_view),
+    }
+}
+
+fn elo_view(estimate: EloEstimate) -> ReviewElo {
+    ReviewElo {
+        rating: estimate.rating,
+        low: estimate.low,
+        high: estimate.high,
+        games: count(estimate.games),
     }
 }
 
@@ -890,6 +916,17 @@ fn profile_view(profile: &Profile, unanalysed: u32) -> ReviewProfile {
                 lost_per_game: weakness.lost_per_game,
                 count: weakness.count,
                 examples: refs_view(&weakness.examples),
+            })
+            .collect(),
+        elo: profile
+            .elo
+            .iter()
+            .map(|stats| ReviewEloStats {
+                time_class: time_class_view(stats.time_class),
+                games: stats.games,
+                estimate: stats.estimate.map(elo_view),
+                rating: stats.rating,
+                mean_rating: stats.mean_rating,
             })
             .collect(),
         per_game: profile

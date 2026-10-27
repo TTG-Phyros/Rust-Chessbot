@@ -4,18 +4,23 @@
 //! chess-reviewer fetch hikaru -n 20 --time-class blitz   # sync and list games
 //! chess-reviewer estimate hikaru -n 10                   # how long, per preset
 //! chess-reviewer analyse hikaru -n 10 --preset fast       # analyse them too
+//! chess-reviewer calibrate collect --seed hikaru --country IS --until 2026-09-30
+//! chess-reviewer calibrate fit                            # config/elo-model.json
 //! ```
 //!
 //! Settings come from `config/review.toml`, `CHESS_REVIEW_*` variables (a
 //! `.env` file in the working directory is read first) and flags.
 
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
 use chess_chesscom::{ApiGame, Client, GameFilter, PlayedGame, TimeClass, parse_date};
 use chess_core::Color;
+use chess_review::elo::FEATURE_NAMES;
 use chess_review::{Budget, MoveClass, PlayerReview, Score, SearchSettings, review_game};
+use chess_reviewer::calibration::{self, CollectEvent, CollectOptions, Dataset};
 use chess_reviewer::{
     EngineKind, JobRequest, JobState, MonthSource, ReviewConfig, ReviewService, Store, SyncEvent,
     analysis_key, sync_player,
@@ -49,6 +54,68 @@ enum Command {
         #[command(flatten)]
         search: Search,
     },
+    /// Calibrates the Elo estimates: a sample of games, then the model.
+    #[command(subcommand)]
+    Calibrate(Calibrate),
+}
+
+#[derive(Debug, Subcommand)]
+enum Calibrate {
+    /// Downloads and analyses a sample of rated games, spread over the
+    /// rating bands by following the opponents of seed players.
+    Collect(Box<CollectArgs>),
+    /// Fits the model (a ridge regression per time class) on a sample.
+    Fit {
+        /// The sample (`calibrate collect`).
+        #[arg(long, default_value = "config/elo-samples.json")]
+        data: PathBuf,
+        /// Where to write the model (`elo_model` in config/review.toml).
+        #[arg(long, default_value = "config/elo-model.json")]
+        out: PathBuf,
+    },
+}
+
+#[derive(Debug, clap::Args)]
+struct CollectArgs {
+    /// Player to start from (repeatable).
+    #[arg(long = "seed")]
+    seeds: Vec<String>,
+    /// Country (ISO code) whose players list gives more seeds (repeatable).
+    #[arg(long = "country")]
+    countries: Vec<String>,
+    /// Seeds drawn from each country's list.
+    #[arg(long, default_value_t = 10)]
+    country_players: usize,
+    /// Time classes to calibrate.
+    #[arg(long, value_delimiter = ',', default_value = "bullet,blitz,rapid")]
+    time_class: Vec<TimeClass>,
+    /// Most recent rated games analysed per player.
+    #[arg(long, default_value_t = 4)]
+    games_per_player: usize,
+    /// Samples wanted per rating band.
+    #[arg(long, default_value_t = 25)]
+    per_band: usize,
+    /// Width of a rating band.
+    #[arg(long, default_value_t = 300)]
+    band: i32,
+    /// Lowest rating sampled.
+    #[arg(long, default_value_t = 400)]
+    min_rating: i32,
+    /// Ratings sampled stay below this one.
+    #[arg(long, default_value_t = 2800)]
+    max_rating: i32,
+    /// Most players visited per time class.
+    #[arg(long, default_value_t = 80)]
+    max_players: usize,
+    /// Games ended on or before this day (YYYY-MM-DD): the same options
+    /// then select the same games.
+    #[arg(long)]
+    until: String,
+    #[command(flatten)]
+    search: Search,
+    /// Where to write the sample.
+    #[arg(long, default_value = "config/elo-samples.json")]
+    out: PathBuf,
 }
 
 /// Engine and search settings.
@@ -161,7 +228,126 @@ async fn main() -> Result<()> {
             analyse(config, request).await
         }
         Command::Estimate { selection, search } => estimate(config, &selection, &search).await,
+        Command::Calibrate(Calibrate::Collect(args)) => collect(config, &args).await,
+        Command::Calibrate(Calibrate::Fit { data, out }) => fit(&data, &out),
     }
+}
+
+async fn collect(config: ReviewConfig, args: &CollectArgs) -> Result<()> {
+    if args.seeds.is_empty() && args.countries.is_empty() {
+        bail!("give at least one --seed or --country");
+    }
+    let until = parse_date(&args.until)
+        .with_context(|| format!("invalid date {:?} (YYYY-MM-DD)", args.until))?
+        + 86_400;
+    let options = CollectOptions {
+        seeds: args.seeds.clone(),
+        countries: args.countries.clone(),
+        country_players: args.country_players,
+        time_classes: args.time_class.clone(),
+        games_per_player: args.games_per_player,
+        per_band: args.per_band,
+        band: args.band,
+        min_rating: args.min_rating,
+        max_rating: args.max_rating,
+        max_players: args.max_players,
+        until: Some(until),
+        engine: args.search.engine.unwrap_or(config.analysis.engine),
+        settings: args.search.settings(&config)?,
+    };
+    let service = Arc::new(ReviewService::new(config)?);
+    let started = Instant::now();
+    let dataset = calibration::collect(&service, &options, |event| match event {
+        CollectEvent::Player {
+            time_class,
+            username,
+            index,
+            samples,
+        } => eprintln!(
+            "[{:>6.0} s] {time_class} #{index} {username} ({samples} samples)",
+            started.elapsed().as_secs_f64()
+        ),
+        CollectEvent::Skipped { username, reason } => eprintln!("  skipped {username}: {reason}"),
+    })
+    .await?;
+    for &time_class in &options.time_classes {
+        let mut bands = std::collections::BTreeMap::new();
+        for sample in dataset
+            .samples
+            .iter()
+            .filter(|s| s.time_class == time_class)
+        {
+            let band = options.min_rating
+                + (sample.rating - options.min_rating) / options.band * options.band;
+            *bands.entry(band).or_insert(0) += 1;
+        }
+        let text: Vec<String> = bands
+            .iter()
+            .map(|(band, count)| format!("{band}: {count}"))
+            .collect();
+        println!("{time_class}: {}", text.join(", "));
+    }
+    write_json(&args.out, &dataset)?;
+    println!(
+        "{} samples written to {} in {}",
+        dataset.samples.len(),
+        args.out.display(),
+        duration(started.elapsed().as_secs())
+    );
+    Ok(())
+}
+
+fn write_json(path: &std::path::Path, value: &impl serde::Serialize) -> Result<()> {
+    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+        std::fs::create_dir_all(parent)?;
+    }
+    let mut text = serde_json::to_string_pretty(value)?;
+    text.push('\n');
+    std::fs::write(path, text).with_context(|| format!("cannot write {}", path.display()))
+}
+
+fn fit(data: &std::path::Path, out: &std::path::Path) -> Result<()> {
+    let text =
+        std::fs::read_to_string(data).with_context(|| format!("cannot read {}", data.display()))?;
+    let dataset: Dataset = serde_json::from_str(&text)
+        .with_context(|| format!("{} is not a calibration sample", data.display()))?;
+    let model = calibration::fit(&dataset);
+    if model.models.is_empty() {
+        bail!("too few samples to fit any time class");
+    }
+    println!("{}", model.source);
+    println!(
+        "{:<7} {:>7} {:>9} {:>11} {:>9} {:>7} {:>9}   per 100 rating points ({})",
+        "class",
+        "samples",
+        "game MAE",
+        "player MAE",
+        "game sd",
+        "offset",
+        "coverage",
+        FEATURE_NAMES.join(", ")
+    );
+    for (class, m) in &model.models {
+        let slopes: Vec<String> = m
+            .slopes
+            .iter()
+            .map(|s| format!("{:+.2}", s * 100.0))
+            .collect();
+        println!(
+            "{class:<7} {:>7} {:>9.0} {:>6.0} ({:.1}) {:>9.0} {:>7.0} {:>8.0} %   {}",
+            m.samples,
+            m.game_mae,
+            m.player_mae,
+            m.player_games,
+            (1.0 / m.information).sqrt(),
+            m.offset,
+            m.coverage * 100.0,
+            slopes.join(" ")
+        );
+    }
+    write_json(out, &model)?;
+    println!("model written to {}", out.display());
+    Ok(())
 }
 
 async fn estimate(config: ReviewConfig, selection: &Selection, search: &Search) -> Result<()> {

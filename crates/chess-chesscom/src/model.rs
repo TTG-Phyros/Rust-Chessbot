@@ -11,6 +11,12 @@ pub(crate) struct ArchiveList {
     pub(crate) archives: Vec<String>,
 }
 
+/// `GET /country/{iso}/players`.
+#[derive(Debug, Deserialize)]
+pub(crate) struct CountryPlayers {
+    pub(crate) players: Vec<String>,
+}
+
 /// `GET /player/{username}/games/{YYYY}/{MM}`.
 #[derive(Debug, Deserialize)]
 pub(crate) struct MonthlyGames {

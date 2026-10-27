@@ -146,6 +146,28 @@ impl Client {
         })
     }
 
+    /// Usernames of the players of a country (ISO 3166 code, `IS`), in the
+    /// order Chess.com lists them: a varied sample of players, used to
+    /// calibrate the Elo estimates.
+    ///
+    /// # Errors
+    ///
+    /// Network, status (404 for an unknown country) and decoding errors.
+    pub async fn country_players(&self, iso: &str) -> Result<Vec<String>, Error> {
+        let url = format!(
+            "{}/country/{}/players",
+            self.config.base_url.trim_end_matches('/'),
+            iso.trim().to_ascii_uppercase()
+        );
+        match self
+            .get_json::<crate::model::CountryPlayers>(&url, &Validators::default())
+            .await?
+        {
+            Fetched::Fresh(list, _) => Ok(list.players),
+            Fetched::NotModified => Ok(Vec::new()),
+        }
+    }
+
     /// Months for which `username` has archived games, oldest first.
     ///
     /// # Errors

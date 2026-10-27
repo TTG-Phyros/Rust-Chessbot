@@ -7,6 +7,7 @@
 //! of months are revalidated (conditional requests) after a short TTL. An
 //! analysis is stored per game and engine configuration, and never redone.
 
+pub mod calibration;
 pub mod config;
 mod error;
 pub mod jobs;

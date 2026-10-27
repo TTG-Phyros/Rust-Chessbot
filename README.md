@@ -118,8 +118,9 @@ crates/
   chess-chesscom/ client de l'API publique Chess.com (requêtes en série, retry, PGN + horloges)
   chess-openings/ noms d'ouvertures (base lichess, CC0) reconnus par position, coups « book »
   chess-review/  analyse d'une partie : trait AnalysisEngine (Stockfish UCI, notre moteur), MultiPV,
-                 classification des coups, précision (formules Lichess)
-  chess-reviewer/ cache SQLite des parties et des analyses, synchronisation, jobs et workers, CLI
+                 classification des coups, précision (formules Lichess), motifs, Elo estimé
+  chess-reviewer/ cache SQLite des parties et des analyses, synchronisation, jobs et workers, profil,
+                 calibration de l'Elo, CLI
 web/             React + TypeScript + Vite + Tailwind
 docker/          Dockerfiles (engine, train, web) + nginx.conf
 config/          configuration de l'analyse Chess.com (review.toml)
@@ -240,7 +241,7 @@ L'API est **sans état** : une partie est toujours envoyée sous la forme `{ "fe
 | `GET /api/review/jobs/{id}`, `DELETE /api/review/jobs/{id}` | progression d'une analyse (mois lus, parties en cache, analysées, positions, temps restant `etaSeconds`), l'arrête |
 | `GET /api/review/jobs/{id}/events` | la même progression en Server-Sent Events (`progress`, au plus toutes les 150 ms, jusqu'à l'état final) |
 | `GET /api/review/players/{pseudo}/games` | parties en cache d'un joueur (`timeClasses`, `maxGames`, `since`, `until`, `ratedOnly`), sans rien télécharger |
-| `GET /api/review/players/{username}/profile` | profil d'un joueur sur ses parties analysées (mêmes filtres) : bilan, précision, répertoire, positions récurrentes et bon coup, erreurs par phase, temps, conversion, motifs tactiques, 3 points faibles avec exemples |
+| `GET /api/review/players/{username}/profile` | profil d'un joueur sur ses parties analysées (mêmes filtres) : bilan, précision, répertoire, positions récurrentes et bon coup, erreurs par phase, temps, conversion, motifs tactiques, 3 points faibles avec exemples, Elo estimé par cadence (intervalle à 95 %) face à l'Elo réel |
 | `GET /api/review/games/{id}` | une partie : ouverture (ECO, nom, famille, variante), coups (SAN, horloges, `book`) et dernière analyse : éval, chances de gain et meilleures lignes de chaque position, classe et précision de chaque coup, précision, ACPL et nombre de coups par classe de chaque joueur |
 | `GET /ws` | WebSocket : `analyze` (avec `limits.multipv` et `bot` en option) puis un message `info` par profondeur, avec ses lignes, et un `done` final ; `stop` interrompt l'analyse |
 
@@ -320,7 +321,7 @@ Au premier démarrage du démon, le top 5 des réseaux entraînés avant cette f
 
 ## Analyse Chess.com
 
-À partir d'un pseudo Chess.com : analyse de chaque partie (style *Game Review*) et bilan du profil sur les N dernières parties. Fonctionnalité en cours de construction ; disponible pour l'instant : la récupération et le cache des parties, et leur analyse par Stockfish (ou notre moteur), la reconnaissance des ouvertures, la classification des coups et la précision des joueurs.
+À partir d'un pseudo Chess.com : analyse de chaque partie (style *Game Review*) et bilan du profil sur les N dernières parties. Fonctionnalité en cours de construction ; disponible pour l'instant : la récupération et le cache des parties, et leur analyse par Stockfish (ou notre moteur), la reconnaissance des ouvertures, la classification des coups, la précision des joueurs, leur profil et l'estimation de leur Elo.
 
 **User-Agent obligatoire.** Chess.com demande à tout client de son API publique un `User-Agent` explicite, avec un moyen de contacter son auteur. Copiez `.env.example` en `.env` et renseignez `CHESS_REVIEW_USER_AGENT`. Sans lui, rien n'est envoyé.
 
@@ -352,6 +353,30 @@ docker compose exec server chess-reviewer analyse hikaru -n 10   # avec le Stock
   - *Positions récurrentes* : positions (EPD) atteintes avant le 30ᵉ demi-coup dans au moins 2 parties, avec au moins une imprécision ; le bon coup est celui de l'analyse.
   - *Motifs* (heuristiques, pour chaque erreur, oubli ou gaffe) : mat manqué, mat concédé, pièce laissée en prise (au moins 2 pions donnés, mesurés comme pour les sacrifices), gain de matériel manqué (la meilleure prise gagnait au moins 2 pions), fourchette manquée ou concédée (la pièce qui fourche attaque au moins deux pièces qu'elle gagne, sans pouvoir être prise avec profit), sinon erreur positionnelle.
   - *Points faibles* : chaque candidat (une phase plus coûteuse que les autres, un motif, le manque de temps, la conversion, une position récurrente) est classé par les chances de gain qu'il coûte en moyenne par partie. Les 3 premiers sont retenus, chacun avec ses pires coups en exemple.
+- **Elo estimé.** Une partie seule dit peu : sa précision, son ACPL et ses taux d'erreurs sont corrélés à l'Elo à 0,45 environ. Une régression de l'Elo sur ces caractéristiques rapprocherait toutes les estimations de la moyenne, et moyenner les parties n'y changerait rien : sur l'échantillon, l'erreur d'une ridge passe de 486 à 448 Elo seulement en blitz avec 4 parties. Le modèle (`chess-review`, module `elo`) est donc pris dans l'autre sens, comme une calibration classique.
+  - Pour chaque cadence, chaque caractéristique (précision, log de l'ACPL, gaffes, erreurs et imprécisions pour 100 coups, hors théorie) est une fonction linéaire de l'Elo, plus un bruit corrélé entre caractéristiques.
+  - L'estimation est l'Elo qui explique le mieux les caractéristiques moyennes des parties (moindres carrés généralisés). Elle n'est pas biaisée et sa variance diminue comme 1/n.
+  - L'intervalle à 95 % ajoute un écart propre au joueur, que plus de parties ne réduisent pas. Les estimations restent dans les Elo de la calibration.
+  - Une partie de moins de 10 coups hors théorie ne compte pas.
+  - La page de partie montre l'estimation de chaque joueur sur cette partie (intervalle très large). Le profil la montre par cadence, avec son intervalle et l'écart à l'Elo réel.
+- **Calibration** (reproductible, à part de l'application).
+
+  ```powershell
+  just elo-collect --seed hikaru --country IS --country LU --until 2026-09-30 --preset fast
+  just elo-fit
+  ```
+
+  `collect` part de joueurs graines : nommés, ou tirés de la liste d'un pays par un hash fixe. Il suit ensuite leurs adversaires (échantillonnage en boule de neige) en choisissant chaque fois le joueur dont la tranche d'Elo (300 points de 400 à 2800) a le moins d'échantillons, jusqu'à 25 par tranche. Quand aucun adversaire connu n'est dans une tranche à remplir, il passe par le plus proche. Il analyse les 4 dernières parties classées de chaque joueur avant `--until`, et chaque partie donne un échantillon par camp. Les mêmes options choisissent les mêmes parties. L'échantillon est enregistré dans `config/elo-samples.json`, avec ses options. `fit` en tire `config/elo-model.json`, chargé par le serveur (`elo_model`), avec une validation croisée en 5 plis de joueurs.
+
+  Échantillon livré : 580 parties de joueurs entre 400 et 2800, analysées par Stockfish 19 (profondeur 12, 2 lignes), 23 minutes de collecte.
+
+  | Cadence | Échantillons | Erreur sur 1 partie | Erreur par joueur (≈ 4 parties) | Écart-type d'une partie | Joueurs dans l'intervalle |
+  |---|---|---|---|---|---|
+  | Bullet | 200 | 717 | 370 | 1 330 | 100 % |
+  | Blitz | 200 | 611 | 364 | 1 084 | 100 % |
+  | Rapide | 180 | 528 | 360 | 856 | 93 % |
+
+  L'erreur d'un profil diminue comme 1/√n. En blitz, environ ±240 Elo à 20 parties et ±150 à 50, plus l'écart propre au joueur. Un échantillon plus grand (`--per-band`) ou une analyse plus profonde (`--preset deep`) affineraient le modèle. La tranche 2500-2800 du rapide n'a que 5 échantillons.
 - **Parallélisme.** Un job télécharge les parties puis analyse celles qui ne le sont pas encore, une partie par worker (`workers`, la moitié des cœurs par défaut, partagés par tous les jobs). Les processus Stockfish sont réutilisés d'une partie à l'autre. La progression est publiée au fil de l'eau (SSE côté API).
 - **Pas de ré-analyse.** Une analyse est stockée par partie et par configuration (moteur et version, réseau, budget, MultiPV) : relancer la même analyse ne recalcule rien, changer la profondeur ou le moteur recalcule.
 - **Choix et durée.** L'utilisateur choisit un preset ou ses propres réglages, avec une estimation de la durée pour les parties demandées. Les parties déjà analysées avec ces réglages ne comptent pas, et la durée prend en compte le partage entre workers : jamais moins que la plus longue partie. Le coût d'une position est mesuré sur cette machine : d'abord par un court benchmark (8 positions de milieu de jeu, quelques secondes, une seule fois par réglage), puis par chaque vraie analyse (moyenne glissante, stockée dans le cache). Pendant l'analyse, le temps restant suit la vitesse réellement observée.

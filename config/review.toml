@@ -12,6 +12,8 @@
 cache = "data/review/cache.sqlite"
 # Most games one review may ask for.
 max_games = 200
+# Elo model fitted by `chess-reviewer calibrate fit` (no estimates without it).
+elo_model = "config/elo-model.json"
 
 [chesscom]
 base_url = "https://api.chess.com/pub"

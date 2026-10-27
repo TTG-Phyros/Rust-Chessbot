@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use chess_chesscom::{ApiGame, Client, GameFilter, PlayedGame, is_valid_username};
+use chess_review::elo::EloModel;
 use chess_review::{
     AnalysisEngine, Budget, EngineSpec, GameAnalysis, SearchSettings, analyse_game, bench,
 };
@@ -333,6 +334,7 @@ pub struct ReviewService {
     pools: HashMap<EngineKind, Arc<EnginePool>>,
     jobs: Mutex<HashMap<u64, Arc<Job>>>,
     next_id: AtomicU64,
+    elo: Option<EloModel>,
 }
 
 impl std::fmt::Debug for ReviewService {
@@ -380,7 +382,9 @@ impl ReviewService {
                 (kind, Arc::new(pool))
             })
             .collect();
+        let elo = load_elo_model(&config.elo_model);
         Ok(Self {
+            elo,
             workers: Arc::new(Semaphore::new(config.workers())),
             client,
             store,
@@ -451,8 +455,21 @@ impl ReviewService {
             &games,
             &self.config.classification,
             &self.config.profile,
+            self.elo.as_ref(),
         );
         Ok((profile, unanalysed))
+    }
+
+    /// The Elo model, if calibrated.
+    #[must_use]
+    pub const fn elo_model(&self) -> Option<&EloModel> {
+        self.elo.as_ref()
+    }
+
+    /// The Chess.com client, if a `User-Agent` is configured.
+    #[must_use]
+    pub const fn client(&self) -> Option<&Client> {
+        self.client.as_ref()
     }
 
     /// Whether Chess.com can be reached (a `User-Agent` is configured).
@@ -769,6 +786,24 @@ impl ReviewService {
 
 /// Where the benchmark of the configuration `key` is recorded: apart from
 /// real analyses, which replace it as soon as there are some.
+/// The Elo model at `path`; `None` (logged) when missing or unreadable.
+fn load_elo_model(path: &std::path::Path) -> Option<EloModel> {
+    let text = match std::fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(err) => {
+            tracing::info!(path = %path.display(), %err, "no Elo model: no rating estimates");
+            return None;
+        }
+    };
+    match serde_json::from_str(&text) {
+        Ok(model) => Some(model),
+        Err(err) => {
+            tracing::warn!(path = %path.display(), %err, "unreadable Elo model");
+            None
+        }
+    }
+}
+
 fn benchmark_key(key: &str) -> String {
     format!("benchmark | {key}")
 }

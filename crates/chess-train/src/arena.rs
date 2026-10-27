@@ -254,7 +254,7 @@ pub(crate) fn load_evaluator(spec: &str) -> Result<EngineEval> {
 /// A player of a match.
 #[derive(Debug, Clone)]
 pub(crate) enum Contestant {
-    /// Our engine with this evaluation, at the match's nodes per move.
+    /// Our engine with this evaluation, within the match's move limit.
     Engine(EngineEval),
     /// Stockfish at a level (its own depth and time per move).
     Stockfish { binary: PathBuf, level: u8 },

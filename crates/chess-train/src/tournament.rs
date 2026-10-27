@@ -1,6 +1,7 @@
-//! Round-robin tournaments between bots (saved networks and the classical
-//! evaluation): every pairing is a match of the arena, from the same random
-//! openings with colors swapped, at a fixed number of nodes per move.
+//! Round-robin tournaments between bots (saved networks, the classical
+//! evaluation and Stockfish levels): every pairing is a match of the arena,
+//! from the same random openings with colors swapped, within the request's
+//! move limit.
 //!
 //! Progress is rewritten to `<data_dir>/tournaments/<id>.json` after every
 //! batch of games, in camelCase for `chess-server`.
@@ -476,7 +477,7 @@ mod tests {
     #[test]
     fn standings_fit_elo_on_every_game() {
         let bots: Vec<String> = ["classic", "strong", "weak"].map(String::from).into();
-        // strong beats classic 75 %, classic beats weak 75 %, strong beats weak.
+        // strong beats classic 70 %, classic beats weak 70 %, strong beats weak.
         let pairings = [
             pairing("classic", "strong", 20, 20, 60),
             pairing("classic", "weak", 60, 20, 20),

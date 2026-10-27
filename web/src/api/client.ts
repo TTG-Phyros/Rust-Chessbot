@@ -20,8 +20,14 @@ import type { PgnExportRequest } from './generated/PgnExportRequest';
 import type { PgnExportResponse } from './generated/PgnExportResponse';
 import type { PgnImportResponse } from './generated/PgnImportResponse';
 import type { PositionView } from './generated/PositionView';
+import type { ReviewEstimates } from './generated/ReviewEstimates';
 import type { ReviewGameSummary } from './generated/ReviewGameSummary';
 import type { ReviewGameView } from './generated/ReviewGameView';
+import type { ReviewJobView } from './generated/ReviewJobView';
+import type { ReviewOptions } from './generated/ReviewOptions';
+import type { ReviewProfile } from './generated/ReviewProfile';
+import type { ReviewRequest } from './generated/ReviewRequest';
+import type { ReviewStarted } from './generated/ReviewStarted';
 import type { SaveBotRequest } from './generated/SaveBotRequest';
 import type { SelfplayView } from './generated/SelfplayView';
 import type { StockfishCompareRequest } from './generated/StockfishCompareRequest';
@@ -145,12 +151,37 @@ export const api = {
   /** Stops the tournament in progress. */
   stopTournament: () => command('POST', '/tournaments/stop', {}),
 
+  /** Presets, defaults and limits of the Chess.com reviews. */
+  reviewOptions: (signal?: AbortSignal) =>
+    request<ReviewOptions>('/review/options', { signal: signal ?? null }),
+
+  /**
+   * How long reviewing a player's games would take with each preset (the
+   * list of their games is downloaded first if needed).
+   */
+  reviewEstimate: (body: ReviewRequest, signal?: AbortSignal) =>
+    post<ReviewEstimates>('/review/estimate', body, signal),
+
+  /** Downloads and analyses a player's games (409 while a job runs, 503 without User-Agent). */
+  startReview: (body: ReviewRequest) => post<ReviewStarted>('/review/jobs', body),
+
+  /** Progress of a review job (`/events` streams it). */
+  reviewJob: (id: number, signal?: AbortSignal) =>
+    request<ReviewJobView>(`/review/jobs/${String(id)}`, { signal: signal ?? null }),
+
+  cancelReview: (id: number) => command('DELETE', `/review/jobs/${String(id)}`),
+
   /** Cached Chess.com games of a player, most recent first (nothing is downloaded). */
-  reviewGames: (username: string, maxGames: number, signal?: AbortSignal) =>
-    request<ReviewGameSummary[]>(
-      `/review/players/${encodeURIComponent(username)}/games?maxGames=${maxGames}`,
-      { signal: signal ?? null },
-    ),
+  reviewGames: (username: string, query: string, signal?: AbortSignal) =>
+    request<ReviewGameSummary[]>(`/review/players/${encodeURIComponent(username)}/games?${query}`, {
+      signal: signal ?? null,
+    }),
+
+  /** Profile of a player over their analysed cached games. */
+  reviewProfile: (username: string, query: string, signal?: AbortSignal) =>
+    request<ReviewProfile>(`/review/players/${encodeURIComponent(username)}/profile?${query}`, {
+      signal: signal ?? null,
+    }),
 
   /** A cached Chess.com game with its latest analysis, moves classified (404 if unknown). */
   reviewGame: (id: string, signal?: AbortSignal) =>

@@ -16,10 +16,13 @@ use axum::response::sse::{Event, KeepAlive, Sse};
 use chess_chesscom::{ApiGame, GameFilter, PlayedGame, TimeClass, parse_date};
 use chess_core::{Color, Position};
 use chess_openings::Book;
+use chess_review::classify::ClassCounts;
+use chess_review::motifs::{Motif, Phase};
 use chess_review::{
     Budget, GameAnalysis, GameReview, MoveClass, PlayerReview, Score, SearchSettings, review_game,
 };
 use chess_reviewer::jobs::{MAX_DEPTH, MAX_MULTIPV};
+use chess_reviewer::profile::{GameRef, OpeningStats, Profile, Record, WeaknessKind};
 use chess_reviewer::{EngineKind, Job, JobProgress, JobRequest, JobState, ReviewService};
 use futures_util::Stream;
 use serde::Deserialize;
@@ -27,12 +30,15 @@ use utoipa::IntoParams;
 
 use super::error::ApiError;
 use super::types::review::{
-    ReviewAnalysis, ReviewClass, ReviewClassCounts, ReviewEngine, ReviewEstimate, ReviewEstimates,
-    ReviewGameSummary, ReviewGameView, ReviewJobState, ReviewJobView, ReviewLine, ReviewMove,
-    ReviewOpening, ReviewOptions, ReviewPlayer, ReviewPlayerStats, ReviewPosition, ReviewPreset,
-    ReviewRequest, ReviewStarted, ReviewVerdict, TimeClassView,
+    ReviewAnalysis, ReviewClass, ReviewClassCounts, ReviewConversion, ReviewEngine, ReviewEstimate,
+    ReviewEstimates, ReviewGameRef, ReviewGameSummary, ReviewGameView, ReviewJobState,
+    ReviewJobView, ReviewLine, ReviewLineStats, ReviewMotif, ReviewMotifStats, ReviewMove,
+    ReviewOpening, ReviewOpeningStats, ReviewOptions, ReviewPhase, ReviewPhaseStats,
+    ReviewPlayedMove, ReviewPlayer, ReviewPlayerStats, ReviewPosition, ReviewPreset, ReviewProfile,
+    ReviewProfileGame, ReviewRecord, ReviewRepertoire, ReviewRequest, ReviewStarted,
+    ReviewTimeStats, ReviewVerdict, ReviewWeakness, ReviewWeaknessKind, TimeClassView,
 };
-use super::types::{ErrorResponse, ScoreView};
+use super::types::{ErrorResponse, ScoreView, Side};
 use crate::AppState;
 
 /// Games of a review when the request does not say.
@@ -443,6 +449,29 @@ pub(super) struct GamesQuery {
     rated_only: Option<bool>,
 }
 
+/// The games a query keeps.
+fn query_filter(service: &ReviewService, query: &GamesQuery) -> Result<GameFilter, ApiError> {
+    let time_classes = query
+        .time_classes
+        .as_deref()
+        .unwrap_or_default()
+        .split(',')
+        .filter(|text| !text.trim().is_empty())
+        .map(str::parse)
+        .collect::<Result<Vec<TimeClass>, _>>()
+        .map_err(ApiError::unprocessable)?;
+    Ok(GameFilter {
+        time_classes,
+        max_games: query
+            .max_games
+            .unwrap_or(DEFAULT_GAMES)
+            .min(service.config().max_games),
+        since: day(query.since.as_deref(), "since")?,
+        until: day(query.until.as_deref(), "until")?.map(|start| start + 86_400),
+        rated_only: query.rated_only.unwrap_or(false),
+    })
+}
+
 /// Cached games of a player (nothing is downloaded: start a job for that).
 #[utoipa::path(
     get,
@@ -460,25 +489,7 @@ pub(super) async fn player_games(
     Query(query): Query<GamesQuery>,
 ) -> Result<Json<Vec<ReviewGameSummary>>, ApiError> {
     let service = service(&state)?;
-    let time_classes = query
-        .time_classes
-        .as_deref()
-        .unwrap_or_default()
-        .split(',')
-        .filter(|text| !text.trim().is_empty())
-        .map(str::parse)
-        .collect::<Result<Vec<TimeClass>, _>>()
-        .map_err(ApiError::unprocessable)?;
-    let filter = GameFilter {
-        time_classes,
-        max_games: query
-            .max_games
-            .unwrap_or(DEFAULT_GAMES)
-            .min(service.config().max_games),
-        since: day(query.since.as_deref(), "since")?,
-        until: day(query.until.as_deref(), "until")?.map(|start| start + 86_400),
-        rated_only: query.rated_only.unwrap_or(false),
-    };
+    let filter = query_filter(service, &query)?;
     let store = service.store();
     let games = store.games(&username, &filter).map_err(api_error)?;
     games
@@ -675,23 +686,222 @@ const fn class_view(class: MoveClass) -> ReviewClass {
 }
 
 fn player_stats(player: &PlayerReview) -> ReviewPlayerStats {
-    let counts = &player.counts;
     ReviewPlayerStats {
         moves: player.moves,
         accuracy: player.accuracy,
         acpl: player.acpl,
-        counts: ReviewClassCounts {
-            brilliant: counts.get(MoveClass::Brilliant),
-            great: counts.get(MoveClass::Great),
-            best: counts.get(MoveClass::Best),
-            excellent: counts.get(MoveClass::Excellent),
-            good: counts.get(MoveClass::Good),
-            book: counts.get(MoveClass::Book),
-            inaccuracy: counts.get(MoveClass::Inaccuracy),
-            mistake: counts.get(MoveClass::Mistake),
-            miss: counts.get(MoveClass::Miss),
-            blunder: counts.get(MoveClass::Blunder),
+        counts: counts_view(&player.counts),
+    }
+}
+
+const fn counts_view(counts: &ClassCounts) -> ReviewClassCounts {
+    ReviewClassCounts {
+        brilliant: counts.get(MoveClass::Brilliant),
+        great: counts.get(MoveClass::Great),
+        best: counts.get(MoveClass::Best),
+        excellent: counts.get(MoveClass::Excellent),
+        good: counts.get(MoveClass::Good),
+        book: counts.get(MoveClass::Book),
+        inaccuracy: counts.get(MoveClass::Inaccuracy),
+        mistake: counts.get(MoveClass::Mistake),
+        miss: counts.get(MoveClass::Miss),
+        blunder: counts.get(MoveClass::Blunder),
+    }
+}
+
+/// Profile of a player over their cached games that have an analysis.
+#[utoipa::path(
+    get,
+    path = "/api/review/players/{username}/profile",
+    tag = "review",
+    params(("username" = String, Path, description = "Chess.com username"), GamesQuery),
+    responses(
+        (status = 200, description = "The profile", body = ReviewProfile),
+        (status = 422, description = "Invalid filter", body = ErrorResponse),
+    )
+)]
+pub(super) async fn profile(
+    State(state): State<AppState>,
+    Path(username): Path<String>,
+    Query(query): Query<GamesQuery>,
+) -> Result<Json<ReviewProfile>, ApiError> {
+    let service = Arc::clone(service(&state)?);
+    let filter = query_filter(&service, &query)?;
+    // SQLite and the review of every game: off the async threads.
+    let (profile, unanalysed) =
+        tokio::task::spawn_blocking(move || service.profile(&username, &filter))
+            .await
+            .map_err(|err| ApiError::internal(format!("profile task failed: {err}")))?
+            .map_err(api_error)?;
+    Ok(Json(profile_view(&profile, unanalysed)))
+}
+
+const fn side_view(color: Color) -> Side {
+    match color {
+        Color::White => Side::White,
+        Color::Black => Side::Black,
+    }
+}
+
+const fn phase_view(phase: Phase) -> ReviewPhase {
+    match phase {
+        Phase::Opening => ReviewPhase::Opening,
+        Phase::Middlegame => ReviewPhase::Middlegame,
+        Phase::Endgame => ReviewPhase::Endgame,
+    }
+}
+
+const fn motif_view(motif: Motif) -> ReviewMotif {
+    match motif {
+        Motif::MissedMate => ReviewMotif::MissedMate,
+        Motif::AllowedMate => ReviewMotif::AllowedMate,
+        Motif::HangingPiece => ReviewMotif::HangingPiece,
+        Motif::MissedMaterial => ReviewMotif::MissedMaterial,
+        Motif::MissedFork => ReviewMotif::MissedFork,
+        Motif::AllowedFork => ReviewMotif::AllowedFork,
+        Motif::Other => ReviewMotif::Other,
+    }
+}
+
+const fn record_view(record: Record) -> ReviewRecord {
+    ReviewRecord {
+        wins: record.wins,
+        draws: record.draws,
+        losses: record.losses,
+    }
+}
+
+fn refs_view(refs: &[GameRef]) -> Vec<ReviewGameRef> {
+    refs.iter()
+        .map(|reference| ReviewGameRef {
+            game_id: reference.game_id.clone(),
+            ply: count(reference.ply),
+            label: reference.label.clone(),
+            class: class_view(reference.class),
+            loss: reference.loss,
+        })
+        .collect()
+}
+
+fn openings_view(openings: &[OpeningStats]) -> Vec<ReviewOpeningStats> {
+    openings
+        .iter()
+        .map(|opening| ReviewOpeningStats {
+            family: opening.family.clone(),
+            eco: opening.eco.clone(),
+            record: record_view(opening.record),
+            accuracy: opening.accuracy,
+            last_game: opening.last_game.clone(),
+        })
+        .collect()
+}
+
+fn profile_view(profile: &Profile, unanalysed: u32) -> ReviewProfile {
+    let time = profile.time.map(|time| ReviewTimeStats {
+        games: time.games,
+        seconds_per_move: time.seconds_per_move,
+        time_trouble_games: time.time_trouble_games,
+        low_moves: time.low_moves,
+        low_errors: time.low_errors,
+        normal_moves: time.normal_moves,
+        normal_errors: time.normal_errors,
+        timeouts: time.timeouts,
+    });
+    let conversion = profile.conversion;
+    ReviewProfile {
+        username: profile.username.clone(),
+        games: profile.games,
+        unanalysed,
+        skipped: profile.skipped,
+        record: record_view(profile.record),
+        accuracy: profile.accuracy,
+        acpl: profile.acpl,
+        moves: profile.moves,
+        counts: counts_view(&profile.counts),
+        rating: profile.rating,
+        opponents: profile.opponents,
+        repertoire: ReviewRepertoire {
+            white: openings_view(&profile.repertoire[Color::White.index()]),
+            black: openings_view(&profile.repertoire[Color::Black.index()]),
         },
+        lines: profile
+            .lines
+            .iter()
+            .map(|line| ReviewLineStats {
+                color: side_view(line.color),
+                moves: line.moves.clone(),
+                fen: line.fen.clone(),
+                games: line.games,
+                errors: line.errors,
+                best: line.best.clone(),
+                played: line
+                    .played
+                    .iter()
+                    .map(|(san, times)| ReviewPlayedMove {
+                        san: san.clone(),
+                        count: *times,
+                    })
+                    .collect(),
+                lost: line.lost,
+                examples: refs_view(&line.examples),
+            })
+            .collect(),
+        phases: profile
+            .phases
+            .iter()
+            .map(|stats| ReviewPhaseStats {
+                phase: phase_view(stats.phase),
+                moves: stats.moves,
+                accuracy: stats.accuracy,
+                acpl: stats.acpl,
+                counts: counts_view(&stats.counts),
+                lost: stats.lost,
+                seconds_per_move: stats.seconds_per_move,
+            })
+            .collect(),
+        time,
+        conversion: ReviewConversion {
+            winning: conversion.winning,
+            converted: conversion.converted,
+            losing: conversion.losing,
+            saved: conversion.saved,
+        },
+        motifs: profile
+            .motifs
+            .iter()
+            .map(|stats| ReviewMotifStats {
+                motif: motif_view(stats.motif),
+                count: stats.count,
+                lost: stats.lost,
+                examples: refs_view(&stats.examples),
+            })
+            .collect(),
+        weaknesses: profile
+            .weaknesses
+            .iter()
+            .map(|weakness| ReviewWeakness {
+                kind: match weakness.kind {
+                    WeaknessKind::Phase(phase) => ReviewWeaknessKind::Phase(phase_view(phase)),
+                    WeaknessKind::Motif(motif) => ReviewWeaknessKind::Motif(motif_view(motif)),
+                    WeaknessKind::TimeTrouble => ReviewWeaknessKind::TimeTrouble,
+                    WeaknessKind::Conversion => ReviewWeaknessKind::Conversion,
+                    WeaknessKind::Line(index) => ReviewWeaknessKind::Line(count(index)),
+                },
+                lost_per_game: weakness.lost_per_game,
+                count: weakness.count,
+                examples: refs_view(&weakness.examples),
+            })
+            .collect(),
+        per_game: profile
+            .per_game
+            .iter()
+            .map(|game| ReviewProfileGame {
+                id: game.id.clone(),
+                color: side_view(game.color),
+                accuracy: game.accuracy,
+                acpl: game.acpl,
+            })
+            .collect(),
     }
 }
 

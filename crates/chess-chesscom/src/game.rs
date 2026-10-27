@@ -14,6 +14,8 @@ pub struct Player {
     pub username: String,
     /// Rating in the game's time class, after the game.
     pub rating: i32,
+    /// How the game ended for them (`win`, `resigned`, `timeout`…).
+    pub result: String,
 }
 
 /// A Chess.com game with its moves.
@@ -77,10 +79,12 @@ impl PlayedGame {
             white: Player {
                 username: api.white.username.clone(),
                 rating: api.white.rating,
+                result: api.white.result.clone(),
             },
             black: Player {
                 username: api.black.username.clone(),
                 rating: api.black.rating,
+                result: api.black.result.clone(),
             },
             result: game.result(),
             game,

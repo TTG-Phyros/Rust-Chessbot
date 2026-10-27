@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use utoipa::ToSchema;
 
-use super::ScoreView;
+use super::{ScoreView, Side};
 
 /// Speed category of a Chess.com game.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
@@ -441,4 +441,293 @@ pub struct ReviewGameView {
     pub moves: Vec<ReviewMove>,
     /// The latest analysis.
     pub analysis: Option<ReviewAnalysis>,
+}
+
+/// Wins, draws and losses.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
+#[ts(export)]
+pub struct ReviewRecord {
+    /// Games won.
+    pub wins: u32,
+    /// Games drawn.
+    pub draws: u32,
+    /// Games lost.
+    pub losses: u32,
+}
+
+/// A move of one of the games, shown as an example.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ReviewGameRef {
+    /// The game.
+    pub game_id: String,
+    /// Index of the move: the game page shows the position after it with
+    /// `?ply=` one more.
+    pub ply: u32,
+    /// The move with its number: `12... Nf3`.
+    pub label: String,
+    /// Its class.
+    pub class: ReviewClass,
+    /// Winning chances it lost.
+    pub loss: f64,
+}
+
+/// An opening family played with one colour.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
+pub struct ReviewOpeningStats {
+    /// Family (`Sicilian Defense`).
+    pub family: String,
+    /// Its most frequent ECO code.
+    pub eco: String,
+    /// Results.
+    pub record: ReviewRecord,
+    /// Mean accuracy of the player in these games.
+    pub accuracy: Option<f64>,
+    /// The most recent of these games.
+    pub last_game: String,
+}
+
+/// A move played in a recurring position, and how often.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
+#[ts(export)]
+pub struct ReviewPlayedMove {
+    /// The move (SAN).
+    pub san: String,
+    /// Times played.
+    pub count: u32,
+}
+
+/// A position the player reached in several games and went wrong in.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, ToSchema)]
+#[ts(export, optional_fields = nullable)]
+pub struct ReviewLineStats {
+    /// Side of the player.
+    pub color: Side,
+    /// Moves (SAN) from the start to the position.
+    pub moves: Vec<String>,
+    /// The position.
+    pub fen: String,
+    /// Games that reached it.
+    pub games: u32,
+    /// Times the move played there was an inaccuracy or worse.
+    pub errors: u32,
+    /// The engine's move (SAN): the one to learn.
+    pub best: Option<String>,
+    /// Moves played there, most frequent first.
+    pub played: Vec<ReviewPlayedMove>,
+    /// Winning chances lost there in all.
+    pub lost: f64,
+    /// The worst of these moves.
+    pub examples: Vec<ReviewGameRef>,
+}
+
+/// Phase of the game.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum ReviewPhase {
+    /// The first moves.
+    Opening,
+    /// Between the two.
+    Middlegame,
+    /// Few pieces left.
+    Endgame,
+}
+
+/// The player's moves in one phase.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
+pub struct ReviewPhaseStats {
+    /// The phase.
+    pub phase: ReviewPhase,
+    /// Moves played in it.
+    pub moves: u32,
+    /// Mean accuracy of these moves.
+    pub accuracy: Option<f64>,
+    /// Average centipawn loss.
+    pub acpl: Option<f64>,
+    /// Moves of each class.
+    pub counts: ReviewClassCounts,
+    /// Winning chances lost by its mistakes, misses and blunders.
+    pub lost: f64,
+    /// Mean thinking time per move, in seconds.
+    pub seconds_per_move: Option<f64>,
+}
+
+/// Use of the clock.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ReviewTimeStats {
+    /// Games with clocks.
+    pub games: u32,
+    /// Mean thinking time per move, in seconds.
+    pub seconds_per_move: f64,
+    /// Games where the player was short of time at some point.
+    pub time_trouble_games: u32,
+    /// Moves played short of time.
+    pub low_moves: u32,
+    /// Mistakes, misses and blunders among them.
+    pub low_errors: u32,
+    /// Moves played with enough time.
+    pub normal_moves: u32,
+    /// Mistakes, misses and blunders among them.
+    pub normal_errors: u32,
+    /// Games lost on time.
+    pub timeouts: u32,
+}
+
+/// Won positions converted, lost ones saved.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
+#[ts(export)]
+pub struct ReviewConversion {
+    /// Games where the player was winning at some point.
+    pub winning: u32,
+    /// Of those, games won.
+    pub converted: u32,
+    /// Games where the player was lost at some point.
+    pub losing: u32,
+    /// Of those, games drawn or won.
+    pub saved: u32,
+}
+
+/// Tactical motif of a mistake.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum ReviewMotif {
+    /// A mate on the board, let go.
+    MissedMate,
+    /// A move that lets the opponent mate.
+    AllowedMate,
+    /// Material left to be taken.
+    HangingPiece,
+    /// A capture winning material, not played.
+    MissedMaterial,
+    /// A fork, not played.
+    MissedFork,
+    /// A move that lets the opponent fork.
+    AllowedFork,
+    /// None of these.
+    Other,
+}
+
+/// The mistakes of one motif.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, ToSchema)]
+#[ts(export)]
+pub struct ReviewMotifStats {
+    /// The motif.
+    pub motif: ReviewMotif,
+    /// Mistakes, misses and blunders with it.
+    pub count: u32,
+    /// Winning chances they lost.
+    pub lost: f64,
+    /// The worst of them.
+    pub examples: Vec<ReviewGameRef>,
+}
+
+/// What a weakness is about.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(tag = "kind", content = "value", rename_all = "camelCase")]
+#[ts(export)]
+pub enum ReviewWeaknessKind {
+    /// More errors than usual in this phase.
+    Phase(ReviewPhase),
+    /// Errors of this motif.
+    Motif(ReviewMotif),
+    /// Errors when short of time.
+    TimeTrouble,
+    /// Won positions not won.
+    Conversion,
+    /// Errors in a recurring position (index in `lines`).
+    Line(u32),
+}
+
+/// One of the main weaknesses of the player.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ReviewWeakness {
+    /// What it is about.
+    pub kind: ReviewWeaknessKind,
+    /// Winning chances it costs per game, on average.
+    pub lost_per_game: f64,
+    /// Moves (games, for the conversion) concerned.
+    pub count: u32,
+    /// Moves showing it.
+    pub examples: Vec<ReviewGameRef>,
+}
+
+/// One game of the profile.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, ToSchema)]
+#[ts(export, optional_fields = nullable)]
+pub struct ReviewProfileGame {
+    /// The game.
+    pub id: String,
+    /// Side of the player.
+    pub color: Side,
+    /// Their accuracy.
+    pub accuracy: Option<f64>,
+    /// Their average centipawn loss.
+    pub acpl: Option<f64>,
+}
+
+/// Openings of the player, with each colour.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, ToSchema)]
+#[ts(export)]
+pub struct ReviewRepertoire {
+    /// With White, most played first.
+    pub white: Vec<ReviewOpeningStats>,
+    /// With Black.
+    pub black: Vec<ReviewOpeningStats>,
+}
+
+/// `GET /api/review/players/{username}/profile`: a player over their
+/// analysed games.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
+pub struct ReviewProfile {
+    /// The player.
+    pub username: String,
+    /// Analysed games counted.
+    pub games: u32,
+    /// Games kept by the filter but not analysed yet.
+    pub unanalysed: u32,
+    /// Games left out: unreadable, or not played by them.
+    pub skipped: u32,
+    /// Results.
+    pub record: ReviewRecord,
+    /// Mean accuracy over the games.
+    pub accuracy: Option<f64>,
+    /// Average centipawn loss over all their moves.
+    pub acpl: Option<f64>,
+    /// Their moves.
+    pub moves: u32,
+    /// Their moves of each class.
+    pub counts: ReviewClassCounts,
+    /// Their rating after the most recent game.
+    pub rating: Option<i32>,
+    /// Mean rating of their opponents.
+    pub opponents: Option<f64>,
+    /// Their openings.
+    pub repertoire: ReviewRepertoire,
+    /// Recurring positions where they went wrong, costliest first.
+    pub lines: Vec<ReviewLineStats>,
+    /// Their moves by phase.
+    pub phases: Vec<ReviewPhaseStats>,
+    /// Their use of the clock.
+    pub time: Option<ReviewTimeStats>,
+    /// Conversion of won positions, defence of lost ones.
+    pub conversion: ReviewConversion,
+    /// Their mistakes by motif, most frequent first.
+    pub motifs: Vec<ReviewMotifStats>,
+    /// Their three main weaknesses, costliest first.
+    pub weaknesses: Vec<ReviewWeakness>,
+    /// Each game, most recent first.
+    pub per_game: Vec<ReviewProfileGame>,
 }

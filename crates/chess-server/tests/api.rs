@@ -72,6 +72,7 @@ async fn openapi_documents_every_route() {
         "/api/review/jobs/{id}",
         "/api/review/jobs/{id}/events",
         "/api/review/players/{username}/games",
+        "/api/review/players/{username}/profile",
         "/api/review/games/{id}",
     ] {
         assert!(doc["paths"][path]["get"].is_object(), "{path}");

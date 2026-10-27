@@ -12,6 +12,8 @@ use figment::Figment;
 use figment::providers::{Env, Format, Serialized, Toml};
 use serde::{Deserialize, Serialize};
 
+use crate::profile::ProfileConfig;
+
 /// Environment variable naming an alternative config file.
 pub const CONFIG_PATH_ENV: &str = "CHESS_REVIEW_CONFIG";
 /// Config file read when [`CONFIG_PATH_ENV`] is unset (ignored if missing).
@@ -39,6 +41,8 @@ pub struct ReviewConfig {
     pub native: NativeConfig,
     /// Classification of the moves.
     pub classification: Thresholds,
+    /// Profiles of the players.
+    pub profile: ProfileConfig,
 }
 
 /// Which engine analyses the games.
@@ -206,6 +210,7 @@ impl Default for ReviewConfig {
             stockfish: StockfishConfig::default(),
             native: NativeConfig::default(),
             classification: Thresholds::default(),
+            profile: ProfileConfig::default(),
         }
     }
 }

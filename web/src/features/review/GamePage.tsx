@@ -37,6 +37,7 @@ export function GamePage() {
   const { id = '' } = useParams();
   const [search] = useSearchParams();
   const player = search.get('player');
+  const ply = Number.parseInt(search.get('ply') ?? '0', 10);
   const { view, error } = useReviewGame(id);
 
   if (error) {
@@ -48,7 +49,16 @@ export function GamePage() {
     );
   }
   if (!view) return <p className="text-sm text-dim">Chargement…</p>;
-  return <GameReview key={view.game.id} view={view} player={player} />;
+  const start = Number.isNaN(ply) ? 0 : Math.max(0, Math.min(view.moves.length, ply));
+  // Keyed by the position asked for: following another example resets the board.
+  return (
+    <GameReview
+      key={`${view.game.id}-${String(start)}`}
+      view={view}
+      player={player}
+      start={start}
+    />
+  );
 }
 
 function BackLink({ player }: { player: string | null }) {
@@ -223,9 +233,18 @@ function BestLines({ view, shown }: { view: ReviewGameView; shown: number }) {
   );
 }
 
-function GameReview({ view, player }: { view: ReviewGameView; player: string | null }) {
+function GameReview({
+  view,
+  player,
+  start,
+}: {
+  view: ReviewGameView;
+  player: string | null;
+  /** Moves shown at first. */
+  start: number;
+}) {
   const length = view.moves.length;
-  const [shown, setShown] = useState(0);
+  const [shown, setShown] = useState(start);
   const [orientation, setOrientation] = useState<Side>(sideOf(view.game, player) ?? 'white');
   const request = useMemo(
     () => ({ ...newGame(view.startFen), moves: view.moves.slice(0, shown).map((m) => m.uci) }),

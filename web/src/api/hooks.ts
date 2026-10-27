@@ -10,8 +10,13 @@ import type { EngineLimits } from './generated/EngineLimits';
 import type { GameRequest } from './generated/GameRequest';
 import type { HealthResponse } from './generated/HealthResponse';
 import type { PositionView } from './generated/PositionView';
+import type { ReviewEstimates } from './generated/ReviewEstimates';
 import type { ReviewGameSummary } from './generated/ReviewGameSummary';
 import type { ReviewGameView } from './generated/ReviewGameView';
+import type { ReviewJobView } from './generated/ReviewJobView';
+import type { ReviewOptions } from './generated/ReviewOptions';
+import type { ReviewProfile } from './generated/ReviewProfile';
+import type { ReviewRequest } from './generated/ReviewRequest';
 import type { SelfplayView } from './generated/SelfplayView';
 import type { ServerMessage } from './generated/ServerMessage';
 import type { TrainingView } from './generated/TrainingView';
@@ -346,14 +351,79 @@ export function useReviewGame(id: string | null): Fetched<ReviewGameView> {
   return useFetched(id, (key, signal) => api.reviewGame(key, signal));
 }
 
-/** The cached Chess.com games of a player, most recent first. */
+/**
+ * The cached Chess.com games of a player kept by `query` (see `filtersQuery`),
+ * most recent first; fetched again when `version` changes.
+ */
 export function useReviewGames(
   username: string | null,
-  maxGames = 50,
+  query: string,
+  version = 0,
 ): Fetched<ReviewGameSummary[]> {
-  const key = username === null ? null : JSON.stringify([username, maxGames]);
+  const key = username === null ? null : JSON.stringify([username, query, version]);
   return useFetched(key, (json, signal) => {
-    const [name, count] = JSON.parse(json) as [string, number];
-    return api.reviewGames(name, count, signal);
+    const [name, filters] = JSON.parse(json) as [string, string];
+    return api.reviewGames(name, filters, signal);
   });
+}
+
+/** Profile of a player over the games kept by `query`. */
+export function useReviewProfile(
+  username: string | null,
+  query: string,
+  version = 0,
+): Fetched<ReviewProfile> {
+  const key = username === null ? null : JSON.stringify([username, query, version]);
+  return useFetched(key, (json, signal) => {
+    const [name, filters] = JSON.parse(json) as [string, string];
+    return api.reviewProfile(name, filters, signal);
+  });
+}
+
+/** Presets and limits of the reviews. */
+export function useReviewOptions(): Fetched<ReviewOptions> {
+  return useFetched('options', (_, signal) => api.reviewOptions(signal));
+}
+
+/** Duration of the review of `request` with each preset. */
+export function useReviewEstimate(
+  request: ReviewRequest | null,
+  version = 0,
+): Fetched<ReviewEstimates> {
+  const key = request === null ? null : JSON.stringify([request, version]);
+  return useFetched(key, (json, signal) => {
+    const [body] = JSON.parse(json) as [ReviewRequest];
+    return api.reviewEstimate(body, signal);
+  });
+}
+
+/**
+ * Progress of review job `id`, streamed by `GET /api/review/jobs/{id}/events`
+ * (Server-Sent Events) until the job ends.
+ */
+export function useReviewJob(id: number | null): ReviewJobView | null {
+  const [state, setState] = useState<{ id: number; view: ReviewJobView } | null>(null);
+  useEffect(() => {
+    if (id === null) return;
+    const source = new EventSource(`/api/review/jobs/${String(id)}/events`);
+    source.addEventListener('progress', (event) => {
+      setState({ id, view: JSON.parse(String(event.data)) as ReviewJobView });
+    });
+    // The stream ends with the job; an error before that: read it once.
+    source.onerror = () => {
+      source.close();
+      api
+        .reviewJob(id)
+        .then((view) => {
+          setState({ id, view });
+        })
+        .catch(() => {
+          // The page keeps the latest progress received.
+        });
+    };
+    return () => {
+      source.close();
+    };
+  }, [id]);
+  return state?.id === id ? state.view : null;
 }

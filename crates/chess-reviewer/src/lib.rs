@@ -10,6 +10,7 @@
 pub mod config;
 mod error;
 pub mod jobs;
+pub mod profile;
 pub mod store;
 pub mod sync;
 

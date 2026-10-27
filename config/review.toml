@@ -98,3 +98,21 @@ brilliant_loss = 2.0
 won = 90.0
 # Miss: after an opponent's Mistake or Blunder had given a won position, a
 # move losing more than an Inaccuracy, without losing the game.
+
+# Profile of a player over their analysed games.
+[profile]
+# Phases: an endgame has at most `endgame_pieces` knights, bishops, rooks and
+# queens (both sides); otherwise the opening lasts until move `opening_moves`.
+opening_moves = 12
+endgame_pieces = 6
+# Winning chances (0-100) from which the player had a won game (conversion),
+# and up to which a lost one (defence).
+winning = 80.0
+losing = 20.0
+# Short of time: less than this share of the starting time on the clock.
+time_trouble = 0.1
+# Recurring positions: reached before this ply, in at least `line_games` games.
+line_plies = 30
+line_games = 2
+# Examples kept for each weakness.
+examples = 3

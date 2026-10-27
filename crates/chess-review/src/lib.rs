@@ -10,6 +10,7 @@
 //!   Blunder) and the accuracy of the players, from such an analysis.
 //! - [`accuracy`]: the formulas of Lichess for winning chances and accuracy.
 //! - [`exchange`]: material at stake on the board (sacrifices).
+//! - [`motifs`]: the phase of a position and the tactical motif of a mistake.
 //! - [`bench`]: how long an engine takes per position, for estimates.
 //!
 //! The crate performs no I/O other than driving the engine processes.
@@ -20,6 +21,7 @@ pub mod bench;
 pub mod classify;
 pub mod engine;
 pub mod exchange;
+pub mod motifs;
 
 pub use analysis::{GameAnalysis, PositionEval, analyse_game};
 pub use classify::{GameReview, MoveClass, MoveReview, PlayerReview, Thresholds, review_game};

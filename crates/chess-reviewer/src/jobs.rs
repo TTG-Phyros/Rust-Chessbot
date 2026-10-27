@@ -422,6 +422,39 @@ impl ReviewService {
         })
     }
 
+    /// Profile of `username` over their cached games kept by `filter` that
+    /// have an analysis (see [`Self::analysis_to_show`]); also returns how
+    /// many of these games have none.
+    ///
+    /// # Errors
+    ///
+    /// When the cache fails.
+    pub fn profile(
+        &self,
+        username: &str,
+        filter: &GameFilter,
+    ) -> Result<(crate::profile::Profile, u32), Error> {
+        let mut games = Vec::new();
+        let mut unanalysed = 0;
+        for api in self.store.games(username, filter)? {
+            let Some(analysis) = self.analysis_to_show(api.id())? else {
+                unanalysed += 1;
+                continue;
+            };
+            match PlayedGame::from_api(&api) {
+                Ok(game) => games.push((game, analysis)),
+                Err(err) => tracing::warn!(game = api.id(), %err, "unreadable game"),
+            }
+        }
+        let profile = crate::profile::build_profile(
+            username,
+            &games,
+            &self.config.classification,
+            &self.config.profile,
+        );
+        Ok((profile, unanalysed))
+    }
+
     /// Whether Chess.com can be reached (a `User-Agent` is configured).
     #[must_use]
     pub const fn chesscom_enabled(&self) -> bool {

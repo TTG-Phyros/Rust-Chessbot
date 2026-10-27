@@ -17,7 +17,7 @@ use chess_server::api::router;
 use chess_server::api::types::ScoreView;
 use chess_server::api::types::review::{
     ReviewClass, ReviewEstimates, ReviewGameSummary, ReviewGameView, ReviewJobState, ReviewJobView,
-    ReviewOptions, ReviewStarted,
+    ReviewOptions, ReviewProfile, ReviewStarted,
 };
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
@@ -196,6 +196,41 @@ async fn reviews_a_player_and_streams_the_progress() {
     assert_eq!(analysis.white.counts.book, 2);
     assert!(analysis.white.accuracy.unwrap() < analysis.black.accuracy.unwrap());
     assert!(analysis.white.acpl.unwrap() > 400.0);
+
+    // Alice's profile over both games.
+    let (status, profile): (_, ReviewProfile) =
+        get_json(&state, "/api/review/players/alice/profile").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        (profile.games, profile.unanalysed, profile.skipped),
+        (2, 0, 0)
+    );
+    assert_eq!(
+        (
+            profile.record.wins,
+            profile.record.draws,
+            profile.record.losses
+        ),
+        (0, 1, 1)
+    );
+    assert_eq!(profile.rating, Some(900));
+    let families: Vec<&str> = profile
+        .repertoire
+        .white
+        .iter()
+        .map(|opening| opening.family.as_str())
+        .collect();
+    assert_eq!(families.len(), 2);
+    assert!(families.contains(&"Barnes Opening"), "{families:?}");
+    assert!(profile.repertoire.black.is_empty());
+    assert_eq!(profile.phases.len(), 3);
+    assert_eq!(profile.per_game.len(), 2);
+    assert_eq!(profile.moves, 2 + 3);
+    // Only the blitz game has clocks.
+    assert_eq!(profile.time.map(|time| time.games), Some(1));
+    let (status, _): (_, Value) =
+        get_json(&state, "/api/review/players/alice/profile?since=2026-13-01").await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
 }
 
 #[tokio::test]

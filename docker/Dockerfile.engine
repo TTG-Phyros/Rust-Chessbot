@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1.7
 #
-# chess-server (HTTP/WebSocket API) and chess-uci, multi-arch (amd64, arm64).
+# chess-server (HTTP/WebSocket API) and chess-uci, multi-arch (amd64, arm64),
+# with Stockfish for the comparisons of the Play page.
 #
 #   docker build -f docker/Dockerfile.engine -t chess-bot/server .
 #
@@ -28,11 +29,37 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     cargo build --release --locked -p chess-server -p chess-uci \
     && cp target/release/chess-server target/release/chess-uci /usr/local/bin/
 
+# ---------------------------------------------------------------- Stockfish
+# Same build as the training image (see Dockerfile.train): the official
+# "universal" binary, downloaded with retries and resume into a cache mount.
+FROM debian:trixie-slim AS stockfish
+ARG TARGETARCH
+ARG STOCKFISH_VERSION=19
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
+RUN --mount=type=cache,target=/root/.cache/stockfish,sharing=locked \
+    case "${TARGETARCH}" in \
+      amd64) arch=x86-64 ;; \
+      arm64) arch=arm64 ;; \
+      *) echo "no Stockfish build for ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+    && archive=/root/.cache/stockfish/stockfish-${STOCKFISH_VERSION}-linux-${arch}.tar.gz \
+    && if [ ! -f "$archive" ]; then \
+         curl -fL --retry 10 --retry-all-errors --retry-delay 2 -C - -o "$archive.part" \
+           "https://github.com/official-stockfish/Stockfish/releases/download/sf_${STOCKFISH_VERSION}/stockfish-linux-${arch}-universal.tar.gz" \
+         && mv "$archive.part" "$archive"; \
+       fi \
+    && tar -xzf "$archive" -C /tmp "stockfish/stockfish-linux-${arch}-universal" \
+    && install -m 755 "/tmp/stockfish/stockfish-linux-${arch}-universal" /usr/local/bin/stockfish \
+    && printf 'uci\nquit\n' | stockfish | grep -q '^uciok'
+
 FROM debian:trixie-slim AS runtime
 ARG UID=10001
 RUN useradd --system --uid ${UID} --home-dir /data --shell /usr/sbin/nologin chess \
     && mkdir -p /data && chown chess /data
 COPY --from=builder /usr/local/bin/chess-server /usr/local/bin/chess-uci /usr/local/bin/
+COPY --from=stockfish /usr/local/bin/stockfish /usr/local/bin/
 USER chess
 WORKDIR /data
 ENV CHESS_SERVER_BIND=0.0.0.0:3000 \

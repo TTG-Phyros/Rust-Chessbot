@@ -13,4 +13,9 @@ game: GameRequest,
 /**
  * Thinking limits.
  */
-limits: EngineLimits, };
+limits: EngineLimits, 
+/**
+ * Bot playing: a saved bot's name, `classic` for PeSTO; absent: the
+ * network the engine is configured with.
+ */
+bot?: string | null, };

@@ -62,6 +62,7 @@ fn analyze(id: u32, fen: Option<&str>, limits: EngineLimits) -> ClientMessage {
             moves: Vec::new(),
         },
         limits,
+        bot: None,
     }
 }
 

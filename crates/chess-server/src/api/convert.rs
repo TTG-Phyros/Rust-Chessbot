@@ -1,11 +1,13 @@
 //! Conversions between `chess-core`/`chess-search` types and API types.
 
 use chess_core::{Color, Move, Position};
-use chess_search::{Score, SearchInfo};
+use chess_search::{PvLine, Score, SearchInfo};
+use chess_stockfish::UciScore;
 
 use super::error::ApiError;
 use super::types::{
-    AnalysisInfo, DrawReason, GameRequest, GameStatus, MoveView, PositionView, ScoreView, Side,
+    AnalysisInfo, DrawReason, GameRequest, GameStatus, MoveView, PositionView, PvLineView,
+    ScoreView, Side, Wdl,
 };
 
 /// Longest game accepted (in plies), to bound the work of one request.
@@ -115,6 +117,50 @@ pub(crate) const fn white_score(score: Score, side_to_move: Color) -> ScoreView 
     }
 }
 
+/// Converts a Stockfish score for `side_to_move` into White's point of view.
+pub(crate) const fn white_uci_score(score: UciScore, side_to_move: Color) -> ScoreView {
+    white_score(
+        match score {
+            UciScore::Centipawns(cp) => Score::Centipawns(cp),
+            UciScore::Mate(moves) => Score::Mate(moves),
+        },
+        side_to_move,
+    )
+}
+
+/// Scale of the network output: it learns `sigmoid(cp / NNUE_SCALE)`.
+const NNUE_SCALE: f64 = chess_eval::nnue::SCALE as f64;
+/// Distance (centipawns) between the expected score and the win and loss
+/// curves: sets how many draws an even position gets (about 30 %).
+const DRAW_MARGIN: f64 = 250.0;
+
+/// Win/draw/loss estimate for a static evaluation `cp` (White's point of
+/// view): logistic curves of the network's scale, shifted by the draw
+/// margin either way, so that win + draw / 2 follows the expected score.
+pub(crate) fn wdl_estimate(cp: i32) -> Wdl {
+    let sigmoid = |x: f64| 1.0 / (1.0 + (-x).exp());
+    let cp = f64::from(cp);
+    let win = (sigmoid((cp - DRAW_MARGIN) / NNUE_SCALE) * 1000.0).round() as u32;
+    let loss = (sigmoid((-cp - DRAW_MARGIN) / NNUE_SCALE) * 1000.0).round() as u32;
+    Wdl {
+        win,
+        draw: 1000_u32.saturating_sub(win + loss),
+        loss,
+    }
+}
+
+/// The best lines of a search from `pos`, from White's point of view.
+pub(crate) fn pv_lines(pos: &Position, lines: &[PvLine]) -> Vec<PvLineView> {
+    lines
+        .iter()
+        .map(|line| PvLineView {
+            score: white_score(line.score, pos.side_to_move()),
+            pv: line.pv.iter().map(ToString::to_string).collect(),
+            pv_san: pv_san(pos, &line.pv),
+        })
+        .collect()
+}
+
 /// SAN of a principal variation starting from `pos`.
 pub(crate) fn pv_san(pos: &Position, pv: &[Move]) -> Vec<String> {
     let mut pos = pos.without_history();
@@ -141,6 +187,7 @@ pub(crate) fn analysis_info(id: u32, pos: &Position, info: &SearchInfo) -> Analy
         hashfull: info.hashfull,
         pv: info.pv.iter().map(ToString::to_string).collect(),
         pv_san: pv_san(pos, &info.pv),
+        lines: pv_lines(pos, &info.lines),
     }
 }
 
@@ -197,6 +244,21 @@ mod tests {
         let promo = view.legal_moves.iter().find(|m| m.uci == "b7b8n").unwrap();
         assert_eq!(promo.promotion.as_deref(), Some("n"));
         assert_eq!(promo.san, "b8=N");
+    }
+
+    #[test]
+    fn wdl_estimates_are_symmetric_and_sum_to_one() {
+        let even = wdl_estimate(0);
+        assert_eq!(even.win, even.loss);
+        assert!((250..=350).contains(&even.draw), "{even:?}");
+        let ahead = wdl_estimate(300);
+        let behind = wdl_estimate(-300);
+        assert_eq!((ahead.win, ahead.loss), (behind.loss, behind.win));
+        assert!(ahead.win > ahead.loss);
+        for cp in [-2000, -100, 0, 42, 900, 5000] {
+            let wdl = wdl_estimate(cp);
+            assert_eq!(wdl.win + wdl.draw + wdl.loss, 1000, "{cp}: {wdl:?}");
+        }
     }
 
     #[test]

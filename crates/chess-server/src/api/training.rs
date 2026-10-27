@@ -15,8 +15,9 @@ use utoipa::IntoParams;
 use super::daemon::{self, check_name};
 use super::error::ApiError;
 use super::types::{
-    CreateNetworkRequest, EloPoint, EngineInfo, ErrorResponse, LossPoint, NetworkParams,
-    NetworkSummary, StartTrainingRequest, TrainingStatus, TrainingTimerRequest, TrainingView,
+    CreateNetworkRequest, EloPoint, EngineInfo, ErrorResponse, LiveGame, LossPoint, NetworkParams,
+    NetworkSummary, SelfplayView, StartTrainingRequest, TrainingStatus, TrainingTimerRequest,
+    TrainingView,
 };
 use crate::AppState;
 
@@ -222,6 +223,69 @@ pub(super) async fn training(
         networks: read_networks(&state.data_dir),
         engine: state.engine.info(),
     })
+}
+
+/// `selfplay.json`, as written by `chess-train` (snake_case).
+#[derive(Debug, Deserialize)]
+struct SelfplayFile {
+    updated_at: u64,
+    #[serde(default)]
+    boards: Vec<BoardFile>,
+}
+
+#[derive(Debug, Deserialize)]
+struct BoardFile {
+    worker: u32,
+    game: u64,
+    fen: String,
+    ply: u32,
+    last_move: Option<String>,
+}
+
+/// Boards older than this are a stopped run's last state.
+const SELFPLAY_STALE_SECS: u64 = 10;
+
+/// Reads the boards of the self-play workers; `now` in Unix seconds.
+fn read_selfplay(metrics_dir: &Path, now: u64) -> SelfplayView {
+    let Some(file) = std::fs::read(metrics_dir.join("selfplay.json"))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<SelfplayFile>(&bytes).ok())
+    else {
+        return SelfplayView {
+            updated_at: None,
+            live: false,
+            games: Vec::new(),
+        };
+    };
+    SelfplayView {
+        updated_at: Some(file.updated_at),
+        live: now.saturating_sub(file.updated_at) <= SELFPLAY_STALE_SECS,
+        games: file
+            .boards
+            .into_iter()
+            .map(|board| LiveGame {
+                worker: board.worker,
+                game: board.game,
+                fen: board.fen,
+                ply: board.ply,
+                last_move: board.last_move,
+            })
+            .collect(),
+    }
+}
+
+/// The games being played by the self-play workers, one board each.
+#[utoipa::path(
+    get,
+    path = "/api/training/selfplay",
+    tag = "training",
+    responses((status = 200, description = "Self-play boards", body = SelfplayView))
+)]
+pub(super) async fn selfplay(State(state): State<AppState>) -> Json<SelfplayView> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |age| age.as_secs());
+    Json(read_selfplay(&state.data_dir.join("metrics"), now))
 }
 
 /// Evaluation used by the engine.

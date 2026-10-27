@@ -49,11 +49,16 @@ async fn session(socket: WebSocket, state: AppState) {
             Ok(ClientMessage::Ping { id }) => {
                 let _ = tx.send(ServerMessage::Pong { id });
             }
-            Ok(ClientMessage::Analyze { id, game, limits }) => {
+            Ok(ClientMessage::Analyze {
+                id,
+                game,
+                limits,
+                bot,
+            }) => {
                 if let Some(stop) = current.take() {
                     stop.stop();
                 }
-                current = start_analysis(&state, &tx, id, &game, limits);
+                current = start_analysis(&state, &tx, id, &game, limits, bot);
             }
             Ok(ClientMessage::Stop) => {
                 if let Some(stop) = current.take() {
@@ -84,6 +89,7 @@ fn start_analysis(
     id: u32,
     game: &GameRequest,
     limits: EngineLimits,
+    bot: Option<String>,
 ) -> Option<StopFlag> {
     let position = match replay(game) {
         Ok(replayed) => replayed.position,
@@ -107,7 +113,13 @@ fn start_analysis(
             });
         };
         let message = match engine
-            .search(position, analysis_limits(limits), flag, on_info)
+            .search(
+                bot.as_deref(),
+                position,
+                analysis_limits(limits),
+                flag,
+                on_info,
+            )
             .await
         {
             Ok(result) => ServerMessage::Done {

@@ -108,7 +108,8 @@ Sous Windows : `winget install Rustlang.Rustup Casey.Just OpenJS.NodeJS.LTS`, pl
 crates/
   chess-core/    plateau, bitboards, coups, FEN/PGN, Zobrist (aucune I/O, aucune dépendance projet)
   chess-eval/    trait Evaluator + évaluation classique (PeSTO) + inférence NNUE (AVX2 / portable)
-  chess-search/  alpha-beta générique sur Evaluator (ne voit que le trait)
+  chess-search/  alpha-beta générique sur Evaluator (ne voit que le trait), multi-PV
+  chess-stockfish/ pilote d'un Stockfish bridé en 10 niveaux (arène et comparaisons)
   chess-uci/     binaire UCI
   chess-train/   binaire : self-play, entraînement burn (CUDA ou CPU), matchs, démon de contrôle
   chess-server/  binaire : API REST (OpenAPI) + WebSocket (axum)
@@ -154,6 +155,7 @@ log_format = "pretty"   # ou "json"
 max_searches = 8        # recherches simultanées (défaut : nombre de cœurs)
 engine_hash_mb = 16     # table de transposition de chaque recherche
 eval_file = "data/weights/main.nnue"   # réseau utilisé dès qu'il existe (rechargé à chaque export)
+stockfish = "stockfish" # binaire pour les comparaisons de la page Jouer (inclus dans l'image Docker)
 # trainer_url = "http://trainer:4000"  # démon de contrôle de l'entraînement (défini en Docker)
 ```
 
@@ -163,11 +165,15 @@ Le niveau de log se règle avec `RUST_LOG` (ex. `RUST_LOG=debug`).
 
 <http://localhost:8080> (Docker) ou <http://localhost:5173> (`just web-dev`).
 
-- **Jouer** : échiquier en perspective (clic-clic) ou à plat (glisser-déposer aussi), choix de la couleur (blancs, noirs, aléatoire), niveau réglable en profondeur (1 à 20) ou en temps par coup (0,1 à 10 s), annulation de coup, **indice** (flèche du meilleur coup), import/export FEN et PGN. Autour du plateau : le réseau joué par le bot, son inférence (profondeur, nœuds, vitesse, suite prévue, masquable jusqu'à votre coup), son évaluation coup après coup et le temps de réflexion de chaque camp.
-- **Analyse** : barre d'évaluation, score, ligne principale en SAN, flèches du meilleur coup et de la réponse attendue, infos de recherche en direct (profondeur, nœuds, vitesse, remplissage de la table), nœuds par profondeur et courbe d'évaluation de la partie (un clic y amène). L'analyse est relancée à chaque coup. On navigue dans la partie avec les flèches ← → (Origine et Fin pour aller au début ou à la fin), ou en cliquant dans la liste des coups.
+- **Jouer** : échiquier en perspective (clic-clic) ou à plat (glisser-déposer aussi), choix de l'**adversaire** (réseau en service, PeSTO ou un bot sauvegardé, aussi depuis l'Arène), de la couleur (blancs, noirs, aléatoire) et du niveau : profondeur (1 à 20), temps par coup (0,1 à 10 s) ou **pendule** (1 + 0 à 15 + 10 : le bot gère son temps comme en partie réelle, la chute du drapeau perd). Annulation de coup, **indice** (flèche du meilleur coup), import/export FEN et PGN. Autour du plateau :
+  - l'inférence du bot (profondeur, nœuds, vitesse), vos **3 coups candidats** et leur PV, la **sortie NNUE brute** en gain / nulle / perte, le tout masquable jusqu'à votre coup ;
+  - la **comparaison avec Stockfish** : jusqu'à 4 niveaux, à leur budget natif ou au même budget que le bot, avec leur éval, l'écart au bot, leur coup (flèches de couleur) et leurs courbes à côté de celle du bot.
+  Les coups sont écrits en notation française (C, F, T, D, R).
+- **Analyse** : barre d'évaluation, score, les **3 lignes principales** (MultiPV) et leurs flèches, la réponse attendue, la **carte NNUE** (ce que chaque pièce apporte à l'évaluation, sur le plateau ou en grille), infos de recherche en direct (profondeur, nœuds, vitesse, remplissage de la table), nœuds par profondeur et courbe d'évaluation de la partie (un clic y amène). L'analyse est relancée à chaque coup. On navigue dans la partie avec les flèches ← → (Origine et Fin pour aller au début ou à la fin), ou en cliquant dans la liste des coups.
 - **Entraînement** : les réseaux de neurones en cartes, avec leur meilleur Elo. Si le service est arrêté, un bandeau donne la commande pour le lancer. « Nouveau réseau » ouvre un formulaire : nom, hyperparamètres (pré-remplis avec les valeurs par défaut ou celles d'un autre réseau, ou **tirés au hasard** avec « Hyperparamètres aléatoires ») et réseaux dont on réutilise les parties. Pour le réseau sélectionné, on trouve :
   - son meilleur Elo contre PeSTO et son état (device, phase, parties, positions, superbatchs, perte, vitesse, VRAM) ;
   - sa fiche technique (hyperparamètres) ;
+  - le **mur de self-play** : un plateau par worker, en direct pendant l'entraînement ;
   - son **top 5** des snapshots, chacun sauvegardable comme bot ;
   - ses courbes de perte et d'Elo contre PeSTO ;
   - les boutons « Démarrer / reprendre », « Arrêter », « Repartir de zéro » et « Supprimer » ;
@@ -188,20 +194,24 @@ L'API est **sans état** : une partie est toujours envoyée sous la forme `{ "fe
 | --- | --- |
 | `GET /api/health` | état et version du serveur |
 | `POST /api/position` | rejoue une partie : FEN, coups légaux (UCI + SAN), échec, statut, historique SAN |
-| `POST /api/engine/move` | coup du moteur, avec limites `depth`, `movetimeMs`, `nodes` (1 s par défaut) |
+| `POST /api/engine/move` | coup du moteur, avec limites `depth`, `movetimeMs`, `nodes` (1 s par défaut) ou les pendules (`whiteTimeMs`, `blackTimeMs`, `whiteIncrementMs`, `blackIncrementMs`), `multipv` (1 à 5 lignes) et `bot` (un bot sauvegardé, `classic` pour PeSTO) |
+| `POST /api/engine/explain` | évaluation statique décomposée : sortie brute, estimation gain / nulle / perte, apport de chaque pièce (NNUE) |
+| `POST /api/stockfish/compare` | coup et éval de 1 à 4 niveaux de Stockfish (`{"game", "levels", "budget"}`, `budget` absent : budget natif) ; 503 sans Stockfish |
 | `POST /api/pgn/import` | première partie d'un PGN |
 | `POST /api/pgn/export` | partie au format PGN |
 | `GET /api/engine` | évaluation utilisée par le moteur (`nnue` ou `classic`, fichier de poids) |
 | `GET /api/training?network=<nom>` | état du démon, liste des réseaux (hyperparamètres, top 5), statut et courbes du réseau demandé |
+| `GET /api/training/selfplay` | plateau de chaque worker de self-play (`live` tant qu'il tourne) |
 | `POST /api/training/start` | entraîne un réseau (`{"network": "exp", "fresh": false}`) ; 409 si un entraînement est déjà en cours |
 | `POST /api/training/stop` | arrête le pipeline après l'étape en cours (checkpoint écrit) |
 | `POST /api/training/timer` | fixe, déplace ou retire le minuteur de l'entraînement en cours (`{"minutes": 90}` ou `{"minutes": null}`) ; `maxMinutes` au démarrage |
 | `GET /api/networks/defaults` | hyperparamètres d'un nouveau réseau |
 | `POST /api/networks`, `DELETE /api/networks/{nom}` | crée un réseau (`{"name", "params"}`, 422 si un paramètre est hors bornes), le supprime |
 | `GET /api/arena` | bots et derniers tournois |
+| `GET /api/bots` | bots sauvegardés |
 | `POST /api/bots`, `DELETE /api/bots/{nom}` | sauvegarde un snapshot comme bot (`{"name", "network", "superbatch"}`), le supprime |
 | `POST /api/tournaments`, `POST /api/tournaments/stop` | lance un tournoi (`{"bots", "gamesPerPair", "limit": {"kind": "nodes" | "depth" | "time", "value"}, "threads", "pairings": [{"a", "b"}] | null}`, où `null` signifie tous les combats), l'arrête |
-| `GET /ws` | WebSocket : `analyze` puis un message `info` par profondeur et un `done` final ; `stop` interrompt l'analyse |
+| `GET /ws` | WebSocket : `analyze` (avec `limits.multipv` et `bot` en option) puis un message `info` par profondeur, avec ses lignes, et un `done` final ; `stop` interrompt l'analyse |
 
 Les scores renvoyés sont du point de vue des blancs. Les limites sont plafonnées côté serveur (profondeur 64, 60 s par coup, 10 min d'analyse), et le nombre de recherches simultanées est borné par `max_searches`.
 
@@ -316,6 +326,7 @@ Options UCI :
 | --- | --- | --- |
 | `Hash` | 16 | taille de la table de transposition, en Mio |
 | `Move Overhead` | 30 | marge en ms gardée à chaque coup pour la latence de la GUI |
+| `MultiPV` | 1 | nombre de meilleures lignes cherchées (une ligne `info … multipv k` chacune) |
 | `Clear Hash` | — | vide la table de transposition |
 | `EvalFile` | `<empty>` | réseau `.nnue` à utiliser ; vide ou invalide : évaluation classique (PeSTO). Aussi via la variable `CHESS_EVAL_FILE` |
 

@@ -59,6 +59,7 @@ export function BotCard({
         <div className="min-w-0 flex-1">
           <p className="truncate font-semibold">{name}</p>
           <p className="truncate text-xs text-dim">{subtitle}</p>
+          {elo && <p className="mt-0.5 font-mono text-xs text-signal">{elo}</p>}
         </div>
         <span className="rounded-lg border border-line px-2 py-0.5 text-xs text-mute">
           {SIDE_NAME[side]}
@@ -70,7 +71,6 @@ export function BotCard({
         >
           {clock}
         </span>
-        {elo && <span className="font-mono text-xs text-dim">{elo}</span>}
       </div>
       <p
         className={`mt-4 flex items-center gap-2 rounded-xl border border-dashed px-3 py-2 text-xs ${

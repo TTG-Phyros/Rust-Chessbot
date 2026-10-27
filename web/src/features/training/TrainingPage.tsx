@@ -408,7 +408,7 @@ function SelfplayWall() {
               <figcaption className="mt-2 flex items-center justify-between font-mono text-[11px] text-dim">
                 <span>worker {game.worker + 1}</span>
                 <span className="flex items-center gap-1.5" title={`partie ${game.game}`}>
-                  {game.ply} ½c
+                  coup {Math.ceil(game.ply / 2)}
                   <Dot tone={live ? 'signal' : 'idle'} />
                 </span>
               </figcaption>

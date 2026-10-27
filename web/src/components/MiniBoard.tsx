@@ -37,7 +37,7 @@ export function MiniBoard({ fen, lastMove }: { fen: string; lastMove?: string | 
         return (
           <span
             key={name}
-            className={`flex items-center justify-center text-[clamp(8px,1.4vw,15px)] leading-none ${
+            className={`flex items-center justify-center text-[clamp(9px,1.6vw,22px)] leading-none ${
               lit.includes(name) ? 'bg-signal/25' : dark ? 'bg-ink-700' : 'bg-ink-600'
             } ${white ? 'text-bone' : 'text-ink-950 [text-shadow:0_0_1px_#eceae4]'}`}
           >

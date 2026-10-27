@@ -1294,6 +1294,7 @@ dependencies = [
  "chess-core",
  "chess-eval",
  "chess-search",
+ "chess-stockfish",
  "figment",
  "futures-util",
  "reqwest",
@@ -1310,6 +1311,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "chess-stockfish"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+]
+
+[[package]]
 name = "chess-train"
 version = "0.1.0"
 dependencies = [
@@ -1319,6 +1327,7 @@ dependencies = [
  "chess-core",
  "chess-eval",
  "chess-search",
+ "chess-stockfish",
  "clap",
  "ctrlc",
  "cudarc",

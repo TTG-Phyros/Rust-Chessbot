@@ -4,6 +4,7 @@ members = [
     "crates/chess-core",
     "crates/chess-eval",
     "crates/chess-search",
+    "crates/chess-stockfish",
     "crates/chess-uci",
     "crates/chess-train",
     "crates/chess-server",
@@ -21,6 +22,7 @@ publish = false
 chess-core = { path = "crates/chess-core" }
 chess-eval = { path = "crates/chess-eval", default-features = false }
 chess-search = { path = "crates/chess-search" }
+chess-stockfish = { path = "crates/chess-stockfish" }
 
 # Errors
 thiserror = "2.0.21"

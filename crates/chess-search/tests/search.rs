@@ -209,3 +209,61 @@ fn plays_a_complete_legal_game_against_itself() {
     }
     assert!(pos.ply() > 10);
 }
+
+/// Orders scores: faster mates first, slower defeats first.
+fn rank(score: Score) -> i64 {
+    match score {
+        Score::Centipawns(cp) => i64::from(cp),
+        Score::Mate(moves) if moves > 0 => 1_000_000 - i64::from(moves),
+        Score::Mate(moves) => -1_000_000 - i64::from(moves),
+    }
+}
+
+#[test]
+fn multipv_reports_distinct_lines_best_first() {
+    let limits = SearchLimits {
+        depth: Some(5),
+        multipv: 3,
+        ..SearchLimits::default()
+    };
+    let mut infos = Vec::new();
+    let pos = Position::startpos();
+    let result = searcher().search(&pos, &limits, |info| infos.push(info.clone()));
+    assert_eq!(result.lines.len(), 3);
+    let firsts: Vec<_> = result.lines.iter().map(|line| line.pv[0]).collect();
+    assert!(firsts[0] != firsts[1] && firsts[1] != firsts[2] && firsts[0] != firsts[2]);
+    assert!(
+        result
+            .lines
+            .windows(2)
+            .all(|w| rank(w[0].score) >= rank(w[1].score))
+    );
+    assert_eq!(result.best_move, Some(firsts[0]));
+    assert_eq!(result.pv, result.lines[0].pv);
+    assert!(infos.iter().all(|info| info.lines.len() == 3));
+}
+
+#[test]
+fn multipv_finds_the_mate_first_and_caps_at_the_legal_moves() {
+    // Asking for more lines than there are legal moves gives one per move.
+    let limits = SearchLimits {
+        depth: Some(4),
+        multipv: 50,
+        ..SearchLimits::default()
+    };
+    let result = search("6k1/5ppp/8/8/8/8/5PPP/3R2K1 w - - 0 1", &limits);
+    let legal = Position::from_fen("6k1/5ppp/8/8/8/8/5PPP/3R2K1 w - - 0 1")
+        .unwrap()
+        .legal_moves()
+        .len();
+    assert_eq!(result.lines.len(), legal);
+    assert_eq!(best_uci(&result), "d1d8");
+    assert_eq!(result.lines[0].score, Score::Mate(1));
+}
+
+#[test]
+fn single_pv_reports_one_line() {
+    let result = search("4k3/8/8/3q4/8/8/3R4/3K4 w - - 0 1", &SearchLimits::depth(4));
+    assert_eq!(result.lines.len(), 1);
+    assert_eq!(result.lines[0].pv, result.pv);
+}

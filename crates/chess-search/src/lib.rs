@@ -22,7 +22,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 pub use bench::{BENCH_POSITIONS, BenchResult, bench};
 pub use limits::SearchLimits;
 pub use score::{MATE, MAX_PLY, Score};
-pub use search::{SearchInfo, SearchResult, Searcher};
+pub use search::{PvLine, SearchInfo, SearchResult, Searcher};
 pub use tt::{DEFAULT_HASH_MB, MAX_HASH_MB};
 
 /// Shared cancellation flag, set by UCI `stop` or by the UI.

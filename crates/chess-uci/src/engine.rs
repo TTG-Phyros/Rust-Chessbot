@@ -10,7 +10,7 @@ use anyhow::{Context, Result, bail};
 use chess_core::{Position, perft_divide};
 use chess_eval::EngineEval;
 use chess_search::{
-    DEFAULT_HASH_MB, MAX_HASH_MB, SearchInfo, SearchResult, Searcher, StopFlag, bench,
+    DEFAULT_HASH_MB, MAX_HASH_MB, SearchInfo, SearchLimits, SearchResult, Searcher, StopFlag, bench,
 };
 
 use crate::command::{Go, parse_go, parse_position, parse_setoption};
@@ -18,6 +18,8 @@ use crate::command::{Go, parse_go, parse_position, parse_setoption};
 const ENGINE_NAME: &str = concat!("chess-bot ", env!("CARGO_PKG_VERSION"));
 const DEFAULT_MOVE_OVERHEAD_MS: u64 = 30;
 const MAX_MOVE_OVERHEAD_MS: u64 = 5_000;
+/// Most lines the `MultiPV` option accepts.
+const MAX_MULTIPV: u64 = 64;
 /// Depth of the `bench` command when none is given.
 pub(crate) const DEFAULT_BENCH_DEPTH: u32 = 10;
 
@@ -49,6 +51,8 @@ pub(crate) struct Engine {
     /// Whether the search in progress is `go infinite` (it never ends by itself).
     infinite: bool,
     move_overhead: Duration,
+    /// Value of the `MultiPV` option.
+    multipv: usize,
 }
 
 impl Engine {
@@ -66,6 +70,7 @@ impl Engine {
             worker: None,
             infinite: false,
             move_overhead: Duration::from_millis(DEFAULT_MOVE_OVERHEAD_MS),
+            multipv: 1,
         }
     }
 
@@ -133,6 +138,9 @@ impl Engine {
         self.send(&format!(
             "option name Move Overhead type spin default {DEFAULT_MOVE_OVERHEAD_MS} min 0 max {MAX_MOVE_OVERHEAD_MS}"
         ));
+        self.send(&format!(
+            "option name MultiPV type spin default 1 min 1 max {MAX_MULTIPV}"
+        ));
         self.send("option name Clear Hash type button");
         self.send("option name EvalFile type string default <empty>");
         self.send("uciok");
@@ -156,6 +164,7 @@ impl Engine {
                 self.move_overhead =
                     Duration::from_millis(number(value)?.min(MAX_MOVE_OVERHEAD_MS));
             }
+            "multipv" => self.multipv = number(value)?.clamp(1, MAX_MULTIPV) as usize,
             "clear hash" => lock(&self.searcher).clear(),
             "evalfile" => {
                 let loaded = self.load_eval_file(value.as_deref().unwrap_or_default());
@@ -208,7 +217,10 @@ impl Engine {
                 self.perft(depth);
                 return Ok(());
             }
-            Go::Search(limits) => limits,
+            Go::Search(limits) => SearchLimits {
+                multipv: self.multipv,
+                ..limits
+            },
         };
         self.finish_search();
         self.stop.reset();
@@ -224,7 +236,9 @@ impl Engine {
             .stack_size(16 * 1024 * 1024)
             .spawn(move || {
                 let result = lock(&searcher).search(&position, &limits, |info| {
-                    send(&out, &format_info(info));
+                    for line in format_info(info) {
+                        send(&out, &line);
+                    }
                 });
                 // An infinite search must not answer before being told to stop.
                 if limits.infinite {
@@ -303,19 +317,32 @@ impl Drop for Engine {
     }
 }
 
-pub(crate) fn format_info(info: &SearchInfo) -> String {
-    let pv: Vec<String> = info.pv.iter().map(ToString::to_string).collect();
-    format!(
-        "info depth {} seldepth {} score {} nodes {} nps {} hashfull {} time {} pv {}",
-        info.depth,
-        info.seldepth,
-        info.score,
-        info.nodes,
-        info.nps,
-        info.hashfull,
-        info.time.as_millis(),
-        pv.join(" ")
-    )
+/// The `info` lines of an iteration: one, or one per line with `multipv k`
+/// when several lines were asked for.
+pub(crate) fn format_info(info: &SearchInfo) -> Vec<String> {
+    let line = |multipv: Option<usize>, score: chess_search::Score, pv: &[chess_core::Move]| {
+        let pv: Vec<String> = pv.iter().map(ToString::to_string).collect();
+        format!(
+            "info depth {} seldepth {}{} score {} nodes {} nps {} hashfull {} time {} pv {}",
+            info.depth,
+            info.seldepth,
+            multipv.map_or_else(String::new, |k| format!(" multipv {k}")),
+            score,
+            info.nodes,
+            info.nps,
+            info.hashfull,
+            info.time.as_millis(),
+            pv.join(" ")
+        )
+    };
+    if info.lines.len() <= 1 {
+        return vec![line(None, info.score, &info.pv)];
+    }
+    info.lines
+        .iter()
+        .enumerate()
+        .map(|(k, pv_line)| line(Some(k + 1), pv_line.score, &pv_line.pv))
+        .collect()
 }
 
 fn format_bestmove(result: &SearchResult) -> String {
@@ -380,6 +407,23 @@ mod tests {
     }
 
     #[test]
+    fn multipv_reports_each_line() {
+        let (mut engine, out) = engine();
+        engine.handle("setoption name MultiPV value 3");
+        engine.handle("position startpos");
+        engine.handle("go depth 4");
+        engine.wait_for_search();
+        let lines = out.lines();
+        for k in 1..=3 {
+            assert!(
+                lines.iter().any(|l| l.starts_with("info depth 4 seldepth")
+                    && l.contains(&format!(" multipv {k} "))),
+                "{lines:?}"
+            );
+        }
+    }
+
+    #[test]
     fn search_answers_with_info_and_bestmove() {
         let (mut engine, out) = engine();
         engine.handle("position startpos moves e2e4");
@@ -426,9 +470,10 @@ mod tests {
             nps: 102_833,
             hashfull: 1,
             pv: Vec::new(),
+            lines: Vec::new(),
         };
         assert_eq!(
-            format_info(&info),
+            format_info(&info)[0],
             "info depth 3 seldepth 5 score mate 2 nodes 1234 nps 102833 hashfull 1 time 12 pv "
         );
     }

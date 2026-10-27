@@ -227,10 +227,29 @@ pub struct ReviewPlayer {
     pub rating: i32,
 }
 
+/// Opening of a game, recognised by position (transpositions included).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
+pub struct ReviewOpening {
+    /// ECO code (`D02`).
+    pub eco: String,
+    /// Full name (`Queen's Pawn Game: London System`).
+    pub name: String,
+    /// The name before its first `:` (`Queen's Pawn Game`).
+    pub family: String,
+    /// The name after it (`London System`).
+    pub variation: Option<String>,
+    /// Move (ply) at which the game reached the named position.
+    pub ply: u32,
+    /// Number of first moves that are book (theory).
+    pub book_plies: u32,
+}
+
 /// A cached Chess.com game.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
+#[ts(export, optional_fields = nullable)]
 pub struct ReviewGameSummary {
     /// Identifier (Chess.com UUID).
     pub id: String,
@@ -253,6 +272,8 @@ pub struct ReviewGameSummary {
     pub result: String,
     /// Number of moves (plies).
     pub plies: u32,
+    /// Opening, if the game reached a named position.
+    pub opening: Option<ReviewOpening>,
     /// Whether an analysis is cached.
     pub analysed: bool,
 }
@@ -269,6 +290,8 @@ pub struct ReviewMove {
     /// Clock of the player after the move, in milliseconds (`[%clk]`).
     #[ts(type = "number", optional = nullable)]
     pub clock_ms: Option<u64>,
+    /// The move is book: still in the opening theory.
+    pub book: bool,
 }
 
 /// One of the best lines of a position.

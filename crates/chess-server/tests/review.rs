@@ -163,6 +163,17 @@ async fn reviews_a_player_and_streams_the_progress() {
         get_json(&state, "/api/review/games/fools-mate").await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(view.moves[3].san, "Qh4#");
+    let opening = view.game.opening.as_ref().unwrap();
+    assert_eq!(
+        (opening.eco.as_str(), opening.name.as_str()),
+        ("A00", "Barnes Opening: Fool's Mate")
+    );
+    assert_eq!(
+        (opening.family.as_str(), opening.variation.as_deref()),
+        ("Barnes Opening", Some("Fool's Mate"))
+    );
+    assert_eq!((opening.ply, opening.book_plies), (4, 4));
+    assert!(view.moves.iter().all(|m| m.book));
     assert_eq!(view.moves[2].clock_ms, Some(177_500));
     let analysis = view.analysis.unwrap();
     assert_eq!(analysis.engine, "chess-bot classic");

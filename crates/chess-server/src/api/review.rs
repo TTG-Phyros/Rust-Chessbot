@@ -15,6 +15,7 @@ use axum::response::IntoResponse;
 use axum::response::sse::{Event, KeepAlive, Sse};
 use chess_chesscom::{ApiGame, GameFilter, PlayedGame, TimeClass, parse_date};
 use chess_core::{Color, Position};
+use chess_openings::Book;
 use chess_review::{Budget, GameAnalysis, Score, SearchSettings};
 use chess_reviewer::jobs::{MAX_DEPTH, MAX_MULTIPV};
 use chess_reviewer::{EngineKind, Job, JobProgress, JobRequest, JobState, ReviewService};
@@ -25,8 +26,9 @@ use utoipa::IntoParams;
 use super::error::ApiError;
 use super::types::review::{
     ReviewAnalysis, ReviewEngine, ReviewEstimate, ReviewEstimates, ReviewGameSummary,
-    ReviewGameView, ReviewJobState, ReviewJobView, ReviewLine, ReviewMove, ReviewOptions,
-    ReviewPlayer, ReviewPosition, ReviewPreset, ReviewRequest, ReviewStarted, TimeClassView,
+    ReviewGameView, ReviewJobState, ReviewJobView, ReviewLine, ReviewMove, ReviewOpening,
+    ReviewOptions, ReviewPlayer, ReviewPosition, ReviewPreset, ReviewRequest, ReviewStarted,
+    TimeClassView,
 };
 use super::types::{ErrorResponse, ScoreView};
 use crate::AppState;
@@ -490,6 +492,19 @@ pub(super) async fn player_games(
         .map(Json)
 }
 
+/// The opening of `game` in the lichess base.
+fn opening(game: &PlayedGame) -> Option<ReviewOpening> {
+    let found = Book::lichess().classify(game.game.start(), game.game.moves());
+    found.opening.map(|opening| ReviewOpening {
+        eco: opening.eco.clone(),
+        name: opening.name.clone(),
+        family: opening.family().to_owned(),
+        variation: opening.variation().map(str::to_owned),
+        ply: count(found.opening_ply),
+        book_plies: count(found.book_plies),
+    })
+}
+
 fn summary(api: &ApiGame, analysed: bool) -> ReviewGameSummary {
     let parsed = PlayedGame::from_api(api).ok();
     let player = |player: &chess_chesscom::ApiPlayer| ReviewPlayer {
@@ -509,7 +524,10 @@ fn summary(api: &ApiGame, analysed: bool) -> ReviewGameSummary {
             .as_ref()
             .map_or("*", |game| game.result.as_str())
             .to_owned(),
-        plies: parsed.map_or(0, |game| count(game.game.moves().len())),
+        plies: parsed
+            .as_ref()
+            .map_or(0, |game| count(game.game.moves().len())),
+        opening: parsed.as_ref().and_then(opening),
         analysed,
     }
 }
@@ -539,13 +557,17 @@ pub(super) async fn game(
     let analysis = store.latest_analysis(&id).map_err(api_error)?;
 
     let start = played.game.start().clone();
+    let book = Book::lichess()
+        .classify(&start, played.game.moves())
+        .book_plies;
     let mut position = start.clone();
     let mut moves = Vec::with_capacity(played.game.moves().len());
-    for (&mv, clock) in played.game.moves().iter().zip(&played.clocks) {
+    for (ply, (&mv, clock)) in played.game.moves().iter().zip(&played.clocks).enumerate() {
         moves.push(ReviewMove {
             uci: mv.to_string(),
             san: position.san(mv),
             clock_ms: clock.map(|clock| u64::try_from(clock.as_millis()).unwrap_or(u64::MAX)),
+            book: ply < book,
         });
         position.make_move(mv);
     }

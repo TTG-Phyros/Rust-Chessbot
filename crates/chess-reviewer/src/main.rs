@@ -407,6 +407,10 @@ fn describe(api: &ApiGame, username: &str) -> String {
         Some(Color::Black) => "black",
         None => "?",
     };
+    let opening = chess_openings::Book::lichess()
+        .classify(game.game.start(), game.game.moves())
+        .opening
+        .map_or_else(|| "-".to_owned(), |o| format!("{} {}", o.eco, o.name));
     let clocks = game.clocks.iter().filter(|clock| clock.is_some()).count();
     let last_clock = game
         .clocks
@@ -415,7 +419,7 @@ fn describe(api: &ApiGame, username: &str) -> String {
         .find_map(|clock| *clock)
         .map_or_else(|| "-".to_owned(), format_clock);
     format!(
-        "{head} {color:<5}  {} ({}) - {} ({})  {:<7}  {:>3} plies  clocks {clocks}/{} (last {last_clock})  {}",
+        "{head} {color:<5}  {} ({}) - {} ({})  {:<7}  {:>3} plies  clocks {clocks}/{} (last {last_clock})  {}  {opening}",
         game.white.username,
         game.white.rating,
         game.black.username,

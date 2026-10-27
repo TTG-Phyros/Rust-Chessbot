@@ -15,4 +15,8 @@ san: string,
 /**
  * Clock of the player after the move, in milliseconds (`[%clk]`).
  */
-clockMs?: number, };
+clockMs?: number, 
+/**
+ * The move is book: still in the opening theory.
+ */
+book: boolean, };

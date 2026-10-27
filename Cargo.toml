@@ -9,6 +9,7 @@ members = [
     "crates/chess-train",
     "crates/chess-server",
     "crates/chess-chesscom",
+    "crates/chess-openings",
     "crates/chess-review",
     "crates/chess-reviewer",
 ]
@@ -27,6 +28,7 @@ chess-eval = { path = "crates/chess-eval", default-features = false }
 chess-search = { path = "crates/chess-search" }
 chess-stockfish = { path = "crates/chess-stockfish" }
 chess-chesscom = { path = "crates/chess-chesscom" }
+chess-openings = { path = "crates/chess-openings" }
 chess-review = { path = "crates/chess-review" }
 chess-reviewer = { path = "crates/chess-reviewer" }
 

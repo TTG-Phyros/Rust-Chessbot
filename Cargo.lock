@@ -1326,6 +1326,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "chess-openings"
+version = "0.1.0"
+dependencies = [
+ "chess-core",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "chess-review"
 version = "0.1.0"
 dependencies = [
@@ -1346,6 +1354,7 @@ dependencies = [
  "axum",
  "chess-chesscom",
  "chess-core",
+ "chess-openings",
  "chess-review",
  "clap",
  "dotenvy",
@@ -1377,6 +1386,7 @@ dependencies = [
  "chess-chesscom",
  "chess-core",
  "chess-eval",
+ "chess-openings",
  "chess-review",
  "chess-reviewer",
  "chess-search",

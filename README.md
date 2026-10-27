@@ -116,6 +116,7 @@ crates/
   chess-train/   binaire : self-play, entraînement burn (CUDA ou CPU), matchs, démon de contrôle
   chess-server/  binaire : API REST (OpenAPI) + WebSocket (axum)
   chess-chesscom/ client de l'API publique Chess.com (requêtes en série, retry, PGN + horloges)
+  chess-openings/ noms d'ouvertures (base lichess, CC0) reconnus par position, coups « book »
   chess-review/  analyse d'une partie : trait AnalysisEngine (Stockfish UCI, notre moteur), MultiPV
   chess-reviewer/ cache SQLite des parties et des analyses, synchronisation, jobs et workers, CLI
 web/             React + TypeScript + Vite + Tailwind
@@ -223,7 +224,7 @@ L'API est **sans état** : une partie est toujours envoyée sous la forme `{ "fe
 | `GET /api/review/jobs/{id}`, `DELETE /api/review/jobs/{id}` | progression d'une analyse (mois lus, parties en cache, analysées, positions, temps restant `etaSeconds`), l'arrête |
 | `GET /api/review/jobs/{id}/events` | la même progression en Server-Sent Events (`progress`, au plus toutes les 150 ms, jusqu'à l'état final) |
 | `GET /api/review/players/{pseudo}/games` | parties en cache d'un joueur (`timeClasses`, `maxGames`, `since`, `until`, `ratedOnly`), sans rien télécharger |
-| `GET /api/review/games/{id}` | une partie : coups (SAN, horloges) et dernière analyse (éval et meilleures lignes de chaque position) |
+| `GET /api/review/games/{id}` | une partie : ouverture (ECO, nom, famille, variante), coups (SAN, horloges, `book`) et dernière analyse (éval et meilleures lignes de chaque position) |
 | `GET /ws` | WebSocket : `analyze` (avec `limits.multipv` et `bot` en option) puis un message `info` par profondeur, avec ses lignes, et un `done` final ; `stop` interrompt l'analyse |
 
 Les scores renvoyés sont du point de vue des blancs. Les limites sont plafonnées côté serveur (profondeur 64, 60 s par coup, 10 min d'analyse), et le nombre de recherches simultanées est borné par `max_searches`.
@@ -302,7 +303,7 @@ Au premier démarrage du démon, le top 5 des réseaux entraînés avant cette f
 
 ## Analyse Chess.com
 
-À partir d'un pseudo Chess.com : analyse de chaque partie (style *Game Review*) et bilan du profil sur les N dernières parties. Fonctionnalité en cours de construction ; disponible pour l'instant : la récupération et le cache des parties, et leur analyse par Stockfish (ou notre moteur).
+À partir d'un pseudo Chess.com : analyse de chaque partie (style *Game Review*) et bilan du profil sur les N dernières parties. Fonctionnalité en cours de construction ; disponible pour l'instant : la récupération et le cache des parties, et leur analyse par Stockfish (ou notre moteur), et la reconnaissance des ouvertures.
 
 **User-Agent obligatoire.** Chess.com demande à tout client de son API publique un `User-Agent` explicite, avec un moyen de contacter son auteur. Copiez `.env.example` en `.env` et renseignez `CHESS_REVIEW_USER_AGENT`. Sans lui, rien n'est envoyé.
 
@@ -318,6 +319,7 @@ docker compose exec server chess-reviewer analyse hikaru -n 10   # avec le Stock
 - **Requêtes en série.** Chess.com autorise un accès illimité en série mais répond `429` aux requêtes parallèles. Le client n'envoie qu'une requête à la fois, espacées de `min_interval_ms`. Les réponses `429` et `5xx` et les erreurs réseau sont retentées avec un backoff exponentiel (avec jitter, en respectant `Retry-After`).
 - **Cache** (`data/review/cache.sqlite`). Les mois passés ne changent plus : lus une fois après leur fin, ils ne sont plus jamais téléchargés à nouveau. La liste des mois et le mois en cours sont revalidés après `recent_ttl_secs` par requête conditionnelle (`ETag`, réponse `304`). La lecture va du mois le plus récent au plus ancien et s'arrête dès que le nombre de parties demandé est atteint. Seules les parties d'échecs standard sont gardées (pas de 960 ni de variantes).
 - **PGN.** `chess-core` garde le commentaire de chaque coup. Les horloges `[%clk]` et le tag `TimeControl` (`180+2`, `1/86400` pour le Daily) sont décodés.
+- **Ouvertures.** La base [lichess-org/chess-openings](https://github.com/lichess-org/chess-openings) (CC0, environ 3 900 lignes, figée sur un commit dans `crates/chess-openings/data`) est compilée dans le binaire. Chaque ligne nomme la position où elle aboutit. Les positions sont comparées par EPD (FEN sans les compteurs de coups) et non par suite de coups : `1. Nf3 Nf6 2. d4 d5 3. Bf4` est reconnu comme le Système de Londres (D02), comme `1. d4 d5 2. Nf3 Nf6 3. Bf4`. Une partie prend le nom de la position nommée la plus profonde qu'elle atteint. Ses premiers coups sont « book » tant que chacun mène à une position d'une ligne de la base. Les systèmes (Londres, Colle, Catalane, etc.) sont reconnus quel que soit l'ordre de coups.
 - **Moteur.** Le trait `AnalysisEngine` (`chess-review`) a deux implémentations : Stockfish à pleine force via UCI (la référence, `engine = "stockfish"`) et notre moteur (`"native"` : le réseau NNUE de l'entraînement s'il existe, PeSTO sinon). Chaque position est analysée en MultiPV (`multipv`, 3 par défaut, au moins 2 pour reconnaître un coup unique), à profondeur fixe (`depth`, reproductible) ou à temps fixe (`movetime_ms`).
 - **Parallélisme.** Un job télécharge les parties puis analyse celles qui ne le sont pas encore, une partie par worker (`workers`, la moitié des cœurs par défaut, partagés par tous les jobs). Les processus Stockfish sont réutilisés d'une partie à l'autre. La progression est publiée au fil de l'eau (SSE côté API).
 - **Pas de ré-analyse.** Une analyse est stockée par partie et par configuration (moteur et version, réseau, budget, MultiPV) : relancer la même analyse ne recalcule rien, changer la profondeur ou le moteur recalcule.

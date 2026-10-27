@@ -17,6 +17,7 @@ chess-eval = { workspace = true, features = ["classic", "nnue"] }
 chess-search.workspace = true
 chess-stockfish.workspace = true
 chess-chesscom.workspace = true
+chess-openings.workspace = true
 chess-review.workspace = true
 chess-reviewer.workspace = true
 anyhow.workspace = true

@@ -434,6 +434,26 @@ mod tests {
     use super::*;
 
     #[test]
+    fn selfplay_boards_are_live_while_fresh() {
+        let dir = std::env::temp_dir().join(format!("chess-server-boards-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        assert_eq!(read_selfplay(&dir, 1000).updated_at, None);
+        // As written by chess-train (see its metrics module).
+        std::fs::write(
+            dir.join("selfplay.json"),
+            r#"{"updated_at":1000,"boards":[{"worker":0,"game":7,"fen":"8/8/8/8/8/8/8/K6k w - - 0 1","ply":12,"last_move":"b1a1"}]}"#,
+        )
+        .unwrap();
+        let fresh = read_selfplay(&dir, 1005);
+        assert!(fresh.live);
+        assert_eq!(fresh.games[0].game, 7);
+        assert_eq!(fresh.games[0].last_move.as_deref(), Some("b1a1"));
+        let stale = read_selfplay(&dir, 1100);
+        assert!(!stale.live);
+        assert_eq!(stale.games.len(), 1);
+    }
+
+    #[test]
     fn curves_keep_the_latest_restart_of_the_run() {
         let dir = std::env::temp_dir().join(format!("chess-server-curves-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();

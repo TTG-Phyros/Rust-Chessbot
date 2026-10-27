@@ -14,3 +14,13 @@ web/dist
 *.log
 .env
 .DS_Store
+Thumbs.db
+
+# Temporary, backup and merge leftovers
+*.tmp
+*.bak
+*.old
+*.orig
+*.rej
+*.swp
+*~

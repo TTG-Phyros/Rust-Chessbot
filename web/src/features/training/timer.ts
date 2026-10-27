@@ -1,6 +1,6 @@
 /** Time limit of a training run (the service accepts 1 minute to a week). */
 
-export const MAX_MINUTES = 7 * 24 * 60;
+const MAX_MINUTES = 7 * 24 * 60;
 
 /** Choices of the duration picker; `null`: no time limit. */
 export const DURATION_PRESETS: readonly { minutes: number | null; label: string }[] = [

@@ -124,17 +124,23 @@ pub(crate) fn run(
             })
         };
 
-        // Mirror the self-play counters into the status file.
+        // Mirror the self-play counters into the status file, and the
+        // boards of the workers for the UI.
         let reporter = {
             let stats = Arc::clone(&stats);
             let stop = selfplay_stop.clone();
             scope.spawn(move || {
+                let mut tick: u64 = 0;
                 while !stop.is_stopped() {
-                    metrics.update(|status| {
-                        status.games = stats.games.load(Ordering::Relaxed);
-                        status.positions = stats.positions.load(Ordering::Relaxed);
-                    });
-                    std::thread::sleep(Duration::from_secs(2));
+                    metrics.write_boards(&stats.boards());
+                    if tick.is_multiple_of(2) {
+                        metrics.update(|status| {
+                            status.games = stats.games.load(Ordering::Relaxed);
+                            status.positions = stats.positions.load(Ordering::Relaxed);
+                        });
+                    }
+                    tick += 1;
+                    std::thread::sleep(Duration::from_secs(1));
                 }
             })
         };

@@ -1,0 +1,15 @@
+[package]
+name = "chess-openings"
+description = "Opening names (lichess chess-openings, CC0) recognised by position, transpositions included."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+chess-core.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

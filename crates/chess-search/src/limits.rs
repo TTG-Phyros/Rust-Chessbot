@@ -28,6 +28,8 @@ pub struct SearchLimits {
     pub infinite: bool,
     /// Time kept in reserve for communication delays (GUI, network).
     pub move_overhead: Duration,
+    /// Number of best lines to find (UCI `MultiPV`); 0 and 1 both mean one.
+    pub multipv: usize,
 }
 
 impl SearchLimits {

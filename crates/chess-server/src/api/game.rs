@@ -5,13 +5,17 @@ use axum::Json;
 use axum::extract::State;
 use chess_core::Position;
 use chess_core::pgn::{Game, GameResult, parse_pgn};
+use chess_eval::{EngineEval, Evaluator};
 use chess_search::StopFlag;
 
-use super::convert::{move_view, position_view, pv_san, replay, white_score};
+use super::convert::{
+    move_view, position_view, pv_lines, pv_san, replay, wdl_estimate, white_score,
+};
 use super::error::ApiError;
 use super::types::{
-    EngineMoveRequest, EngineMoveResponse, ErrorResponse, GameRequest, PgnExportRequest,
-    PgnExportResponse, PgnImportRequest, PgnImportResponse, PgnTag, PositionView,
+    EngineMoveRequest, EngineMoveResponse, ErrorResponse, EvalExplanation, ExplainRequest,
+    GameRequest, PgnExportRequest, PgnExportResponse, PgnImportRequest, PgnImportResponse, PgnTag,
+    PieceContribution, PositionView,
 };
 use crate::AppState;
 use crate::engine::move_limits;
@@ -45,6 +49,7 @@ pub(super) async fn position(
     request_body = EngineMoveRequest,
     responses(
         (status = 200, description = "The engine's move", body = EngineMoveResponse),
+        (status = 404, description = "No such bot", body = ErrorResponse),
         (status = 422, description = "Invalid FEN or illegal move", body = ErrorResponse),
     )
 )]
@@ -58,7 +63,13 @@ pub(super) async fn engine_move(
     let start = std::time::Instant::now();
     let result = state
         .engine
-        .search(position.clone(), limits, StopFlag::new(), |_| {})
+        .search(
+            request.bot.as_deref(),
+            position.clone(),
+            limits,
+            StopFlag::new(),
+            |_| {},
+        )
         .await?;
     Ok(Json(EngineMoveResponse {
         best_move: result.best_move.map(|mv| move_view(&position, mv)),
@@ -67,6 +78,50 @@ pub(super) async fn engine_move(
         nodes: result.nodes,
         time_ms: start.elapsed().as_millis() as u64,
         pv: pv_san(&position, &result.pv),
+        lines: pv_lines(&position, &result.lines),
+    }))
+}
+
+/// Takes the static evaluation of a position apart: raw output, win/draw/loss
+/// estimate and, with a network, what each piece brings.
+#[utoipa::path(
+    post,
+    path = "/api/engine/explain",
+    tag = "engine",
+    request_body = ExplainRequest,
+    responses(
+        (status = 200, description = "The evaluation, taken apart", body = EvalExplanation),
+        (status = 404, description = "No such bot", body = ErrorResponse),
+        (status = 422, description = "Invalid FEN or illegal move", body = ErrorResponse),
+    )
+)]
+pub(super) async fn explain(
+    State(state): State<AppState>,
+    Json(request): Json<ExplainRequest>,
+) -> Result<Json<EvalExplanation>, ApiError> {
+    let position = replay(&request.game)?.position;
+    let eval = state.engine.evaluator_for(request.bot.as_deref())?;
+    // White's point of view: the evaluation is for the side to move.
+    let sign = position.side_to_move().sign();
+    let static_cp = eval.evaluate(&position) * sign;
+    let pieces = match &eval {
+        EngineEval::Nnue(network) => network
+            .weights()
+            .piece_contributions(&position)
+            .into_iter()
+            .map(|(square, piece, cp)| PieceContribution {
+                square: square.to_string(),
+                piece: piece.to_fen_char().to_string(),
+                cp: cp * sign,
+            })
+            .collect(),
+        EngineEval::Classic(_) => Vec::new(),
+    };
+    Ok(Json(EvalExplanation {
+        evaluator: eval.name().to_owned(),
+        static_cp,
+        wdl: wdl_estimate(static_cp),
+        pieces,
     }))
 }
 

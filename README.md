@@ -6,9 +6,9 @@ Moteur d'échecs en Rust qui apprend en jouant contre lui-même :
 2. **Entraînement** : self-play et entraînement d'un réseau NNUE avec [burn](https://burn.dev), sur GPU NVIDIA avec repli automatique sur le CPU.
 3. **Visualisation** : interface web (React + TypeScript) pour jouer, analyser et piloter l'entraînement.
 
-| Jouer | Analyser | Entraîner |
-| --- | --- | --- |
-| [![Jouer](docs/screenshots/play.png)](docs/screenshots/play.png) | [![Analyser](docs/screenshots/analysis.png)](docs/screenshots/analysis.png) | [![Entraîner](docs/screenshots/training.png)](docs/screenshots/training.png) |
+| Jouer | Analyser | Entraîner | Arène |
+| --- | --- | --- | --- |
+| [![Jouer](docs/screenshots/play.png)](docs/screenshots/play.png) | [![Analyser](docs/screenshots/analysis.png)](docs/screenshots/analysis.png) | [![Entraîner](docs/screenshots/training.png)](docs/screenshots/training.png) | [![Arène](docs/screenshots/arena.png)](docs/screenshots/arena.png) |
 
 ## Sommaire
 
@@ -18,6 +18,7 @@ Moteur d'échecs en Rust qui apprend en jouant contre lui-même :
 - [Architecture](#architecture)
 - [Interface web et API](#interface-web)
 - [Entraînement (NNUE)](#entraînement-nnue)
+- [Analyse Chess.com](#analyse-chesscom)
 - [Performances](#performances)
 - [Utiliser le moteur dans une GUI](#utiliser-le-moteur-dans-une-gui-cute-chess-arena)
 - [Dépannage](#dépannage)
@@ -101,6 +102,7 @@ Sous Windows : `winget install Rustlang.Rustup Casey.Just OpenJS.NodeJS.LTS`, pl
 | `just engine-bench` | signature et vitesse (nœuds/s) du moteur, via `chess-uci bench` |
 | `just play` | moteur UCI sur stdin/stdout |
 | `just gen-types` | régénère les types TypeScript depuis les structs Rust |
+| `just chesscom <pseudo> [options]` | synchronise les parties Chess.com d'un joueur dans le cache et les liste (voir [Analyse Chess.com](#analyse-chesscom)) |
 
 ## Architecture
 
@@ -108,13 +110,21 @@ Sous Windows : `winget install Rustlang.Rustup Casey.Just OpenJS.NodeJS.LTS`, pl
 crates/
   chess-core/    plateau, bitboards, coups, FEN/PGN, Zobrist (aucune I/O, aucune dépendance projet)
   chess-eval/    trait Evaluator + évaluation classique (PeSTO) + inférence NNUE (AVX2 / portable)
-  chess-search/  alpha-beta générique sur Evaluator (ne voit que le trait)
+  chess-search/  alpha-beta générique sur Evaluator (ne voit que le trait), multi-PV
+  chess-stockfish/ pilote UCI de Stockfish : bridé en 10 niveaux (arène, comparaisons) ou pleine force en MultiPV (analyses)
   chess-uci/     binaire UCI
   chess-train/   binaire : self-play, entraînement burn (CUDA ou CPU), matchs, démon de contrôle
   chess-server/  binaire : API REST (OpenAPI) + WebSocket (axum)
+  chess-chesscom/ client de l'API publique Chess.com (requêtes en série, retry, PGN + horloges)
+  chess-openings/ noms d'ouvertures (base lichess, CC0) reconnus par position, coups « book »
+  chess-review/  analyse d'une partie : trait AnalysisEngine (Stockfish UCI, notre moteur), MultiPV,
+                 classification des coups, précision (formules Lichess), motifs, Elo estimé
+  chess-reviewer/ cache SQLite des parties et des analyses, synchronisation, jobs et workers, profil,
+                 calibration de l'Elo, CLI
 web/             React + TypeScript + Vite + Tailwind
 docker/          Dockerfiles (engine, train, web) + nginx.conf
-data/            poids, checkpoints, métriques (ignoré par git)
+config/          configuration de l'analyse Chess.com (review.toml)
+data/            poids, checkpoints, métriques, cache (ignoré par git)
 ```
 
 ```mermaid
@@ -154,6 +164,7 @@ log_format = "pretty"   # ou "json"
 max_searches = 8        # recherches simultanées (défaut : nombre de cœurs)
 engine_hash_mb = 16     # table de transposition de chaque recherche
 eval_file = "data/weights/main.nnue"   # réseau utilisé dès qu'il existe (rechargé à chaque export)
+stockfish = "stockfish" # binaire pour les comparaisons de la page Jouer (inclus dans l'image Docker)
 # trainer_url = "http://trainer:4000"  # démon de contrôle de l'entraînement (défini en Docker)
 ```
 
@@ -163,15 +174,35 @@ Le niveau de log se règle avec `RUST_LOG` (ex. `RUST_LOG=debug`).
 
 <http://localhost:8080> (Docker) ou <http://localhost:5173> (`just web-dev`).
 
-- **Jouer** : échiquier en glisser-déposer ou clic-clic, choix de la couleur (blancs, noirs, aléatoire), niveau réglable en profondeur (1 à 20) ou en temps par coup (0,1 à 10 s), annulation de coup, import/export FEN et PGN.
-- **Analyse** : barre d'évaluation, score, ligne principale en SAN, flèche du meilleur coup, infos de recherche en direct (profondeur, nœuds, vitesse, remplissage de la table). L'analyse est relancée à chaque coup. On navigue dans la partie avec les flèches ← → (Origine et Fin pour aller au début ou à la fin), ou en cliquant dans la liste des coups.
-- **Entraînement** : liste des réseaux de neurones, avec leurs hyperparamètres et leur meilleur Elo. « Nouveau réseau » ouvre un formulaire : nom, hyperparamètres (pré-remplis avec les valeurs par défaut ou celles d'un autre réseau, ou **tirés au hasard** avec « Hyperparamètres aléatoires ») et réseaux dont on réutilise les parties. Pour le réseau sélectionné, on trouve :
-  - son état (device, phase, parties, positions, superbatchs, perte, vitesse, VRAM) ;
+- **Jouer** : échiquier en perspective (clic-clic) ou à plat (glisser-déposer aussi), choix de l'**adversaire** (réseau en service, PeSTO ou un bot sauvegardé, aussi depuis l'Arène), de la couleur (blancs, noirs, aléatoire) et du niveau : profondeur (1 à 20), temps par coup (0,1 à 10 s) ou **pendule** (1 + 0 à 15 + 10 : le bot gère son temps comme en partie réelle, la chute du drapeau perd). Annulation de coup, **indice** (flèche du meilleur coup), import/export FEN et PGN. Autour du plateau :
+  - l'inférence du bot (profondeur, nœuds, vitesse), vos **3 coups candidats** et leur PV, la **sortie NNUE brute** en gain / nulle / perte, le tout masquable jusqu'à votre coup ;
+  - la **comparaison avec Stockfish** : jusqu'à 4 niveaux, à leur budget natif ou au même budget que le bot, avec leur éval, l'écart au bot, leur coup (flèches de couleur) et leurs courbes à côté de celle du bot.
+  Les coups sont écrits en notation française (C, F, T, D, R).
+- **Analyse** : barre d'évaluation, score, les **3 lignes principales** (MultiPV) et leurs flèches, la réponse attendue, la **carte NNUE** (ce que chaque pièce apporte à l'évaluation, sur le plateau ou en grille), infos de recherche en direct (profondeur, nœuds, vitesse, remplissage de la table), nœuds par profondeur et courbe d'évaluation de la partie (un clic y amène). L'analyse est relancée à chaque coup. On navigue dans la partie avec les flèches ← → (Origine et Fin pour aller au début ou à la fin), ou en cliquant dans la liste des coups.
+- **Entraînement** : les réseaux de neurones en cartes, avec leur meilleur Elo. Si le service est arrêté, un bandeau donne la commande pour le lancer. « Nouveau réseau » ouvre un formulaire : nom, hyperparamètres (pré-remplis avec les valeurs par défaut ou celles d'un autre réseau, ou **tirés au hasard** avec « Hyperparamètres aléatoires ») et réseaux dont on réutilise les parties. Pour le réseau sélectionné, on trouve :
+  - son meilleur Elo contre PeSTO et son état (device, phase, parties, positions, superbatchs, perte, vitesse, VRAM) ;
+  - sa fiche technique (hyperparamètres) ;
+  - le **mur de self-play** : un plateau par worker, en direct pendant l'entraînement ;
   - son **top 5** des snapshots, chacun sauvegardable comme bot ;
   - ses courbes de perte et d'Elo contre PeSTO ;
   - les boutons « Démarrer / reprendre », « Arrêter », « Repartir de zéro » et « Supprimer » ;
   - un **minuteur** : on démarre pour une durée donnée (15 min à 24 h, ou un nombre de minutes au choix, jusqu'à une semaine). À l'échéance, l'entraînement s'arrête comme avec « Arrêter » : il finit l'étape en cours, écrit un checkpoint et exporte le réseau. Pendant l'entraînement, un compte à rebours indique l'heure d'arrêt ; on peut la modifier ou retirer le minuteur.
-- **Arène** : les bots sauvegardés, plus PeSTO et **Stockfish niveaux 1 à 10**, et les **tournois** toutes-rondes entre eux : choix des participants, des parties par paire et de la réflexion de nos bots (nœuds, profondeur ou temps par coup). La **table croisée des participants** permet d'activer ou de désactiver chaque combat avant le lancement, par exemple pour ne faire jouer tes réseaux que contre Stockfish. Un clic sur un nom bascule tous ses combats, et des boutons permettent de tout activer ou de tout désactiver. Avant le lancement, le formulaire affiche la **durée estimée** du tournoi. Une fois lancé, un tournoi affiche sa progression en direct, un classement Elo, une table croisée et l'historique des tournois.
+- **Arène** : les bots sauvegardés, plus PeSTO et **Stockfish niveaux 1 à 10**, et les **tournois** toutes-rondes entre eux : choix des participants, des parties par paire et de la réflexion de nos bots (nœuds, profondeur ou temps par coup). La **table croisée des participants** permet d'activer ou de désactiver chaque combat avant le lancement, par exemple pour ne faire jouer tes réseaux que contre Stockfish. Un clic sur un nom bascule tous ses combats, et des boutons permettent de tout activer ou de tout désactiver. Avant le lancement, le formulaire affiche la **durée estimée** du tournoi. Une fois lancé, un tournoi affiche sa progression en direct, un résumé (par exemple « main-sb305 bat Stockfish 6 et ne cède qu'au niveau 7 »), un podium, un classement Elo, une table croisée et l'historique des tournois.
+- **Chess.com** : le **profil** d'un joueur. On saisit un pseudo et des filtres : cadences, nombre de parties, période, parties classées seulement. Le panneau d'analyse affiche, pour chaque preset, la durée estimée et le nombre de parties à analyser. Un bouton télécharge et analyse ces parties, avec une barre de progression en direct et le temps restant ; l'analyse peut être annulée. Le tableau de bord détaille ensuite :
+  - le bilan, la précision et l'ACPL moyens, l'Elo, et la répartition des coups par classe ;
+  - les **3 points faibles** principaux, avec des exemples cliquables qui ouvrent la partie à la position du coup ;
+  - les erreurs et le temps par **phase** (ouverture, milieu, finale), la **gestion du temps**, la **conversion** des positions gagnantes et la **défense** des positions perdues ;
+  - les **motifs** des erreurs ;
+  - le **répertoire** avec chaque couleur, avec le score et la précision ;
+  - les **positions qui reviennent**, avec le coup joué et le bon coup ;
+  - enfin la liste des parties avec la précision de chacune.
+
+  Une partie s'ouvre dans une **revue de partie** (voir [Analyse Chess.com](#analyse-chesscom)) :
+  - un plateau navigable (boutons, flèches du clavier, clic sur un coup ou sur le graphe) avec les deux joueurs et leurs pendules `[%clk]` ;
+  - les cases du coup joué prennent la couleur de sa classe. Une flèche montre le meilleur coup de la position ; après une imprécision ou pire, une seconde flèche montre ce qu'il fallait jouer ;
+  - un graphe cliquable des chances de gain des Blancs, avec un repère sur chaque coup notable (brillant, très bon coup, imprécision, erreur, occasion manquée, gaffe) ;
+  - la liste des coups avec ces mêmes repères, le verdict du coup courant (classe, chances avant et après, précision, perte), les meilleures lignes de la position, et pour chaque joueur la précision, l'ACPL et le nombre de coups par classe ;
+  - le nom de l'ouverture.
 
 Les boutons de ces deux pages passent par le démon de contrôle : il faut le profil `train` ou `train-cpu`. Sans lui, réseaux, bots et résultats restent consultables.
 
@@ -187,20 +218,32 @@ L'API est **sans état** : une partie est toujours envoyée sous la forme `{ "fe
 | --- | --- |
 | `GET /api/health` | état et version du serveur |
 | `POST /api/position` | rejoue une partie : FEN, coups légaux (UCI + SAN), échec, statut, historique SAN |
-| `POST /api/engine/move` | coup du moteur, avec limites `depth`, `movetimeMs`, `nodes` (1 s par défaut) |
+| `POST /api/engine/move` | coup du moteur, avec limites `depth`, `movetimeMs`, `nodes` (1 s par défaut) ou les pendules (`whiteTimeMs`, `blackTimeMs`, `whiteIncrementMs`, `blackIncrementMs`), `multipv` (1 à 5 lignes) et `bot` (un bot sauvegardé, `classic` pour PeSTO) |
+| `POST /api/engine/explain` | évaluation statique décomposée : sortie brute, estimation gain / nulle / perte, apport de chaque pièce (NNUE) |
+| `POST /api/stockfish/compare` | coup et éval de 1 à 4 niveaux de Stockfish (`{"game", "levels", "budget"}`, `budget` absent : budget natif) ; 503 sans Stockfish |
 | `POST /api/pgn/import` | première partie d'un PGN |
 | `POST /api/pgn/export` | partie au format PGN |
 | `GET /api/engine` | évaluation utilisée par le moteur (`nnue` ou `classic`, fichier de poids) |
 | `GET /api/training?network=<nom>` | état du démon, liste des réseaux (hyperparamètres, top 5), statut et courbes du réseau demandé |
+| `GET /api/training/selfplay` | plateau de chaque worker de self-play (`live` tant qu'il tourne) |
 | `POST /api/training/start` | entraîne un réseau (`{"network": "exp", "fresh": false}`) ; 409 si un entraînement est déjà en cours |
 | `POST /api/training/stop` | arrête le pipeline après l'étape en cours (checkpoint écrit) |
 | `POST /api/training/timer` | fixe, déplace ou retire le minuteur de l'entraînement en cours (`{"minutes": 90}` ou `{"minutes": null}`) ; `maxMinutes` au démarrage |
 | `GET /api/networks/defaults` | hyperparamètres d'un nouveau réseau |
 | `POST /api/networks`, `DELETE /api/networks/{nom}` | crée un réseau (`{"name", "params"}`, 422 si un paramètre est hors bornes), le supprime |
 | `GET /api/arena` | bots et derniers tournois |
+| `GET /api/bots` | bots sauvegardés |
 | `POST /api/bots`, `DELETE /api/bots/{nom}` | sauvegarde un snapshot comme bot (`{"name", "network", "superbatch"}`), le supprime |
 | `POST /api/tournaments`, `POST /api/tournaments/stop` | lance un tournoi (`{"bots", "gamesPerPair", "limit": {"kind": "nodes" | "depth" | "time", "value"}, "threads", "pairings": [{"a", "b"}] | null}`, où `null` signifie tous les combats), l'arrête |
-| `GET /ws` | WebSocket : `analyze` puis un message `info` par profondeur et un `done` final ; `stop` interrompt l'analyse |
+| `GET /api/review/options` | presets d'analyse (Rapide, Équilibré, Approfondi), moteur et preset par défaut, workers, limites |
+| `POST /api/review/estimate` | durée estimée de l'analyse des parties demandées pour chaque preset (et pour les réglages de la requête) : parties déjà en cache, positions à analyser, secondes par position (mesurées sur de vraies analyses, sinon sur un court benchmark) |
+| `POST /api/review/jobs` | lance l'analyse des parties Chess.com d'un joueur (`{"username", "timeClasses", "maxGames", "since", "until", "ratedOnly", "engine": "stockfish" \| "native", "preset", "depth" \| "movetimeMs", "multipv"}`, les trois derniers remplaçant ceux du preset) ; 202 avec `jobId`, 503 sans User-Agent |
+| `GET /api/review/jobs/{id}`, `DELETE /api/review/jobs/{id}` | progression d'une analyse (mois lus, parties en cache, analysées, positions, temps restant `etaSeconds`), l'arrête |
+| `GET /api/review/jobs/{id}/events` | la même progression en Server-Sent Events (`progress`, au plus toutes les 150 ms, jusqu'à l'état final) |
+| `GET /api/review/players/{pseudo}/games` | parties en cache d'un joueur (`timeClasses`, `maxGames`, `since`, `until`, `ratedOnly`), sans rien télécharger |
+| `GET /api/review/players/{username}/profile` | profil d'un joueur sur ses parties analysées (mêmes filtres) : bilan, précision, répertoire, positions récurrentes et bon coup, erreurs par phase, temps, conversion, motifs tactiques, 3 points faibles avec exemples, Elo estimé par cadence (intervalle à 95 %) face à l'Elo réel |
+| `GET /api/review/games/{id}` | une partie : ouverture (ECO, nom, famille, variante), coups (SAN, horloges, `book`) et dernière analyse : éval, chances de gain et meilleures lignes de chaque position, classe et précision de chaque coup, précision, ACPL et nombre de coups par classe de chaque joueur |
+| `GET /ws` | WebSocket : `analyze` (avec `limits.multipv` et `bot` en option) puis un message `info` par profondeur, avec ses lignes, et un `done` final ; `stop` interrompt l'analyse |
 
 Les scores renvoyés sont du point de vue des blancs. Les limites sont plafonnées côté serveur (profondeur 64, 60 s par coup, 10 min d'analyse), et le nombre de recherches simultanées est borné par `max_searches`.
 
@@ -276,6 +319,71 @@ La configuration se fait par `chess-train.toml` (voir [`chess-train.example.toml
 
 Au premier démarrage du démon, le top 5 des réseaux entraînés avant cette fonctionnalité est **reconstruit depuis l'historique des matchs**, et leurs autres snapshots mesurés sont supprimés. Pour tous les garder, il faut copier `data/weights/<run>/` ailleurs avant de mettre à jour.
 
+## Analyse Chess.com
+
+À partir d'un pseudo Chess.com : analyse de chaque partie (style *Game Review*) et bilan du profil sur les N dernières parties. Fonctionnalité en cours de construction ; disponible pour l'instant : la récupération et le cache des parties, et leur analyse par Stockfish (ou notre moteur), la reconnaissance des ouvertures, la classification des coups, la précision des joueurs, leur profil et l'estimation de leur Elo.
+
+**User-Agent obligatoire.** Chess.com demande à tout client de son API publique un `User-Agent` explicite, avec un moyen de contacter son auteur. Copiez `.env.example` en `.env` et renseignez `CHESS_REVIEW_USER_AGENT`. Sans lui, rien n'est envoyé.
+
+```powershell
+just chesscom hikaru -n 20 --time-class blitz,rapid
+cargo run -p chess-reviewer -- fetch hikaru -n 50 --since 2026-01-01 --until 2026-06-30 --rated
+cargo run --release -p chess-reviewer -- estimate hikaru -n 10            # durée par preset
+cargo run --release -p chess-reviewer -- analyse hikaru -n 10 --preset fast
+cargo run --release -p chess-reviewer -- analyse hikaru -n 10 --depth 14 --multipv 2
+docker compose exec server chess-reviewer analyse hikaru -n 10   # avec le Stockfish de l'image
+```
+
+- **Requêtes en série.** Chess.com autorise un accès illimité en série mais répond `429` aux requêtes parallèles. Le client n'envoie qu'une requête à la fois, espacées de `min_interval_ms`. Les réponses `429` et `5xx` et les erreurs réseau sont retentées avec un backoff exponentiel (avec jitter, en respectant `Retry-After`).
+- **Cache** (`data/review/cache.sqlite`). Les mois passés ne changent plus : lus une fois après leur fin, ils ne sont plus jamais téléchargés à nouveau. La liste des mois et le mois en cours sont revalidés après `recent_ttl_secs` par requête conditionnelle (`ETag`, réponse `304`). La lecture va du mois le plus récent au plus ancien et s'arrête dès que le nombre de parties demandé est atteint. Seules les parties d'échecs standard sont gardées (pas de 960 ni de variantes).
+- **PGN.** `chess-core` garde le commentaire de chaque coup. Les horloges `[%clk]` et le tag `TimeControl` (`180+2`, `1/86400` pour le Daily) sont décodés.
+- **Ouvertures.** La base [lichess-org/chess-openings](https://github.com/lichess-org/chess-openings) (CC0, environ 3 900 lignes, figée sur un commit dans `crates/chess-openings/data`) est compilée dans le binaire. Chaque ligne nomme la position où elle aboutit. Les positions sont comparées par EPD (FEN sans les compteurs de coups) et non par suite de coups : `1. Nf3 Nf6 2. d4 d5 3. Bf4` est reconnu comme le Système de Londres (D02), comme `1. d4 d5 2. Nf3 Nf6 3. Bf4`. Une partie prend le nom de la position nommée la plus profonde qu'elle atteint. Ses premiers coups sont « book » tant que chacun mène à une position d'une ligne de la base. Les systèmes (Londres, Colle, Catalane, etc.) sont reconnus quel que soit l'ordre de coups.
+- **Moteur.** Le trait `AnalysisEngine` (`chess-review`) a deux implémentations : Stockfish à pleine force via UCI (la référence, `engine = "stockfish"`) et notre moteur (`"native"` : le réseau NNUE de l'entraînement s'il existe, PeSTO sinon). Chaque position est analysée en MultiPV (`multipv`, 3 par défaut, au moins 2 pour reconnaître un coup unique), à profondeur fixe (`depth`, reproductible) ou à temps fixe (`movetime_ms`).
+- **Classification.** Chaque coup est jugé par les chances de gain (0 à 100, courbe de Lichess : `50 + 50 * (2 / (1 + exp(-0.00368208 * cp)) - 1)`, éval plafonnée à ±10 pions, mat = 100 ou 0) qu'il perd par rapport au meilleur coup. Les deux chances viennent de la même recherche quand le coup joué fait partie des lignes MultiPV, sinon de l'éval de la position suivante. Les seuils sont dans `[classification]` et suivent par défaut les bandes de Chess.com : Best (au plus 0,5), Excellent (2), Good (5), Inaccuracy (10), Mistake (20), Blunder au-delà.
+  - *Book* : coup de la théorie (voir Ouvertures).
+  - *Brilliant* : un sacrifice réel, à 2 points de chances au plus du meilleur coup. La matière donnée doit valoir au moins 2 pions : ce que l'adversaire gagne ensuite par une prise (évaluation statique des échanges), moins ce que le coup prend, moins ce qui était déjà en prise. Exclu si la partie était déjà gagnée (90 % ou plus) ou reste perdue après le coup (30 % ou moins).
+  - *Great* : le meilleur coup, avec au moins 10 points d'avance sur la 2ᵉ ligne MultiPV, quand cette 2ᵉ ligne change l'issue (gagné à partir de 70 %, perdu à 30 % ou moins, nulle entre les deux). Les coups évidents en sont exclus : reprises, prise d'une pièce en prise, pièce attaquée mise à l'abri, une des deux seules parades à un échec.
+  - *Miss* : après une Mistake ou un Blunder de l'adversaire qui donnait une position gagnée, un coup qui perd plus qu'une Inaccuracy sans perdre la partie.
+  - Vérifié sur des positions connues avec Stockfish (`crates/chess-review/tests/stockfish.rs`, `STOCKFISH=<binaire>`) : 5. Nxe5!! du mat de Légal est Brilliant, 1. c7! de la position de Saavedra est Great, 3... Nf6?? (mat du berger) est un Blunder, et 3. d3? après 2... Qh4?? est un Miss.
+- **Précision.** Précision d'un coup : `103.1668 * exp(-0.04354 * Δ) - 3.1669`, Δ étant les chances perdues. Précision d'une partie, comme sur Lichess : moyenne des coups pondérée par la volatilité (écart-type des chances sur une fenêtre de 2 à 8 positions), puis moyenne de cette valeur et de la moyenne harmonique, qui pèse les pires coups. L'ACPL (perte moyenne en centipions, évals plafonnées à ±10 pions) est calculé aussi. La classification et la précision sont recalculées à chaque lecture : changer un seuil ne demande aucune ré-analyse. Sur 10 parties de blitz de Naroditsky (Stockfish profondeur 16), l'écart moyen avec la précision affichée par Chess.com, dont la formule n'est pas publique, est d'environ 4 points.
+- **Profil.** Agrégé sur les parties analysées du joueur, à chaque lecture (`[profile]` dans `config/review.toml`).
+  - *Phases* : une finale compte au plus 6 cavaliers, fous, tours et dames (les deux camps, comme Lichess) ; sinon, l'ouverture dure jusqu'au coup 12.
+  - *Temps* : temps de réflexion par coup tiré des `[%clk]`, avec l'incrément. Le joueur est « à court de temps » sous 10 % du temps initial.
+  - *Conversion* : une partie compte comme gagnante si le joueur y a dépassé 80 % de chances, et comme perdue s'il est descendu sous 20 %.
+  - *Positions récurrentes* : positions (EPD) atteintes avant le 30ᵉ demi-coup dans au moins 2 parties, avec au moins une imprécision ; le bon coup est celui de l'analyse.
+  - *Motifs* (heuristiques, pour chaque erreur, oubli ou gaffe) : mat manqué, mat concédé, pièce laissée en prise (au moins 2 pions donnés, mesurés comme pour les sacrifices), gain de matériel manqué (la meilleure prise gagnait au moins 2 pions), fourchette manquée ou concédée (la pièce qui fourche attaque au moins deux pièces qu'elle gagne, sans pouvoir être prise avec profit), sinon erreur positionnelle.
+  - *Points faibles* : chaque candidat (une phase plus coûteuse que les autres, un motif, le manque de temps, la conversion, une position récurrente) est classé par les chances de gain qu'il coûte en moyenne par partie. Les 3 premiers sont retenus, chacun avec ses pires coups en exemple.
+- **Elo estimé.** Une partie seule dit peu : sa précision, son ACPL et ses taux d'erreurs sont corrélés à l'Elo à 0,45 environ. Une régression de l'Elo sur ces caractéristiques rapprocherait toutes les estimations de la moyenne, et moyenner les parties n'y changerait rien : sur l'échantillon, l'erreur d'une ridge passe de 486 à 448 Elo seulement en blitz avec 4 parties. Le modèle (`chess-review`, module `elo`) est donc pris dans l'autre sens, comme une calibration classique.
+  - Pour chaque cadence, chaque caractéristique (précision, log de l'ACPL, gaffes, erreurs et imprécisions pour 100 coups, hors théorie) est une fonction linéaire de l'Elo, plus un bruit corrélé entre caractéristiques.
+  - L'estimation est l'Elo qui explique le mieux les caractéristiques moyennes des parties (moindres carrés généralisés). Elle n'est pas biaisée et sa variance diminue comme 1/n.
+  - L'intervalle à 95 % ajoute un écart propre au joueur, que plus de parties ne réduisent pas. Les estimations restent dans les Elo de la calibration.
+  - Une partie de moins de 10 coups hors théorie ne compte pas.
+  - La page de partie montre l'estimation de chaque joueur sur cette partie (intervalle très large). Le profil la montre par cadence, avec son intervalle et l'écart à l'Elo réel.
+- **Calibration** (reproductible, à part de l'application).
+
+  ```powershell
+  just elo-collect --seed hikaru --country IS --country LU --until 2026-09-30 --preset fast
+  just elo-fit
+  ```
+
+  `collect` part de joueurs graines : nommés, ou tirés de la liste d'un pays par un hash fixe. Il suit ensuite leurs adversaires (échantillonnage en boule de neige) en choisissant chaque fois le joueur dont la tranche d'Elo (300 points de 400 à 2800) a le moins d'échantillons, jusqu'à 25 par tranche. Quand aucun adversaire connu n'est dans une tranche à remplir, il passe par le plus proche. Il analyse les 4 dernières parties classées de chaque joueur avant `--until`, et chaque partie donne un échantillon par camp. Les mêmes options choisissent les mêmes parties. L'échantillon est enregistré dans `config/elo-samples.json`, avec ses options. `fit` en tire `config/elo-model.json`, chargé par le serveur (`elo_model`), avec une validation croisée en 5 plis de joueurs.
+
+  Échantillon livré : 580 parties de joueurs entre 400 et 2800, analysées par Stockfish 19 (profondeur 12, 2 lignes), 23 minutes de collecte.
+
+  | Cadence | Échantillons | Erreur sur 1 partie | Erreur par joueur (≈ 4 parties) | Écart-type d'une partie | Joueurs dans l'intervalle |
+  |---|---|---|---|---|---|
+  | Bullet | 200 | 717 | 370 | 1 330 | 100 % |
+  | Blitz | 200 | 611 | 364 | 1 084 | 100 % |
+  | Rapide | 180 | 528 | 360 | 856 | 93 % |
+
+  L'erreur d'un profil diminue comme 1/√n. En blitz, environ ±240 Elo à 20 parties et ±150 à 50, plus l'écart propre au joueur. Un échantillon plus grand (`--per-band`) ou une analyse plus profonde (`--preset deep`) affineraient le modèle. La tranche 2500-2800 du rapide n'a que 5 échantillons.
+- **Parallélisme.** Un job télécharge les parties puis analyse celles qui ne le sont pas encore, une partie par worker (`workers`, la moitié des cœurs par défaut, partagés par tous les jobs). Les processus Stockfish sont réutilisés d'une partie à l'autre. La progression est publiée au fil de l'eau (SSE côté API).
+- **Pas de ré-analyse.** Une analyse est stockée par partie et par configuration (moteur et version, réseau, budget, MultiPV) : relancer la même analyse ne recalcule rien, changer la profondeur ou le moteur recalcule.
+- **Choix et durée.** L'utilisateur choisit un preset ou ses propres réglages, avec une estimation de la durée pour les parties demandées. Les parties déjà analysées avec ces réglages ne comptent pas, et la durée prend en compte le partage entre workers : jamais moins que la plus longue partie. Le coût d'une position est mesuré sur cette machine : d'abord par un court benchmark (8 positions de milieu de jeu, quelques secondes, une seule fois par réglage), puis par chaque vraie analyse (moyenne glissante, stockée dans le cache). Pendant l'analyse, le temps restant suit la vitesse réellement observée.
+- **Coût.** Stockfish 19 tourne à environ 0,9 M nœuds/s par cœur sur la machine de référence. Par position : environ 0,05 s en Rapide (profondeur 12, 2 lignes), 0,16 s en Équilibré (14, 2) et 0,75 s en Approfondi (16, 3). Mesuré sur 20 parties de blitz (1 625 positions, 4 workers) en Rapide : 27 s estimées, 26,7 s réelles.
+
+Configuration : `config/review.toml` (ou le chemin donné par `CHESS_REVIEW_CONFIG`) < variables `CHESS_REVIEW_*`, avec `__` entre section et clé (`CHESS_REVIEW_CHESSCOM__MAX_RETRIES=3`, `CHESS_REVIEW_ANALYSIS__DEPTH=14`). En Docker, `./config` est monté en lecture seule et le cache vit dans le volume nommé `review-cache` (SQLite sur un bind mount Windows est lent et son verrouillage peu fiable).
+
 ## Performances
 
 Mesures sur la machine de référence : Intel i7-9700KF (8 cœurs, AVX2), RTX 4060 8 Go, Windows 11 + Docker Desktop.
@@ -315,6 +423,7 @@ Options UCI :
 | --- | --- | --- |
 | `Hash` | 16 | taille de la table de transposition, en Mio |
 | `Move Overhead` | 30 | marge en ms gardée à chaque coup pour la latence de la GUI |
+| `MultiPV` | 1 | nombre de meilleures lignes cherchées (une ligne `info … multipv k` chacune) |
 | `Clear Hash` | — | vide la table de transposition |
 | `EvalFile` | `<empty>` | réseau `.nnue` à utiliser ; vide ou invalide : évaluation classique (PeSTO). Aussi via la variable `CHESS_EVAL_FILE` |
 

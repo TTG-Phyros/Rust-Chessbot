@@ -1,9 +1,10 @@
 //! Self-play data generation: the engine plays itself on every CPU core and
 //! records quiet positions with their search score and the game result.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc;
+use std::sync::{Mutex, PoisonError, mpsc};
 use std::time::Instant;
 
 use anyhow::{Context, Result};
@@ -60,11 +61,53 @@ impl Default for SelfplayConfig {
     }
 }
 
-/// Live counters, shared with the metrics writer.
+/// The game a worker is playing, for the wall of boards of the UI.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct LiveBoard {
+    /// Worker thread, from 0.
+    pub(crate) worker: u32,
+    /// Number of the game in the run.
+    pub(crate) game: u64,
+    pub(crate) fen: String,
+    pub(crate) ply: u32,
+    /// Last move, in UCI.
+    pub(crate) last_move: Option<String>,
+}
+
+/// Live counters and boards, shared with the metrics writer.
 #[derive(Debug, Default)]
 pub(crate) struct SelfplayStats {
     pub(crate) games: AtomicU64,
     pub(crate) positions: AtomicU64,
+    /// Current position of each worker.
+    boards: Mutex<BTreeMap<u32, LiveBoard>>,
+}
+
+impl SelfplayStats {
+    /// Records the position `worker` reached in game `game`.
+    fn show(&self, worker: u32, game: u64, pos: &Position) {
+        let board = LiveBoard {
+            worker,
+            game,
+            fen: pos.to_fen(),
+            ply: pos.ply() as u32,
+            last_move: pos.last_move().map(|mv| mv.to_string()),
+        };
+        self.boards
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(worker, board);
+    }
+
+    /// The current position of every worker, by worker.
+    pub(crate) fn boards(&self) -> Vec<LiveBoard> {
+        self.boards
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .values()
+            .cloned()
+            .collect()
+    }
 }
 
 /// A score this large (centipawns, side to move) for long enough ends the game.
@@ -77,11 +120,13 @@ const DRAW_MIN_PLY: usize = 80;
 /// Positions with a larger score are not recorded (the game is decided anyway).
 const MAX_RECORDED_SCORE: i32 = 3_000;
 
-/// Plays one game from a random opening. Returns the recorded positions.
+/// Plays one game from a random opening, showing each position to
+/// `on_position`. Returns the recorded positions.
 pub(crate) fn play_game<E: Evaluator>(
     searcher: &mut Searcher<E>,
     config: &SelfplayConfig,
     seed: u64,
+    mut on_position: impl FnMut(&Position),
 ) -> Vec<Record> {
     let mut rng = Rng::new(seed);
     let mut pos = Position::startpos();
@@ -100,6 +145,7 @@ pub(crate) fn play_game<E: Evaluator>(
     let mut draw_streak = 0;
 
     let outcome = loop {
+        on_position(&pos);
         match pos.status() {
             GameStatus::Ongoing => {}
             GameStatus::Checkmate {
@@ -218,7 +264,11 @@ pub(crate) fn run(
                     if let Some(network) = &config.network {
                         refresh_network(searcher, loaded, network);
                     }
-                    let records = play_game(searcher, config, config.seed.wrapping_add(index));
+                    let worker = rayon::current_thread_index().unwrap_or(0) as u32;
+                    let records =
+                        play_game(searcher, config, config.seed.wrapping_add(index), |pos| {
+                            stats.show(worker, index, pos);
+                        });
                     let played = stats.games.fetch_add(1, Ordering::Relaxed) + 1;
                     if played.is_multiple_of(100) {
                         let rate = played as f64 / start.elapsed().as_secs_f64().max(1e-3);
@@ -344,7 +394,9 @@ mod tests {
     #[test]
     fn games_produce_consistent_records() {
         let mut searcher = Searcher::new(chess_eval::ClassicEval, StopFlag::new());
-        let records = play_game(&mut searcher, &small(), 1);
+        let mut shown = 0;
+        let records = play_game(&mut searcher, &small(), 1, |_| shown += 1);
+        assert!(shown > records.len());
         assert!(!records.is_empty());
         let outcome = records[0].outcome;
         assert!(records.iter().all(|r| r.outcome == outcome));
@@ -354,7 +406,7 @@ mod tests {
                 .all(|r| i32::from(r.score).abs() < MAX_RECORDED_SCORE)
         );
         // Deterministic for a given seed.
-        assert_eq!(play_game(&mut searcher, &small(), 1), records);
+        assert_eq!(play_game(&mut searcher, &small(), 1, |_| {}), records);
     }
 
     #[test]
@@ -385,6 +437,13 @@ mod tests {
                 .is_empty()
         );
         assert_eq!(next_chunk_index(&dir, "test"), files.len() as u32);
+        // Each worker shows the last position of its last game.
+        let boards = stats.boards();
+        assert!((1..=2).contains(&boards.len()), "{boards:?}");
+        for board in &boards {
+            assert!(Position::from_fen(&board.fen).is_ok(), "{}", board.fen);
+            assert!(board.ply > 0 && board.last_move.is_some());
+        }
     }
 
     #[test]

@@ -64,3 +64,8 @@ export function eloBand(points: readonly EloPoint[]) {
     games: point.games,
   }));
 }
+
+/** `NVIDIA GeForce RTX 4060` for `GPU NVIDIA GeForce RTX 4060 (compute 8.9, …)`. */
+export function deviceName(device: string): string {
+  return device.replace(/^GPU\s+/, '').replace(/\s*\(.*$/, '') || device;
+}

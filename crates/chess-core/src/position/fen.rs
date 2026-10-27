@@ -97,6 +97,16 @@ impl Position {
     /// Serializes the position as FEN.
     #[must_use]
     pub fn to_fen(&self) -> String {
+        let mut fen = self.epd();
+        let _ = write!(fen, " {} {}", self.halfmove_clock, self.fullmove_number);
+        fen
+    }
+
+    /// The first four fields of the FEN (placement, side to move, castling,
+    /// en passant), without the move counters: the same key for the same
+    /// position whatever the move order that reached it.
+    #[must_use]
+    pub fn epd(&self) -> String {
         let mut fen = String::with_capacity(90);
         for rank in (0..8).rev() {
             let mut empty = 0;
@@ -147,7 +157,6 @@ impl Position {
             }
             None => fen.push_str(" -"),
         }
-        let _ = write!(fen, " {} {}", self.halfmove_clock, self.fullmove_number);
         fen
     }
 }
@@ -314,6 +323,26 @@ mod tests {
     fn counters_are_optional() {
         let pos = Position::from_fen("4k3/8/8/8/8/8/8/4K3 w - -").unwrap();
         assert_eq!(pos.to_fen(), "4k3/8/8/8/8/8/8/4K3 w - - 0 1");
+    }
+
+    #[test]
+    fn epd_ignores_move_order_and_counters() {
+        let mut a = Position::startpos();
+        let mut b = Position::startpos();
+        for san in ["d4", "Nf6", "Nf3", "d5"] {
+            let mv = a.parse_san(san).unwrap();
+            a.make_move(mv);
+        }
+        for san in ["Nf3", "d5", "d4", "Nf6"] {
+            let mv = b.parse_san(san).unwrap();
+            b.make_move(mv);
+        }
+        assert_eq!(a.epd(), b.epd());
+        assert_eq!(
+            a.epd(),
+            "rnbqkb1r/ppp1pppp/5n2/3p4/3P4/5N2/PPP1PPPP/RNBQKB1R w KQkq -"
+        );
+        assert!(a.to_fen().starts_with(&a.epd()));
     }
 
     #[test]

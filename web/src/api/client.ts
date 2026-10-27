@@ -7,9 +7,12 @@
 import type { ArenaView } from './generated/ArenaView';
 import type { BotInfo } from './generated/BotInfo';
 import type { CreateNetworkRequest } from './generated/CreateNetworkRequest';
+import type { EngineInfo } from './generated/EngineInfo';
 import type { EngineMoveRequest } from './generated/EngineMoveRequest';
 import type { EngineMoveResponse } from './generated/EngineMoveResponse';
 import type { ErrorResponse } from './generated/ErrorResponse';
+import type { EvalExplanation } from './generated/EvalExplanation';
+import type { ExplainRequest } from './generated/ExplainRequest';
 import type { GameRequest } from './generated/GameRequest';
 import type { HealthResponse } from './generated/HealthResponse';
 import type { NetworkParams } from './generated/NetworkParams';
@@ -17,7 +20,18 @@ import type { PgnExportRequest } from './generated/PgnExportRequest';
 import type { PgnExportResponse } from './generated/PgnExportResponse';
 import type { PgnImportResponse } from './generated/PgnImportResponse';
 import type { PositionView } from './generated/PositionView';
+import type { ReviewEstimates } from './generated/ReviewEstimates';
+import type { ReviewGameSummary } from './generated/ReviewGameSummary';
+import type { ReviewGameView } from './generated/ReviewGameView';
+import type { ReviewJobView } from './generated/ReviewJobView';
+import type { ReviewOptions } from './generated/ReviewOptions';
+import type { ReviewProfile } from './generated/ReviewProfile';
+import type { ReviewRequest } from './generated/ReviewRequest';
+import type { ReviewStarted } from './generated/ReviewStarted';
 import type { SaveBotRequest } from './generated/SaveBotRequest';
+import type { SelfplayView } from './generated/SelfplayView';
+import type { StockfishCompareRequest } from './generated/StockfishCompareRequest';
+import type { StockfishCompareResponse } from './generated/StockfishCompareResponse';
 import type { StartTrainingRequest } from './generated/StartTrainingRequest';
 import type { TournamentRequest } from './generated/TournamentRequest';
 import type { TournamentStarted } from './generated/TournamentStarted';
@@ -67,9 +81,20 @@ export const api = {
   position: (game: GameRequest, signal?: AbortSignal) =>
     post<PositionView>('/position', game, signal),
 
+  /** Which evaluation the engine plays with (NNUE network or PeSTO). */
+  engine: (signal?: AbortSignal) => request<EngineInfo>('/engine', { signal: signal ?? null }),
+
   /** The engine's move in a game. */
   engineMove: (body: EngineMoveRequest, signal?: AbortSignal) =>
     post<EngineMoveResponse>('/engine/move', body, signal),
+
+  /** The static evaluation of a position, taken apart (NNUE piece map, win/draw/loss). */
+  explain: (body: ExplainRequest, signal?: AbortSignal) =>
+    post<EvalExplanation>('/engine/explain', body, signal),
+
+  /** What Stockfish plays in a position, at up to 4 levels (503 without Stockfish). */
+  stockfishCompare: (body: StockfishCompareRequest, signal?: AbortSignal) =>
+    post<StockfishCompareResponse>('/stockfish/compare', body, signal),
 
   /** First game of a PGN text. */
   importPgn: (pgn: string) => post<PgnImportResponse>('/pgn/import', { pgn }),
@@ -86,6 +111,10 @@ export const api = {
       network ? `/training?network=${encodeURIComponent(network)}` : '/training',
       { signal: signal ?? null },
     ),
+
+  /** The game each self-play worker is playing. */
+  selfplay: (signal?: AbortSignal) =>
+    request<SelfplayView>('/training/selfplay', { signal: signal ?? null }),
 
   /** Starts the self-play + training pipeline of a network (409 if one is running). */
   startTraining: (body: StartTrainingRequest) => command('POST', '/training/start', body),
@@ -108,6 +137,9 @@ export const api = {
   /** Bots and tournaments. */
   arena: (signal?: AbortSignal) => request<ArenaView>('/arena', { signal: signal ?? null }),
 
+  /** The saved bots, newest first. */
+  bots: (signal?: AbortSignal) => request<BotInfo[]>('/bots', { signal: signal ?? null }),
+
   /** Saves a snapshot (or the latest export) of a network as a bot. */
   saveBot: (body: SaveBotRequest) => post<BotInfo>('/bots', body),
 
@@ -118,6 +150,44 @@ export const api = {
 
   /** Stops the tournament in progress. */
   stopTournament: () => command('POST', '/tournaments/stop', {}),
+
+  /** Presets, defaults and limits of the Chess.com reviews. */
+  reviewOptions: (signal?: AbortSignal) =>
+    request<ReviewOptions>('/review/options', { signal: signal ?? null }),
+
+  /**
+   * How long reviewing a player's games would take with each preset (the
+   * list of their games is downloaded first if needed).
+   */
+  reviewEstimate: (body: ReviewRequest, signal?: AbortSignal) =>
+    post<ReviewEstimates>('/review/estimate', body, signal),
+
+  /** Downloads and analyses a player's games (409 while a job runs, 503 without User-Agent). */
+  startReview: (body: ReviewRequest) => post<ReviewStarted>('/review/jobs', body),
+
+  /** Progress of a review job (`/events` streams it). */
+  reviewJob: (id: number, signal?: AbortSignal) =>
+    request<ReviewJobView>(`/review/jobs/${String(id)}`, { signal: signal ?? null }),
+
+  cancelReview: (id: number) => command('DELETE', `/review/jobs/${String(id)}`),
+
+  /** Cached Chess.com games of a player, most recent first (nothing is downloaded). */
+  reviewGames: (username: string, query: string, signal?: AbortSignal) =>
+    request<ReviewGameSummary[]>(`/review/players/${encodeURIComponent(username)}/games?${query}`, {
+      signal: signal ?? null,
+    }),
+
+  /** Profile of a player over their analysed cached games. */
+  reviewProfile: (username: string, query: string, signal?: AbortSignal) =>
+    request<ReviewProfile>(`/review/players/${encodeURIComponent(username)}/profile?${query}`, {
+      signal: signal ?? null,
+    }),
+
+  /** A cached Chess.com game with its latest analysis, moves classified (404 if unknown). */
+  reviewGame: (id: string, signal?: AbortSignal) =>
+    request<ReviewGameView>(`/review/games/${encodeURIComponent(id)}`, {
+      signal: signal ?? null,
+    }),
 };
 
 /** A command answered with an empty body (201, 202 or 204). */

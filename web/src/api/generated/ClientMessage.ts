@@ -22,4 +22,8 @@ game: GameRequest,
 /**
  * Optional limits.
  */
-limits: EngineLimits, } | { "type": "stop" };
+limits: EngineLimits, 
+/**
+ * Evaluation to analyse with (as in [`EngineMoveRequest::bot`]).
+ */
+bot?: string | null, } | { "type": "stop" };

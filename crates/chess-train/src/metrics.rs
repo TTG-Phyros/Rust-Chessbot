@@ -3,7 +3,9 @@
 //! Two files in `<data_dir>/metrics/`:
 //! - `events.jsonl`: one JSON object per line (`dataset`, `superbatch`,
 //!   `checkpoint`, `export` and `match` events), appended;
-//! - `status.json`: the current state of the run, rewritten atomically.
+//! - `status.json`: the current state of the run, rewritten atomically;
+//! - `selfplay.json`: the board of every self-play worker, rewritten
+//!   every second while self-play runs.
 
 use std::fs::{File, OpenOptions};
 use std::io::Write;
@@ -14,6 +16,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+
+use crate::selfplay::LiveBoard;
 
 /// Seconds since the Unix epoch.
 pub(crate) fn now() -> u64 {
@@ -108,9 +112,25 @@ impl Metrics {
     }
 
     fn write_status(&self, status: &Status) -> Result<()> {
-        let temp = self.dir.join("status.json.tmp");
-        std::fs::write(&temp, serde_json::to_vec_pretty(status)?)?;
-        std::fs::rename(&temp, self.dir.join("status.json"))?;
+        self.write_atomically("status.json", &serde_json::to_vec_pretty(status)?)
+    }
+
+    /// Rewrites `selfplay.json` with the current self-play boards.
+    pub(crate) fn write_boards(&self, boards: &[LiveBoard]) {
+        let file = json!({ "updated_at": now(), "boards": boards });
+        let written = serde_json::to_vec(&file)
+            .map_err(anyhow::Error::from)
+            .and_then(|bytes| self.write_atomically("selfplay.json", &bytes));
+        if let Err(err) = written {
+            tracing::warn!(error = %err, "cannot write selfplay.json");
+        }
+    }
+
+    /// Writes `name` through a temporary file, so readers never see half of it.
+    fn write_atomically(&self, name: &str, bytes: &[u8]) -> Result<()> {
+        let temp = self.dir.join(format!("{name}.tmp"));
+        std::fs::write(&temp, bytes)?;
+        std::fs::rename(&temp, self.dir.join(name))?;
         Ok(())
     }
 }
@@ -149,5 +169,20 @@ mod tests {
                 .unwrap();
         assert_eq!((status.run.as_str(), status.superbatch), ("r", 3));
         assert_eq!(metrics.status().superbatch, 3);
+
+        metrics.write_boards(&[LiveBoard {
+            worker: 1,
+            game: 42,
+            fen: "8/8/8/8/8/8/8/K6k w - - 0 1".into(),
+            ply: 30,
+            last_move: Some("a2a1".into()),
+        }]);
+        // The format chess-server reads.
+        let boards: Value =
+            serde_json::from_slice(&std::fs::read(dir.join("metrics/selfplay.json")).unwrap())
+                .unwrap();
+        assert!(boards["updated_at"].as_u64().is_some());
+        assert_eq!(boards["boards"][0]["worker"], 1);
+        assert_eq!(boards["boards"][0]["last_move"], "a2a1");
     }
 }

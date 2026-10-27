@@ -1,0 +1,29 @@
+[package]
+name = "chess-review"
+description = "Game review: analysis engines behind a trait (Stockfish, our engine), per-move evaluations."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+default = ["stockfish", "native"]
+# Stockfish over UCI (the reference).
+stockfish = ["dep:chess-stockfish"]
+# Our own engine (chess-search with the NNUE or the classical evaluation).
+native = ["dep:chess-search", "dep:chess-eval"]
+
+[dependencies]
+chess-core.workspace = true
+chess-eval = { workspace = true, features = ["classic", "nnue"], optional = true }
+chess-search = { workspace = true, optional = true }
+chess-stockfish = { workspace = true, optional = true }
+anyhow.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

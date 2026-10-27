@@ -8,15 +8,20 @@ use axum::http::{Request, StatusCode, header};
 use chess_server::AppState;
 use chess_server::api::router;
 use chess_server::api::types::{
-    EngineMoveResponse, ErrorResponse, GameStatus, HealthResponse, PgnExportResponse,
-    PgnImportResponse, PositionView, ScoreView, Side,
+    BotInfo, EngineMoveResponse, ErrorResponse, EvalExplanation, GameStatus, HealthResponse,
+    PgnExportResponse, PgnImportResponse, PositionView, ScoreView, SelfplayView, Side,
 };
+use chess_server::engine::EngineService;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
 async fn call(request: Request<Body>) -> (StatusCode, Vec<u8>) {
-    let response = router(AppState::default()).oneshot(request).await.unwrap();
+    call_with(AppState::default(), request).await
+}
+
+async fn call_with(state: AppState, request: Request<Body>) -> (StatusCode, Vec<u8>) {
+    let response = router(state).oneshot(request).await.unwrap();
     let status = response.status();
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     (status, body.to_vec())
@@ -57,10 +62,24 @@ async fn openapi_documents_every_route() {
         "/api/engine/move",
         "/api/pgn/import",
         "/api/pgn/export",
+        "/api/engine/explain",
+        "/api/stockfish/compare",
+        "/api/review/jobs",
     ] {
         assert!(doc["paths"][path]["post"].is_object(), "{path}");
     }
+    for path in [
+        "/api/review/jobs/{id}",
+        "/api/review/jobs/{id}/events",
+        "/api/review/players/{username}/games",
+        "/api/review/players/{username}/profile",
+        "/api/review/games/{id}",
+    ] {
+        assert!(doc["paths"][path]["get"].is_object(), "{path}");
+    }
+    assert!(doc["paths"]["/api/review/jobs/{id}"]["delete"].is_object());
     assert!(doc["components"]["schemas"]["PositionView"].is_object());
+    assert!(doc["components"]["schemas"]["ReviewGameView"].is_object());
 }
 
 #[tokio::test]
@@ -188,4 +207,99 @@ async fn pgn_errors_are_422() {
     let (status, _): (_, ErrorResponse) =
         post("/api/pgn/export", json!({ "game": {}, "result": "2-0" })).await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[tokio::test]
+async fn engine_reports_its_best_lines() {
+    let body = json!({ "game": {}, "limits": { "depth": 4, "multipv": 3 } });
+    let (status, answer): (_, EngineMoveResponse) = post("/api/engine/move", body).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(answer.lines.len(), 3);
+    let best = answer.best_move.unwrap();
+    assert_eq!(answer.lines[0].pv[0], best.uci);
+    assert_eq!(answer.lines[0].pv_san[0], best.san);
+    assert_ne!(answer.lines[1].pv[0], best.uci);
+}
+
+#[tokio::test]
+async fn engine_plays_with_a_clock() {
+    let body = json!({
+        "game": {},
+        "limits": { "whiteTimeMs": 2000, "blackTimeMs": 2000, "whiteIncrementMs": 0 }
+    });
+    let (status, answer): (_, EngineMoveResponse) = post("/api/engine/move", body).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(answer.best_move.is_some());
+    assert!(answer.time_ms < 1500, "{} ms", answer.time_ms);
+}
+
+#[tokio::test]
+async fn unknown_bots_are_404() {
+    let body = json!({ "game": {}, "limits": { "depth": 1 }, "bot": "ghost" });
+    let (status, error): (_, ErrorResponse) = post("/api/engine/move", body).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert!(error.error.contains("ghost"));
+    let classic = json!({ "game": {}, "limits": { "depth": 1 }, "bot": "classic" });
+    let (status, _): (_, EngineMoveResponse) = post("/api/engine/move", classic).await;
+    assert_eq!(status, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn classic_explanation_has_no_piece_map() {
+    let (status, explanation): (_, EvalExplanation) = post(
+        "/api/engine/explain",
+        json!({ "game": { "moves": ["e2e4"] } }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(explanation.evaluator, "classic");
+    assert!(explanation.pieces.is_empty());
+    let wdl = explanation.wdl;
+    assert_eq!(wdl.win + wdl.draw + wdl.loss, 1000);
+}
+
+#[tokio::test]
+async fn nnue_explanation_maps_every_piece() {
+    let dir = std::env::temp_dir().join(format!("chess-server-explain-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("zero.nnue");
+    std::fs::write(&file, chess_eval::nnue::NnueWeights::zeros().to_bytes()).unwrap();
+    let state = AppState {
+        engine: EngineService::new(1, 1, Some(file)),
+        ..AppState::default()
+    };
+    let request = Request::post("/api/engine/explain")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(json!({ "game": {} }).to_string()))
+        .unwrap();
+    let (status, bytes) = call_with(state, request).await;
+    assert_eq!(status, StatusCode::OK);
+    let explanation: EvalExplanation = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(explanation.evaluator, "nnue");
+    assert_eq!(explanation.pieces.len(), 32);
+    assert!(
+        explanation
+            .pieces
+            .iter()
+            .any(|p| p.square == "e1" && p.piece == "K")
+    );
+    assert_eq!(explanation.static_cp, 0);
+}
+
+#[tokio::test]
+async fn stockfish_comparison_needs_stockfish() {
+    let body = json!({ "game": {}, "levels": [5] });
+    let (status, _): (_, ErrorResponse) = post("/api/stockfish/compare", body).await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+}
+
+#[tokio::test]
+async fn bots_and_selfplay_boards_read_the_data_directory() {
+    let (status, body) = get("/api/bots").await;
+    assert_eq!(status, StatusCode::OK);
+    let _: Vec<BotInfo> = serde_json::from_slice(&body).unwrap();
+    let (status, body) = get("/api/training/selfplay").await;
+    assert_eq!(status, StatusCode::OK);
+    let view: SelfplayView = serde_json::from_slice(&body).unwrap();
+    assert!(!view.live || !view.games.is_empty());
 }

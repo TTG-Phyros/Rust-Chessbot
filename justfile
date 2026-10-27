@@ -100,3 +100,15 @@ ci: lint test
 # Engine signature and speed: fixed-depth search over the bench positions
 engine-bench depth="10":
     cargo run --release -p chess-uci -- bench {{ depth }}
+
+# Sync the Chess.com games of a player into the review cache and list them, e.g. `just chesscom hikaru -n 10 --time-class blitz`
+chesscom username *args:
+    cargo run --release -p chess-reviewer -- fetch {{ username }} {{ args }}
+
+# Collect the Elo calibration sample (Chess.com games, analysed), e.g. `just elo-collect --seed hikaru --country IS --until 2026-09-30 --preset fast`
+elo-collect *args:
+    cargo run --release -p chess-reviewer -- calibrate collect {{ args }}
+
+# Fit the Elo model on the sample: config/elo-samples.json -> config/elo-model.json
+elo-fit:
+    cargo run --release -p chess-reviewer -- calibrate fit

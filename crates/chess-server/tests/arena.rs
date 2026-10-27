@@ -151,6 +151,7 @@ async fn networks_bots_and_tournaments() {
         data_dir: dir.clone(),
         trainer_url: Some(fake_daemon().await),
         http: reqwest::Client::new(),
+        review: None,
     };
 
     // Networks, from the files.
@@ -235,6 +236,7 @@ async fn arena_without_a_daemon() {
         data_dir: dir,
         trainer_url: None,
         http: reqwest::Client::new(),
+        review: None,
     };
     let (code, arena) = call(&state, "GET", "/api/arena", Value::Null).await;
     assert_eq!(code, StatusCode::OK);

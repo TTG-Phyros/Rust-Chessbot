@@ -15,4 +15,8 @@ weightsFile?: string | null,
 /**
  * Modification time of that file (Unix seconds).
  */
-weightsModified?: number | null, };
+weightsModified?: number | null, 
+/**
+ * Stockfish available for comparisons (`id name`), if any.
+ */
+stockfish?: string | null, };

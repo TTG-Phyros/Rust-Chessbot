@@ -1,0 +1,120 @@
+# Chess.com game reviews (chess-reviewer, chess-server).
+#
+# Every key can be overridden by a CHESS_REVIEW_* variable (`__` between a
+# section and its key, e.g. CHESS_REVIEW_CHESSCOM__MAX_RETRIES=3), and this
+# file replaced by CHESS_REVIEW_CONFIG. The values below are the defaults.
+
+# User-Agent sent to Chess.com: the application and a way to contact you.
+# No default: set CHESS_REVIEW_USER_AGENT in .env (see .env.example).
+# user_agent = "chess-bot/0.1 (you@example.com)"
+
+# SQLite cache of games and analyses (a named volume in Docker).
+cache = "data/review/cache.sqlite"
+# Most games one review may ask for.
+max_games = 200
+# Elo model fitted by `chess-reviewer calibrate fit` (no estimates without it).
+elo_model = "config/elo-model.json"
+
+[chesscom]
+base_url = "https://api.chess.com/pub"
+# Requests are sent one at a time, at least this far apart.
+min_interval_ms = 200
+# Rate-limited (429) or failed requests: retries, exponential backoff.
+max_retries = 5
+initial_backoff_ms = 1000
+max_backoff_ms = 60000
+timeout_secs = 30
+# The list of months and the current month are revalidated after this many
+# seconds; past months are never downloaded twice.
+recent_ttl_secs = 600
+
+# Engine searches. The user picks a preset (with an estimate of the time it
+# takes for the games asked: POST /api/review/estimate), or sets a depth or a
+# time and a number of lines. An analysis is cached per engine and settings:
+# other settings analyse the games again.
+[analysis]
+# "stockfish" (the reference) or "native" (our engine).
+engine = "stockfish"
+# Preset of the requests that name none.
+preset = "deep"
+# Games analysed at once, one engine (one CPU core) each; 0 = half the cores.
+workers = 0
+
+# Presets, fastest first: depth (or movetime_ms, a time per position) and
+# lines per position (at least 2 to recognise the only good move).
+# Measured on an i7-9700KF (Stockfish 19, one core per game): about 0.05,
+# 0.16 and 0.75 s per position; a blitz game has about 80 positions.
+[[analysis.presets]]
+name = "fast"
+label = "Rapide"
+depth = 12
+multipv = 2
+
+[[analysis.presets]]
+name = "balanced"
+label = "Équilibré"
+depth = 14
+multipv = 2
+
+[[analysis.presets]]
+name = "deep"
+label = "Approfondi"
+depth = 16
+multipv = 3
+
+[stockfish]
+binary = "stockfish"
+threads = 1
+hash_mb = 64
+
+[native]
+# Network used when it exists; classical evaluation otherwise.
+eval_file = "data/weights/main.nnue"
+hash_mb = 64
+
+# Classification of the moves. Every move is judged by the winning chances
+# (0-100, Lichess's curve over the evaluation) it loses against the best
+# move; the bands are Chess.com's (0.02, 0.05, 0.10 and 0.20 expected points).
+[classification]
+# Most a move may lose to be Best, Excellent, Good, an Inaccuracy, a Mistake;
+# a Blunder loses more.
+best = 0.5
+excellent = 2.0
+good = 5.0
+inaccuracy = 10.0
+mistake = 20.0
+# Chances from which a position is won, and up to which it is lost.
+winning = 70.0
+losing = 30.0
+# Great: the best move, ahead of the second line by at least this much, the
+# second line leading to another outcome (won, drawn, lost). Obvious moves
+# are never Great: recaptures, taking a hanging piece, saving an attacked
+# piece, answering a check that leaves two moves at most.
+only_move = 10.0
+# Brilliant: a move losing at most brilliant_loss that gives away at least
+# `sacrifice` centipawns of material (what the opponent can then win by a
+# capture, less what the move takes, less what was hanging already); not
+# when the chances were `won` already, nor when they are still lost after.
+sacrifice = 200
+brilliant_loss = 2.0
+won = 90.0
+# Miss: after an opponent's Mistake or Blunder had given a won position, a
+# move losing more than an Inaccuracy, without losing the game.
+
+# Profile of a player over their analysed games.
+[profile]
+# Phases: an endgame has at most `endgame_pieces` knights, bishops, rooks and
+# queens (both sides); otherwise the opening lasts until move `opening_moves`.
+opening_moves = 12
+endgame_pieces = 6
+# Winning chances (0-100) from which the player had a won game (conversion),
+# and up to which a lost one (defence).
+winning = 80.0
+losing = 20.0
+# Short of time: less than this share of the starting time on the clock.
+time_trouble = 0.1
+# Recurring positions: reached before this ply, in at least `line_games` games.
+line_plies = 30
+line_games = 2
+# Examples kept for each weakness.
+examples = 3

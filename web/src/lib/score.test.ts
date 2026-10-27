@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatScore, whiteShare } from './score';
+import { clampedPawns, formatScore, whiteShare } from './score';
 
 describe('formatScore', () => {
   it('formats centipawns as pawns with a sign', () => {
@@ -27,5 +27,17 @@ describe('whiteShare', () => {
   it('saturates on mates', () => {
     expect(whiteShare({ kind: 'mate', moves: 4 })).toBe(1);
     expect(whiteShare({ kind: 'mate', moves: -1 })).toBe(0);
+  });
+});
+
+describe('clampedPawns', () => {
+  it('converts centipawns and clamps them', () => {
+    expect(clampedPawns({ kind: 'cp', value: 42 }, 3)).toBeCloseTo(0.42);
+    expect(clampedPawns({ kind: 'cp', value: -900 }, 3)).toBe(-3);
+  });
+
+  it('puts mates at the bounds', () => {
+    expect(clampedPawns({ kind: 'mate', moves: 2 }, 3)).toBe(3);
+    expect(clampedPawns({ kind: 'mate', moves: -1 }, 3)).toBe(-3);
   });
 });

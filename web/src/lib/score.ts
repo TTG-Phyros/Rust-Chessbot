@@ -21,3 +21,12 @@ export function whiteShare(score: ScoreView): number {
   }
   return 1 / (1 + Math.exp(-score.value / 180));
 }
+
+/** The score in pawns for White, clamped to `[-cap, cap]`; mates sit at the bounds. */
+export function clampedPawns(score: ScoreView, cap: number): number {
+  if (score.kind === 'mate') {
+    if (score.moves === 0) return 0;
+    return score.moves > 0 ? cap : -cap;
+  }
+  return Math.max(-cap, Math.min(cap, score.value / 100));
+}

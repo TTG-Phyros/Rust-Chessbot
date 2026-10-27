@@ -1,5 +1,5 @@
 import { type CSSProperties, useState } from 'react';
-import { type Arrow, Chessboard } from 'react-chessboard';
+import { type Arrow, Chessboard, type PieceRenderObject, defaultPieces } from 'react-chessboard';
 
 import type { MoveView } from '../api/generated/MoveView';
 import type { PositionView } from '../api/generated/PositionView';
@@ -14,16 +14,60 @@ type BoardProps = {
   interactive: boolean;
   onMove: (uci: string) => void;
   arrows?: Arrow[];
+  /** Background of some squares (a heat map), under the move highlights. */
+  squareTints?: Record<string, CSSProperties>;
+  /**
+   * Tilts the board in perspective, pieces standing up. Moves are then
+   * played by clicks only: dragging does not follow a tilted board.
+   */
+  tilted?: boolean;
 };
 
-const LAST_MOVE: CSSProperties = { background: 'rgba(250, 204, 21, 0.35)' };
-const SELECTED: CSSProperties = { background: 'rgba(59, 130, 246, 0.45)' };
+/** Board tilt, in degrees, and the stretch that stands the pieces back up. */
+const TILT = 34;
+const STAND_UP = 1 / Math.cos((TILT * Math.PI) / 180);
+
+const DARK = '#232731';
+const LIGHT = '#3b414d';
+const LAST_MOVE: CSSProperties = { boxShadow: 'inset 0 0 0 100vmax rgba(200, 245, 96, 0.16)' };
+const SELECTED: CSSProperties = {
+  boxShadow: 'inset 0 0 0 2px rgba(200, 245, 96, 0.8), inset 0 0 0 100vmax rgba(200, 245, 96, 0.1)',
+};
 const CHECK: CSSProperties = {
-  background: 'radial-gradient(circle, rgba(239, 68, 68, 0.85) 0%, rgba(239, 68, 68, 0) 75%)',
+  background: 'radial-gradient(circle, rgba(255, 138, 92, 0.9) 0%, rgba(255, 138, 92, 0) 72%)',
 };
 const TARGET: CSSProperties = {
-  background: 'radial-gradient(circle, rgba(15, 23, 42, 0.35) 22%, transparent 24%)',
+  backgroundImage: 'radial-gradient(circle, rgba(236, 234, 228, 0.28) 18%, transparent 20%)',
 };
+const NOTATION: CSSProperties = {
+  color: '#8a909c',
+  fontFamily: 'JetBrains Mono, monospace',
+  fontSize: '10px',
+};
+
+/**
+ * The default pieces, lit for a dark board: black pieces get a bone rim so
+ * they stay visible on dark squares; tilted, every piece stands up.
+ */
+function piecesFor(tilted: boolean): PieceRenderObject {
+  return Object.fromEntries(
+    Object.entries(defaultPieces).map(([code, render]) => {
+      const style: CSSProperties = {
+        filter: code.startsWith('b')
+          ? 'drop-shadow(0 0 0.6px rgba(236, 234, 228, 0.9)) drop-shadow(0 2px 2px rgba(0, 0, 0, 0.5))'
+          : 'drop-shadow(0 2px 2px rgba(0, 0, 0, 0.55))',
+        ...(tilted && { transform: `scaleY(${STAND_UP})`, transformOrigin: '50% 92%' }),
+      };
+      return [
+        code,
+        (props?: Parameters<typeof render>[0]) => render({ ...props, svgStyle: style }),
+      ];
+    }),
+  );
+}
+
+const FLAT_PIECES = piecesFor(false);
+const TILTED_PIECES = piecesFor(true);
 
 const PROMOTION_NAMES: Record<string, string> = {
   q: 'Dame',
@@ -40,7 +84,15 @@ const PROMOTION_SYMBOLS: Record<Side, Record<string, string>> = {
  * Interactive chessboard (drag and drop or click-click). Every move is
  * checked against the server's list of legal moves; promotions open a picker.
  */
-export function Board({ view, orientation, interactive, onMove, arrows = [] }: BoardProps) {
+export function Board({
+  view,
+  orientation,
+  interactive,
+  onMove,
+  arrows = [],
+  squareTints = {},
+  tilted = false,
+}: BoardProps) {
   // react-chessboard v5 has no 'start' shorthand: always pass a real FEN.
   const fen = view?.fen ?? STARTPOS_FEN;
   const legal = view?.legalMoves ?? [];
@@ -63,51 +115,78 @@ export function Board({ view, orientation, interactive, onMove, arrows = [] }: B
     return true;
   };
 
-  const squareStyles: Record<string, CSSProperties> = {};
+  const squareStyles: Record<string, CSSProperties> = { ...squareTints };
   if (view?.lastMove) {
-    squareStyles[view.lastMove.from] = LAST_MOVE;
-    squareStyles[view.lastMove.to] = LAST_MOVE;
+    squareStyles[view.lastMove.from] = { ...squareStyles[view.lastMove.from], ...LAST_MOVE };
+    squareStyles[view.lastMove.to] = { ...squareStyles[view.lastMove.to], ...LAST_MOVE };
   }
   if (view?.checkSquare) squareStyles[view.checkSquare] = CHECK;
   if (selected) {
     squareStyles[selected] = SELECTED;
-    for (const square of destinations(legal, selected)) squareStyles[square] = TARGET;
+    for (const square of destinations(legal, selected)) {
+      squareStyles[square] = { ...squareStyles[square], ...TARGET };
+    }
   }
 
   const ownPiece = (pieceType: string | undefined): boolean =>
     interactive && !!view && !!pieceType && pieceSide(pieceType) === view.sideToMove;
 
+  const board = (
+    <Chessboard
+      options={{
+        id: 'board',
+        position: fen,
+        boardOrientation: orientation,
+        allowDragging: interactive && !tilted,
+        arrows,
+        squareStyles,
+        pieces: tilted ? TILTED_PIECES : FLAT_PIECES,
+        animationDurationInMs: 150,
+        // Tilted pieces rise above the top rank: let them overflow the board.
+        boardStyle: tilted ? { overflow: 'visible' } : { borderRadius: 12 },
+        darkSquareStyle: { backgroundColor: DARK },
+        lightSquareStyle: { backgroundColor: LIGHT },
+        darkSquareNotationStyle: NOTATION,
+        lightSquareNotationStyle: NOTATION,
+        dropSquareStyle: { boxShadow: 'inset 0 0 0 2px rgba(200, 245, 96, 0.6)' },
+        canDragPiece: ({ piece }) => ownPiece(piece.pieceType),
+        onPieceDrop: ({ sourceSquare, targetSquare }) =>
+          targetSquare ? play(sourceSquare, targetSquare) : false,
+        onSquareClick: ({ square, piece }) => {
+          if (selected && destinations(legal, selected).includes(square)) {
+            play(selected, square);
+          } else if (ownPiece(piece?.pieceType)) {
+            setSelection({ fen, square });
+          } else {
+            setSelection(null);
+          }
+        },
+      }}
+    />
+  );
+
   return (
-    <div className="relative aspect-square w-full">
-      <Chessboard
-        options={{
-          id: 'board',
-          position: fen,
-          boardOrientation: orientation,
-          allowDragging: interactive,
-          arrows,
-          squareStyles,
-          animationDurationInMs: 150,
-          darkSquareStyle: { backgroundColor: '#769656' },
-          lightSquareStyle: { backgroundColor: '#eeeed2' },
-          canDragPiece: ({ piece }) => ownPiece(piece.pieceType),
-          onPieceDrop: ({ sourceSquare, targetSquare }) =>
-            targetSquare ? play(sourceSquare, targetSquare) : false,
-          onSquareClick: ({ square, piece }) => {
-            if (selected && destinations(legal, selected).includes(square)) {
-              play(selected, square);
-            } else if (ownPiece(piece?.pieceType)) {
-              setSelection({ fen, square });
-            } else {
-              setSelection(null);
-            }
-          },
-        }}
-      />
+    <div className="relative w-full">
+      {tilted ? (
+        // No overflow clipping on the way up: it would flatten the 3D. The
+        // negative margin takes back the height the tilt frees above the board.
+        <div className="-mt-[12%] px-[4%] pb-[2%] [perspective:1700px]">
+          <div
+            className="rounded-[14px] border border-ink-600/60 bg-ink-800 p-2 shadow-[0_40px_80px_-20px_rgba(0,0,0,0.9),0_10px_0_0_#0d0f14]"
+            style={{ transform: `rotateX(${TILT}deg)`, transformOrigin: '50% 60%' }}
+          >
+            {board}
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-line bg-ink-900 p-2">{board}</div>
+      )}
       {choices && view && (
-        <div className="absolute inset-0 flex items-center justify-center bg-slate-950/60">
-          <div className="rounded-xl bg-slate-900 p-4 shadow-xl">
-            <p className="mb-3 text-center text-sm text-slate-300">Promotion</p>
+        <div className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-ink-950/70 backdrop-blur-sm">
+          <div className="rounded-card border border-line bg-ink-900 p-5 shadow-xl">
+            <p className="mb-3 text-center text-[11px] tracking-[0.14em] text-dim uppercase">
+              Promotion
+            </p>
             <div className="flex gap-2">
               {choices.map((move) => {
                 const piece = move.promotion ?? 'q';
@@ -116,7 +195,7 @@ export function Board({ view, orientation, interactive, onMove, arrows = [] }: B
                     key={move.uci}
                     type="button"
                     title={PROMOTION_NAMES[piece]}
-                    className="flex size-14 items-center justify-center rounded-lg bg-slate-800 text-4xl hover:bg-slate-700"
+                    className="flex size-14 items-center justify-center rounded-xl border border-line bg-ink-800 text-4xl hover:border-signal/50"
                     onClick={() => {
                       setPromotion(null);
                       onMove(move.uci);
@@ -129,7 +208,7 @@ export function Board({ view, orientation, interactive, onMove, arrows = [] }: B
             </div>
             <button
               type="button"
-              className="mt-3 w-full text-xs text-slate-400 hover:text-white"
+              className="mt-3 w-full text-xs text-dim hover:text-bone"
               onClick={() => {
                 setPromotion(null);
               }}

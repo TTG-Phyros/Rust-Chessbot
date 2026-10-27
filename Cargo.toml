@@ -4,9 +4,14 @@ members = [
     "crates/chess-core",
     "crates/chess-eval",
     "crates/chess-search",
+    "crates/chess-stockfish",
     "crates/chess-uci",
     "crates/chess-train",
     "crates/chess-server",
+    "crates/chess-chesscom",
+    "crates/chess-openings",
+    "crates/chess-review",
+    "crates/chess-reviewer",
 ]
 
 [workspace.package]
@@ -21,6 +26,11 @@ publish = false
 chess-core = { path = "crates/chess-core" }
 chess-eval = { path = "crates/chess-eval", default-features = false }
 chess-search = { path = "crates/chess-search" }
+chess-stockfish = { path = "crates/chess-stockfish" }
+chess-chesscom = { path = "crates/chess-chesscom" }
+chess-openings = { path = "crates/chess-openings" }
+chess-review = { path = "crates/chess-review" }
+chess-reviewer = { path = "crates/chess-reviewer" }
 
 # Errors
 thiserror = "2.0.21"
@@ -47,6 +57,10 @@ utoipa = { version = "6.0.0", features = ["axum_extras"] }
 ts-rs = "12.0.1"
 tokio-tungstenite = "0.30.0"
 reqwest = { version = "0.13.5", default-features = false, features = ["json"] }
+
+# Chess.com review: game and analysis cache, `.env` loading for the CLI
+rusqlite = { version = "0.41.0", features = ["bundled"] }
+dotenvy = "0.15.7"
 
 # Training
 burn = { version = "0.22.1", default-features = false, features = ["std", "autodiff", "optim", "flex", "rayon"] }

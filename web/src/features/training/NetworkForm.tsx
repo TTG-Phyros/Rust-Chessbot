@@ -24,7 +24,7 @@ function toDrafts(params: NetworkParams): Drafts {
 }
 
 const INPUT =
-  'w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 font-mono text-sm disabled:opacity-50';
+  'w-full rounded-xl border border-line bg-ink-950 px-2 py-1.5 font-mono text-sm disabled:opacity-50';
 
 /** Creates a network: a name and its hyperparameters, from the defaults or another network. */
 export function NetworkForm({
@@ -82,7 +82,7 @@ export function NetworkForm({
       </div>
     );
   }
-  if (!drafts) return <p className="text-sm text-slate-400">Chargement des paramètres…</p>;
+  if (!drafts) return <p className="text-sm text-dim">Chargement des paramètres…</p>;
 
   const values = Object.fromEntries(
     PARAM_FIELDS.map((field) => [field.key, Number(drafts[field.key])]),
@@ -139,7 +139,7 @@ export function NetworkForm({
     >
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block text-sm">
-          <span className="text-slate-300">Nom du réseau</span>
+          <span className="text-mute">Nom du réseau</span>
           <input
             value={name}
             onChange={(event) => {
@@ -150,13 +150,13 @@ export function NetworkForm({
             className={`mt-1 ${INPUT}`}
           />
           {(nameProblem ?? (taken ? 'ce nom est déjà pris' : null)) && (
-            <span className="mt-1 block text-xs text-rose-400">
+            <span className="mt-1 block text-xs text-alert">
               {nameProblem ?? 'ce nom est déjà pris'}
             </span>
           )}
         </label>
         <label className="block text-sm">
-          <span className="text-slate-300">Partir des paramètres de</span>
+          <span className="text-mute">Partir des paramètres de</span>
           <select
             value={base}
             onChange={(event) => {
@@ -177,7 +177,7 @@ export function NetworkForm({
       </div>
       <div className="flex flex-wrap items-center gap-3">
         <Button onClick={randomize}>Hyperparamètres aléatoires</Button>
-        <span className="text-xs text-slate-500">
+        <span className="text-xs text-dim">
           Tire au hasard les nœuds de self-play, le taux d’apprentissage et sa décroissance, le
           poids du résultat, la taille de batch et la réutilisation, dans des plages raisonnables ;
           la durée et la mesure ne changent pas.
@@ -186,7 +186,7 @@ export function NetworkForm({
 
       {PARAM_GROUPS.map((group) => (
         <fieldset key={group.title}>
-          <legend className="mb-2 text-xs font-semibold tracking-wider text-slate-400 uppercase">
+          <legend className="mb-2 text-xs font-semibold tracking-wider text-dim uppercase">
             {group.title}
           </legend>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -195,7 +195,7 @@ export function NetworkForm({
               const fallback = defaults?.[field.key];
               return (
                 <label key={field.key} className="block text-sm" title={field.help}>
-                  <span className="text-slate-300">{field.label}</span>
+                  <span className="text-mute">{field.label}</span>
                   <input
                     type="number"
                     inputMode="decimal"
@@ -207,11 +207,9 @@ export function NetworkForm({
                       setDrafts({ ...drafts, [field.key]: event.target.value });
                     }}
                     aria-invalid={fieldError !== null}
-                    className={`mt-1 ${INPUT} ${fieldError ? 'border-rose-500' : ''}`}
+                    className={`mt-1 ${INPUT} ${fieldError ? 'border-alert' : ''}`}
                   />
-                  <span
-                    className={`mt-1 block text-xs ${fieldError ? 'text-rose-400' : 'text-slate-500'}`}
-                  >
+                  <span className={`mt-1 block text-xs ${fieldError ? 'text-alert' : 'text-dim'}`}>
                     {fieldError ??
                       (fallback !== undefined && values[field.key] !== fallback
                         ? `défaut : ${formatParam(field.key, fallback)}`
@@ -225,11 +223,11 @@ export function NetworkForm({
       ))}
 
       <fieldset>
-        <legend className="mb-2 text-xs font-semibold tracking-wider text-slate-400 uppercase">
+        <legend className="mb-2 text-xs font-semibold tracking-wider text-dim uppercase">
           Réutiliser les parties de
         </legend>
         {sources.length === 0 ? (
-          <p className="text-sm text-slate-500">Aucun autre réseau.</p>
+          <p className="text-sm text-dim">Aucun autre réseau.</p>
         ) : (
           <div className="flex flex-wrap gap-x-5 gap-y-2">
             {sources.map((network) => (
@@ -244,14 +242,14 @@ export function NetworkForm({
                         : datasetsFrom.filter((source) => source !== network.name),
                     );
                   }}
-                  className="size-4 accent-emerald-500"
+                  className="size-4 accent-signal"
                 />
                 {network.name}
               </label>
             ))}
           </div>
         )}
-        <p className="mt-2 text-xs text-slate-500">
+        <p className="mt-2 text-xs text-dim">
           Le réseau s’entraîne aussi sur les parties déjà jouées par ces réseaux : il démarre sans
           attendre son propre self-play.
         </p>

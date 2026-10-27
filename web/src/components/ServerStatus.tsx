@@ -1,18 +1,19 @@
-import { useHealth, useServerSocket } from '../api/hooks';
+import type { ControllerState } from '../api/generated/ControllerState';
+import { useController, useHealth, useServerSocket } from '../api/hooks';
+import { StatusPill, type Tone } from './ui';
 
-function Dot({ ok }: { ok: boolean }) {
-  return (
-    <span
-      aria-hidden
-      className={`inline-block size-2 rounded-full ${ok ? 'bg-emerald-400' : 'bg-rose-500'}`}
-    />
-  );
-}
+const TRAINING: Record<ControllerState, { tone: Tone; label: string }> = {
+  unavailable: { tone: 'alert', label: 'Entraînement hors ligne' },
+  idle: { tone: 'idle', label: 'Entraînement en attente' },
+  running: { tone: 'think', label: 'Entraînement en cours' },
+  stopping: { tone: 'warn', label: 'Entraînement : arrêt…' },
+};
 
-/** Shows whether the REST API and the WebSocket are reachable. */
+/** Shows whether the REST API, the WebSocket and the training service are reachable. */
 export function ServerStatus() {
   const health = useHealth();
   const { status: socket } = useServerSocket();
+  const controller = useController();
 
   const apiLabel =
     health.kind === 'ok'
@@ -20,20 +21,27 @@ export function ServerStatus() {
       : health.kind === 'loading'
         ? 'API…'
         : 'API hors ligne';
+  const training = controller.view ? TRAINING[controller.view.state] : null;
 
   return (
-    <div className="flex items-center gap-4 text-xs text-slate-400">
-      <span
-        className="flex items-center gap-1.5"
-        title={health.kind === 'error' ? health.message : ''}
+    <div className="flex flex-wrap items-center gap-2">
+      <StatusPill
+        tone={health.kind === 'ok' ? 'signal' : health.kind === 'loading' ? 'idle' : 'alert'}
+        title={health.kind === 'error' ? health.message : undefined}
       >
-        <Dot ok={health.kind === 'ok'} />
         {apiLabel}
-      </span>
-      <span className="flex items-center gap-1.5">
-        <Dot ok={socket === 'open'} />
+      </StatusPill>
+      <StatusPill tone={socket === 'open' ? 'signal' : socket === 'connecting' ? 'warn' : 'alert'}>
         {socket === 'open' ? 'WebSocket' : `WebSocket (${socket})`}
-      </span>
+      </StatusPill>
+      {training && (
+        <StatusPill
+          tone={training.tone}
+          title={controller.view?.error ?? controller.view?.run ?? undefined}
+        >
+          {training.label}
+        </StatusPill>
+      )}
     </div>
   );
 }

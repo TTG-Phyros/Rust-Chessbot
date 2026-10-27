@@ -5,7 +5,6 @@ import {
   CartesianGrid,
   ComposedChart,
   Line,
-  LineChart,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -17,10 +16,12 @@ import type { EloPoint } from '../../api/generated/EloPoint';
 import type { LossPoint } from '../../api/generated/LossPoint';
 import { eloBand, formatCount, formatElo } from './format';
 
-/** Color of the data series (lines and Elo band), readable on the dark panels. */
-const SERIES = '#3987e5';
-const GRID = '#334155';
-const AXIS = '#94a3b8';
+/** Elo is our bots' strength (signal); the loss is the engine learning (think). */
+const ELO = '#c8f560';
+const LOSS = '#9d8cff';
+const GRID = '#1c2029';
+const AXIS = '#8a909c';
+const TICK = { fill: AXIS, fontSize: 11, fontFamily: 'JetBrains Mono, monospace' };
 
 function ChartTooltip({
   active,
@@ -34,7 +35,7 @@ function ChartTooltip({
   const point = payload?.[0]?.payload;
   if (!active || !point) return null;
   return (
-    <div className="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 shadow-lg">
+    <div className="rounded-xl border border-line bg-ink-800 px-3 py-2 font-mono text-xs text-bone shadow-lg">
       {render(point as never)}
     </div>
   );
@@ -43,10 +44,16 @@ function ChartTooltip({
 export function LossChart({ points }: { points: readonly LossPoint[] }) {
   return (
     <ResponsiveContainer width="100%" height={240}>
-      <LineChart data={[...points]} margin={{ top: 8, right: 16, bottom: 4, left: 0 }}>
-        <CartesianGrid stroke={GRID} strokeDasharray="2 4" vertical={false} />
-        <XAxis dataKey="superbatch" stroke={AXIS} tickLine={false} fontSize={12} />
-        <YAxis stroke={AXIS} tickLine={false} fontSize={12} width={56} domain={['auto', 'auto']} />
+      <ComposedChart data={[...points]} margin={{ top: 8, right: 8, bottom: 4, left: 0 }}>
+        <defs>
+          <linearGradient id="loss-fill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={LOSS} stopOpacity={0.25} />
+            <stop offset="100%" stopColor={LOSS} stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid stroke={GRID} vertical={false} />
+        <XAxis dataKey="superbatch" stroke={GRID} tick={TICK} tickLine={false} />
+        <YAxis stroke={GRID} tick={TICK} tickLine={false} width={64} domain={['auto', 'auto']} />
         <Tooltip
           cursor={{ stroke: AXIS, strokeDasharray: '3 3' }}
           content={(props) => (
@@ -63,16 +70,17 @@ export function LossChart({ points }: { points: readonly LossPoint[] }) {
             />
           )}
         />
-        <Line
+        <Area
           type="monotone"
           dataKey="loss"
-          stroke={SERIES}
+          stroke={LOSS}
           strokeWidth={2}
-          dot={points.length < 40 ? { r: 3, fill: SERIES } : false}
-          activeDot={{ r: 5 }}
+          fill="url(#loss-fill)"
+          dot={false}
+          activeDot={{ r: 5, fill: LOSS, stroke: '#0d0f14' }}
           isAnimationActive={false}
         />
-      </LineChart>
+      </ComposedChart>
     </ResponsiveContainer>
   );
 }
@@ -80,15 +88,15 @@ export function LossChart({ points }: { points: readonly LossPoint[] }) {
 export function EloChart({ points }: { points: readonly EloPoint[] }) {
   return (
     <ResponsiveContainer width="100%" height={240}>
-      <ComposedChart data={eloBand(points)} margin={{ top: 8, right: 16, bottom: 4, left: 0 }}>
-        <CartesianGrid stroke={GRID} strokeDasharray="2 4" vertical={false} />
-        <XAxis dataKey="superbatch" stroke={AXIS} tickLine={false} fontSize={12} />
-        <YAxis stroke={AXIS} tickLine={false} fontSize={12} width={56} domain={['auto', 'auto']} />
+      <ComposedChart data={eloBand(points)} margin={{ top: 8, right: 8, bottom: 4, left: 0 }}>
+        <CartesianGrid stroke={GRID} vertical={false} />
+        <XAxis dataKey="superbatch" stroke={GRID} tick={TICK} tickLine={false} />
+        <YAxis stroke={GRID} tick={TICK} tickLine={false} width={48} domain={['auto', 'auto']} />
         <ReferenceLine
           y={0}
           stroke={AXIS}
           strokeDasharray="4 4"
-          label={{ value: 'PeSTO', position: 'insideTopLeft', fill: AXIS, fontSize: 11 }}
+          label={{ value: 'PeSTO = 0', position: 'insideBottomLeft', ...TICK }}
         />
         <Tooltip
           cursor={{ stroke: AXIS, strokeDasharray: '3 3' }}
@@ -106,20 +114,21 @@ export function EloChart({ points }: { points: readonly EloPoint[] }) {
           )}
         />
         <Area
-          type="monotone"
+          type="linear"
           dataKey="band"
-          stroke="none"
-          fill={SERIES}
-          fillOpacity={0.15}
+          stroke={ELO}
+          strokeOpacity={0.2}
+          fill={ELO}
+          fillOpacity={0.1}
           isAnimationActive={false}
         />
         <Line
-          type="monotone"
+          type="linear"
           dataKey="elo"
-          stroke={SERIES}
+          stroke={ELO}
           strokeWidth={2}
-          dot={{ r: 4, fill: SERIES }}
-          activeDot={{ r: 6 }}
+          dot={points.length < 40 ? { r: 4, fill: '#0d0f14', stroke: ELO, strokeWidth: 2 } : false}
+          activeDot={{ r: 6, fill: ELO }}
           isAnimationActive={false}
         />
       </ComposedChart>
@@ -131,14 +140,14 @@ export function EloChart({ points }: { points: readonly EloPoint[] }) {
 export function DataTable({ headers, rows }: { headers: string[]; rows: (string | number)[][] }) {
   if (rows.length === 0) return null;
   return (
-    <details className="mt-2 text-xs text-slate-400">
-      <summary className="cursor-pointer hover:text-slate-200">Voir les données</summary>
+    <details className="mt-2 text-xs text-dim">
+      <summary className="cursor-pointer hover:text-bone">Voir les données</summary>
       <div className="mt-2 max-h-48 overflow-y-auto">
         <table className="w-full font-mono">
           <thead>
             <tr>
               {headers.map((header) => (
-                <th key={header} className="py-1 text-left font-normal text-slate-500">
+                <th key={header} className="py-1 text-left font-normal text-dim">
                   {header}
                 </th>
               ))}
@@ -146,7 +155,7 @@ export function DataTable({ headers, rows }: { headers: string[]; rows: (string 
           </thead>
           <tbody>
             {rows.map((row) => (
-              <tr key={String(row[0])} className="text-slate-300">
+              <tr key={String(row[0])} className="text-mute">
                 {row.map((cell, i) => (
                   <td key={i} className="py-0.5">
                     {cell}

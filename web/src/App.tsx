@@ -13,8 +13,14 @@ const TrainingPage = lazy(() =>
 const ArenaPage = lazy(() =>
   import('./features/arena/ArenaPage').then((module) => ({ default: module.ArenaPage })),
 );
+const ReviewPage = lazy(() =>
+  import('./features/review/ReviewPage').then((module) => ({ default: module.ReviewPage })),
+);
+const GamePage = lazy(() =>
+  import('./features/review/GamePage').then((module) => ({ default: module.GamePage })),
+);
 
-const loading = <p className="text-sm text-slate-400">Chargement…</p>;
+const loading = <p className="text-sm text-dim">Chargement…</p>;
 
 export function App() {
   return (
@@ -36,6 +42,22 @@ export function App() {
           element={
             <Suspense fallback={loading}>
               <ArenaPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/review"
+          element={
+            <Suspense fallback={loading}>
+              <ReviewPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/review/games/:id"
+          element={
+            <Suspense fallback={loading}>
+              <GamePage />
             </Suspense>
           }
         />

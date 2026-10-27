@@ -12,6 +12,8 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use utoipa::ToSchema;
 
+pub mod review;
+
 /// Response of `GET /api/health`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
 #[ts(export)]
@@ -156,6 +158,34 @@ pub struct EngineLimits {
     /// Maximum number of nodes.
     #[ts(type = "number", optional = nullable)]
     pub nodes: Option<u64>,
+    /// Number of best lines to find (1 to 5; default 1).
+    pub multipv: Option<u32>,
+    /// White's remaining clock time, in milliseconds: the engine manages
+    /// its time like in a real game (with the black clock and increments).
+    #[ts(type = "number", optional = nullable)]
+    pub white_time_ms: Option<u64>,
+    /// Black's remaining clock time, in milliseconds.
+    #[ts(type = "number", optional = nullable)]
+    pub black_time_ms: Option<u64>,
+    /// White's increment per move, in milliseconds.
+    #[ts(type = "number", optional = nullable)]
+    pub white_increment_ms: Option<u64>,
+    /// Black's increment per move, in milliseconds.
+    #[ts(type = "number", optional = nullable)]
+    pub black_increment_ms: Option<u64>,
+}
+
+/// One of the best lines of a search, from White's point of view.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct PvLineView {
+    /// Evaluation of the line.
+    pub score: ScoreView,
+    /// The line, in UCI.
+    pub pv: Vec<String>,
+    /// The line, in SAN.
+    pub pv_san: Vec<String>,
 }
 
 /// Request of `POST /api/engine/move`.
@@ -168,6 +198,11 @@ pub struct EngineMoveRequest {
     /// Thinking limits.
     #[serde(default)]
     pub limits: EngineLimits,
+    /// Bot playing: a saved bot's name, `classic` for PeSTO; absent: the
+    /// network the engine is configured with.
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub bot: Option<String>,
 }
 
 /// The engine's choice.
@@ -189,6 +224,139 @@ pub struct EngineMoveResponse {
     pub time_ms: u64,
     /// Expected continuation, in SAN.
     pub pv: Vec<String>,
+    /// The best lines (as many as `limits.multipv`), best first.
+    pub lines: Vec<PvLineView>,
+}
+
+/// Request of `POST /api/engine/explain`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ExplainRequest {
+    /// The game whose position is explained.
+    pub game: GameRequest,
+    /// Evaluation to explain (same values as [`EngineMoveRequest::bot`]).
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub bot: Option<String>,
+}
+
+/// Win, draw and loss chances, in per mille, from White's point of view.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
+#[ts(export)]
+pub struct Wdl {
+    /// White wins.
+    pub win: u32,
+    /// Draw.
+    pub draw: u32,
+    /// Black wins.
+    pub loss: u32,
+}
+
+/// What one piece brings to the evaluation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
+#[ts(export)]
+pub struct PieceContribution {
+    /// Square of the piece (`e4`).
+    pub square: String,
+    /// The piece, as in FEN (`N` white knight, `q` black queen).
+    pub piece: String,
+    /// Evaluation minus the evaluation without the piece, in centipawns
+    /// from White's point of view (a black piece usually has a negative one).
+    pub cp: i32,
+}
+
+/// The static evaluation of a position, taken apart.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct EvalExplanation {
+    /// `nnue` or `classic`.
+    pub evaluator: String,
+    /// Raw output of the evaluation (no search), in centipawns for White.
+    pub static_cp: i32,
+    /// Win/draw/loss estimate of that output: the network learns the
+    /// expected score `sigmoid(cp / 400)`; draws are estimated around it.
+    pub wdl: Wdl,
+    /// Contribution of each piece (NNUE only; empty with PeSTO).
+    pub pieces: Vec<PieceContribution>,
+}
+
+/// Request of `POST /api/stockfish/compare`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
+pub struct StockfishCompareRequest {
+    /// Position to search.
+    pub game: GameRequest,
+    /// Levels to ask (1 to 10, at most 4).
+    pub levels: Vec<u8>,
+    /// Search limits shared with our engine (depth, time or nodes; clocks
+    /// are ignored); absent: each level searches at its own depth and time.
+    #[serde(default)]
+    pub budget: Option<EngineLimits>,
+}
+
+/// What one Stockfish level plays in the position.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
+pub struct StockfishResult {
+    /// Level, 1 to 10.
+    pub level: u8,
+    /// Its move; absent when the game is over.
+    pub best_move: Option<MoveView>,
+    /// Its evaluation, from White's point of view.
+    pub score: Option<ScoreView>,
+    /// Depth reached.
+    pub depth: u32,
+    /// Thinking time, in milliseconds.
+    #[ts(type = "number")]
+    pub time_ms: u64,
+}
+
+/// Response of `POST /api/stockfish/compare`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct StockfishCompareResponse {
+    /// Name and version of Stockfish.
+    pub version: String,
+    /// One result per level asked, in the order asked.
+    pub results: Vec<StockfishResult>,
+}
+
+/// A self-play game in progress on one worker of the training service.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
+pub struct LiveGame {
+    /// Worker thread, from 0.
+    pub worker: u32,
+    /// Number of the game in the run.
+    #[ts(type = "number")]
+    pub game: u64,
+    /// Current position.
+    pub fen: String,
+    /// Plies played.
+    pub ply: u32,
+    /// Last move, in UCI.
+    pub last_move: Option<String>,
+}
+
+/// Response of `GET /api/training/selfplay`: the board of every self-play worker.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
+pub struct SelfplayView {
+    /// When the training service last wrote them (Unix seconds); absent
+    /// when it never has.
+    #[ts(type = "number | null", optional = nullable)]
+    pub updated_at: Option<u64>,
+    /// Whether they are being updated right now.
+    pub live: bool,
+    /// The games, by worker.
+    pub games: Vec<LiveGame>,
 }
 
 /// A PGN tag pair.
@@ -270,6 +438,10 @@ pub enum ClientMessage {
         /// Optional limits.
         #[serde(default)]
         limits: EngineLimits,
+        /// Evaluation to analyse with (as in [`EngineMoveRequest::bot`]).
+        #[serde(default)]
+        #[ts(optional = nullable)]
+        bot: Option<String>,
     },
     /// Stops the analysis in progress (its final result is still sent).
     Stop,
@@ -303,6 +475,8 @@ pub struct AnalysisInfo {
     pub pv: Vec<String>,
     /// Principal variation, in SAN.
     pub pv_san: Vec<String>,
+    /// The best lines (as many as `limits.multipv`), best first.
+    pub lines: Vec<PvLineView>,
 }
 
 /// Message sent by the server over `/ws`.
@@ -356,6 +530,8 @@ pub struct EngineInfo {
     /// Modification time of that file (Unix seconds).
     #[ts(type = "number | null", optional = nullable)]
     pub weights_modified: Option<u64>,
+    /// Stockfish available for comparisons (`id name`), if any.
+    pub stockfish: Option<String>,
 }
 
 /// State of the training control daemon.

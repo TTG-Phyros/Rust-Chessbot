@@ -2,9 +2,11 @@
 
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpStream};
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result, ensure};
+use chess_reviewer::{ReviewConfig, ReviewService};
 use chess_server::config::{LogFormat, ServerConfig};
 use tracing_subscriber::EnvFilter;
 
@@ -31,13 +33,28 @@ async fn serve(config: ServerConfig) -> Result<()> {
         .with_context(|| format!("cannot listen on {}", config.bind))?;
     tracing::info!(addr = %config.bind, "listening");
 
-    axum::serve(
-        listener,
-        chess_server::api::router(chess_server::AppState::new(&config)),
-    )
-    .with_graceful_shutdown(shutdown_signal())
-    .await
-    .context("server error")
+    let mut state = chess_server::AppState::new(&config);
+    match review_service() {
+        Ok(service) => state = state.with_review(Arc::new(service)),
+        Err(err) => tracing::warn!("Chess.com reviews disabled: {err:#}"),
+    }
+    axum::serve(listener, chess_server::api::router(state))
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+        .context("server error")
+}
+
+/// The Chess.com reviews, configured by `config/review.toml` and the
+/// `CHESS_REVIEW_*` variables (see `chess-reviewer`).
+fn review_service() -> Result<ReviewService> {
+    let config = ReviewConfig::load().context("invalid review configuration")?;
+    tracing::info!(
+        cache = %config.cache.display(),
+        engine = ?config.analysis.engine,
+        workers = config.workers(),
+        "Chess.com reviews"
+    );
+    ReviewService::new(config).context("cannot open the review cache")
 }
 
 /// Docker `HEALTHCHECK`: queries `/api/health` on localhost with std only, so

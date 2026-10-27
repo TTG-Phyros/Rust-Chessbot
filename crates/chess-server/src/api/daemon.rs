@@ -111,7 +111,7 @@ pub(super) async fn send(
 
 /// Network and bot names, checked before they go into a URL or a path:
 /// 1 to 32 letters, digits, `-` or `_`, starting with a letter or a digit.
-pub(super) fn check_name(name: &str) -> Result<(), ApiError> {
+pub(crate) fn check_name(name: &str) -> Result<(), ApiError> {
     let valid = (1..=32).contains(&name.len())
         && name
             .bytes()

@@ -344,20 +344,32 @@ fn run_selfplay(config: &Config) -> Result<()> {
     let stop = stop_on_signal()?;
     let metrics = open_metrics(config, "selfplay", "CPU".into())?;
     let stats = selfplay::SelfplayStats::default();
-    selfplay::run(
-        &config.selfplay,
-        &config.dataset_dir,
-        &config.run,
-        &stop,
-        &stats,
-        |path| {
-            metrics.event("dataset", serde_json::json!({ "file": path }));
-            metrics.update(|status| {
-                status.games = stats.games.load(Ordering::Relaxed);
-                status.positions = stats.positions.load(Ordering::Relaxed);
-            });
-        },
-    )?;
+    let done = StopFlag::new();
+    std::thread::scope(|scope| {
+        // The boards of the workers, for the UI, until self-play ends.
+        scope.spawn(|| {
+            while !done.is_stopped() {
+                metrics.write_boards(&stats.boards());
+                std::thread::sleep(std::time::Duration::from_secs(1));
+            }
+        });
+        let played = selfplay::run(
+            &config.selfplay,
+            &config.dataset_dir,
+            &config.run,
+            &stop,
+            &stats,
+            |path| {
+                metrics.event("dataset", serde_json::json!({ "file": path }));
+                metrics.update(|status| {
+                    status.games = stats.games.load(Ordering::Relaxed);
+                    status.positions = stats.positions.load(Ordering::Relaxed);
+                });
+            },
+        );
+        done.stop();
+        played
+    })?;
     metrics.update(|status| {
         status.phase = "finished".into();
         status.games = stats.games.load(Ordering::Relaxed);

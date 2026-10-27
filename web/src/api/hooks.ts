@@ -3,10 +3,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from './client';
 import type { AnalysisInfo } from './generated/AnalysisInfo';
 import type { ArenaView } from './generated/ArenaView';
+import type { BotInfo } from './generated/BotInfo';
+import type { ControllerView } from './generated/ControllerView';
+import type { EngineInfo } from './generated/EngineInfo';
 import type { EngineLimits } from './generated/EngineLimits';
 import type { GameRequest } from './generated/GameRequest';
 import type { HealthResponse } from './generated/HealthResponse';
 import type { PositionView } from './generated/PositionView';
+import type { SelfplayView } from './generated/SelfplayView';
 import type { ServerMessage } from './generated/ServerMessage';
 import type { TrainingView } from './generated/TrainingView';
 import { type ServerSocket, type SocketStatus, connectServerSocket } from './socket';
@@ -122,6 +126,10 @@ export type AnalysisState = {
   running: boolean;
   /** Latest completed depth of the current analysis. */
   info: AnalysisInfo | null;
+  /** Every completed depth of the current analysis, shallowest first. */
+  depths: AnalysisInfo[];
+  /** The game being analysed, which `info` and `depths` describe. */
+  game: GameRequest | null;
   error: string | null;
 };
 
@@ -130,13 +138,15 @@ export type AnalysisState = {
  * progress; messages of replaced analyses are ignored thanks to their id.
  */
 export function useAnalysis(): AnalysisState & {
-  analyze: (game: GameRequest, limits?: EngineLimits) => void;
+  analyze: (game: GameRequest, limits?: EngineLimits, bot?: string | null) => void;
   stop: () => void;
 } {
   const currentId = useRef(0);
   const [state, setState] = useState<Omit<AnalysisState, 'socket'>>({
     running: false,
     info: null,
+    depths: [],
+    game: null,
     error: null,
   });
 
@@ -144,7 +154,14 @@ export function useAnalysis(): AnalysisState & {
     switch (message.type) {
       case 'info':
         if (message.info.id === currentId.current) {
-          setState((previous) => ({ ...previous, info: message.info }));
+          setState((previous) => ({
+            ...previous,
+            info: message.info,
+            depths: [
+              ...previous.depths.filter((info) => info.depth < message.info.depth),
+              message.info,
+            ],
+          }));
         }
         break;
       case 'done':
@@ -163,11 +180,11 @@ export function useAnalysis(): AnalysisState & {
   const { status, socket } = useServerSocket(onMessage);
 
   const analyze = useCallback(
-    (game: GameRequest, limits: EngineLimits = {}) => {
+    (game: GameRequest, limits: EngineLimits = {}, bot: string | null = null) => {
       if (!socket) return;
       currentId.current += 1;
-      setState({ running: true, info: null, error: null });
-      socket.send({ type: 'analyze', id: currentId.current, game, limits });
+      setState({ running: true, info: null, depths: [], game, error: null });
+      socket.send({ type: 'analyze', id: currentId.current, game, limits, bot });
     },
     [socket],
   );
@@ -241,4 +258,36 @@ export function useTraining(network: string | null): Polled<TrainingView> {
 /** Polls `GET /api/arena`. */
 export function useArena(): Polled<ArenaView> {
   return usePolling('arena', (signal) => api.arena(signal), TRAINING_POLL_MS);
+}
+
+const CONTROLLER_POLL_MS = 10_000;
+
+/** Polls the state of the training service (for the header). */
+export function useController(): Polled<ControllerView> {
+  return usePolling(
+    'controller',
+    (signal) => api.training(null, signal).then((view) => view.controller),
+    CONTROLLER_POLL_MS,
+  );
+}
+
+const SELFPLAY_POLL_MS = 1_000;
+
+/** Polls the boards of the self-play workers (every second: they move fast). */
+export function useSelfplay(): Polled<SelfplayView> {
+  return usePolling('selfplay', (signal) => api.selfplay(signal), SELFPLAY_POLL_MS);
+}
+
+const BOTS_POLL_MS = 30_000;
+
+/** Polls the saved bots. */
+export function useBots(): Polled<BotInfo[]> {
+  return usePolling('bots', (signal) => api.bots(signal), BOTS_POLL_MS);
+}
+
+const ENGINE_POLL_MS = 30_000;
+
+/** Polls which evaluation the engine plays with (the server reloads the network). */
+export function useEngineInfo(): Polled<EngineInfo> {
+  return usePolling('engine', (signal) => api.engine(signal), ENGINE_POLL_MS);
 }

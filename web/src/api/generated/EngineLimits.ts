@@ -15,4 +15,25 @@ movetimeMs?: number,
 /**
  * Maximum number of nodes.
  */
-nodes?: number, };
+nodes?: number, 
+/**
+ * Number of best lines to find (1 to 5; default 1).
+ */
+multipv?: number | null, 
+/**
+ * White's remaining clock time, in milliseconds: the engine manages
+ * its time like in a real game (with the black clock and increments).
+ */
+whiteTimeMs?: number, 
+/**
+ * Black's remaining clock time, in milliseconds.
+ */
+blackTimeMs?: number, 
+/**
+ * White's increment per move, in milliseconds.
+ */
+whiteIncrementMs?: number, 
+/**
+ * Black's increment per move, in milliseconds.
+ */
+blackIncrementMs?: number, };

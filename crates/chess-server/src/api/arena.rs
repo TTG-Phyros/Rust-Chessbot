@@ -72,6 +72,17 @@ pub(super) async fn arena(State(state): State<AppState>) -> Json<ArenaView> {
     })
 }
 
+/// The saved bots, newest first.
+#[utoipa::path(
+    get,
+    path = "/api/bots",
+    tag = "arena",
+    responses((status = 200, description = "Saved bots", body = Vec<BotInfo>))
+)]
+pub(super) async fn list_bots(State(state): State<AppState>) -> Json<Vec<BotInfo>> {
+    Json(read_bots(&state.data_dir))
+}
+
 /// Saves a snapshot (or the latest export) of a network as a bot.
 #[utoipa::path(
     post,

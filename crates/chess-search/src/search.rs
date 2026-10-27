@@ -14,6 +14,15 @@ use crate::ordering::{History, Killers, MovePicker, is_noisy};
 use crate::score::{DRAW, INFINITY, MATE, MATE_BOUND, MAX_PLY, Score, from_tt, to_tt};
 use crate::tt::{Bound, DEFAULT_HASH_MB, TranspositionTable};
 
+/// One of the best lines of a multi-PV search.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PvLine {
+    /// Score for the side to move.
+    pub score: Score,
+    /// The line, starting with its root move.
+    pub pv: Vec<Move>,
+}
+
 /// Progress report, emitted after each completed iteration.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchInfo {
@@ -33,6 +42,9 @@ pub struct SearchInfo {
     pub hashfull: u32,
     /// Principal variation, starting with the best move.
     pub pv: Vec<Move>,
+    /// The best lines, best first (`SearchLimits::multipv` of them, or
+    /// fewer when there are fewer legal moves); the first is `score` and `pv`.
+    pub lines: Vec<PvLine>,
 }
 
 /// Outcome of a search.
@@ -50,6 +62,8 @@ pub struct SearchResult {
     pub nodes: u64,
     /// Principal variation of the last completed iteration.
     pub pv: Vec<Move>,
+    /// The best lines of the last completed iteration, best first.
+    pub lines: Vec<PvLine>,
 }
 
 /// A searcher bound to an injected evaluator. Keeps its transposition table
@@ -132,6 +146,7 @@ impl<E: Evaluator> Searcher<E> {
             hard_deadline: budget.hard.map(|hard| start + hard),
             node_limit: limits.nodes,
             stopped: false,
+            excluded_root: Vec::new(),
         };
 
         let mut result = SearchResult {
@@ -141,32 +156,58 @@ impl<E: Evaluator> Searcher<E> {
             depth: 0,
             nodes: 0,
             pv: Vec::new(),
+            lines: Vec::new(),
         };
         if root_moves.is_empty() {
             return result;
         }
+        let multipv = limits.multipv.clamp(1, root_moves.len());
 
         let max_depth = limits
             .depth
             .unwrap_or(MAX_PLY as u32 - 1)
             .clamp(1, MAX_PLY as u32 - 1);
-        let mut previous = 0;
+        // Score of each line at the previous depth, for the aspiration windows.
+        let mut previous = vec![0; multipv];
         for depth in 1..=max_depth {
-            let score = ctx.aspiration(depth as i32, previous);
-            // A partial iteration is only trusted for the very first depth, and
-            // only if it got as far as a best move.
-            if ctx.stopped && (depth > 1 || ctx.pv_len[0] == 0) {
+            // Multi-PV: search the root again for each line, without the
+            // root moves of the lines already found at this depth.
+            ctx.excluded_root.clear();
+            let mut lines: Vec<(i32, Vec<Move>)> = Vec::with_capacity(multipv);
+            for k in 0..multipv {
+                let score = ctx.aspiration(depth as i32, previous.get(k).copied().unwrap_or(0));
+                // A partial iteration is only trusted for the very first
+                // depth and line, and only if it got as far as a best move.
+                let usable = !ctx.stopped || (depth == 1 && k == 0 && ctx.pv_len[0] > 0);
+                let pv = ctx.pv[0][..ctx.pv_len[0]].to_vec();
+                let Some(&first) = pv.first().filter(|_| usable) else {
+                    break;
+                };
+                ctx.excluded_root.push(first);
+                lines.push((score, pv));
+                if ctx.stopped {
+                    break;
+                }
+            }
+            if lines.is_empty() || (ctx.stopped && depth > 1) {
                 break;
             }
-            previous = score;
-            let pv = ctx.pv[0][..ctx.pv_len[0]].to_vec();
-            if let Some(&best) = pv.first() {
-                result.best_move = Some(best);
-                result.ponder = pv.get(1).copied();
-            }
+            // Later lines may score better than earlier ones (another window).
+            lines.sort_by_key(|(score, _)| std::cmp::Reverse(*score));
+            previous = lines.iter().map(|(score, _)| *score).collect();
+            let (score, pv) = lines[0].clone();
+            result.best_move = pv.first().copied();
+            result.ponder = pv.get(1).copied();
             result.score = Score::from_internal(score);
             result.depth = depth;
             result.pv.clone_from(&pv);
+            result.lines = lines
+                .into_iter()
+                .map(|(score, pv)| PvLine {
+                    score: Score::from_internal(score),
+                    pv,
+                })
+                .collect();
 
             let time = start.elapsed();
             on_info(&SearchInfo {
@@ -178,6 +219,7 @@ impl<E: Evaluator> Searcher<E> {
                 nps: (ctx.nodes as f64 / time.as_secs_f64().max(1e-6)) as u64,
                 hashfull: ctx.tt.hashfull(),
                 pv,
+                lines: result.lines.clone(),
             });
 
             let out_of_time = budget.soft.is_some_and(|soft| time >= soft);
@@ -223,6 +265,8 @@ struct Context<'a, E: Evaluator> {
     hard_deadline: Option<Instant>,
     node_limit: Option<u64>,
     stopped: bool,
+    /// Root moves left out of this search (lines already found, multi-PV).
+    excluded_root: Vec<Move>,
 }
 
 impl<E: Evaluator> Context<'_, E> {
@@ -415,7 +459,12 @@ impl<E: Evaluator> Context<'_, E> {
         let mut best_score = -INFINITY;
         let mut best_move = Move::NULL;
 
-        for (index, mv) in picker.enumerate() {
+        // Moves actually searched (excluded root moves do not count).
+        let mut index = 0;
+        for mv in picker {
+            if root && self.excluded_root.contains(&mv) {
+                continue;
+            }
             let quiet = !is_noisy(mv);
             self.make(mv);
             let gives_check = self.pos.in_check();
@@ -470,6 +519,7 @@ impl<E: Evaluator> Context<'_, E> {
                 quiets_tried[quiet_count] = mv;
                 quiet_count += 1;
             }
+            index += 1;
         }
 
         let bound = if best_score >= beta {

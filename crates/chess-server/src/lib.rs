@@ -31,7 +31,9 @@ impl AppState {
                 config.max_searches,
                 config.engine_hash_mb,
                 Some(config.eval_file.clone()),
-            ),
+            )
+            .with_bots(config.data_dir.join("bots"))
+            .with_stockfish(config.stockfish.clone()),
             data_dir: config.data_dir.clone(),
             trainer_url: config
                 .trainer_url

@@ -270,7 +270,35 @@ impl NnueWeights {
     #[must_use]
     pub fn evaluate(&self, pos: &Position) -> Score {
         let us = pos.side_to_move();
+        self.output_from_scratch(&[self.accumulate(pos, us), self.accumulate(pos, !us)])
+    }
+
+    /// What each piece of `pos` brings to its evaluation, in centipawns for
+    /// the side to move: the evaluation minus the evaluation of the same
+    /// board without that piece (kings included, as the network sees them).
+    #[must_use]
+    pub fn piece_contributions(&self, pos: &Position) -> Vec<(Square, Piece, Score)> {
+        let us = pos.side_to_move();
         let halves = [self.accumulate(pos, us), self.accumulate(pos, !us)];
+        let full = self.output_from_scratch(&halves);
+        pos.occupied()
+            .filter_map(|square| {
+                let piece = pos.piece_at(square)?;
+                let mut without = halves;
+                for (half, perspective) in without.iter_mut().zip([us, !us]) {
+                    let feature = feature_index(perspective, piece, square);
+                    let row = &self.ft_weights[feature * HIDDEN..(feature + 1) * HIDDEN];
+                    for (a, &w) in half.iter_mut().zip(row) {
+                        *a -= i32::from(w);
+                    }
+                }
+                Some((square, piece, full - self.output_from_scratch(&without)))
+            })
+            .collect()
+    }
+
+    /// Output layer on the feature transformer outputs (side to move first).
+    fn output_from_scratch(&self, halves: &[[i32; HIDDEN]; 2]) -> Score {
         let mut sum = i64::from(self.out_bias);
         for (half, weights) in halves.iter().zip(self.out_weights.as_chunks::<HIDDEN>().0) {
             for (&a, &w) in half.iter().zip(weights) {
@@ -516,6 +544,35 @@ mod tests {
         b.sort_unstable();
         assert_eq!(a, b);
         assert_eq!(a.len(), 32);
+    }
+
+    #[test]
+    fn piece_contribution_is_the_evaluation_without_the_piece() {
+        let weights = pseudo_random_weights();
+        let pos = Position::from_fen(
+            "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
+        )
+        .unwrap();
+        // The knight on e5, removed from the FEN.
+        let without = Position::from_fen(
+            "r3k2r/p1ppqpb1/bn2pnp1/3P4/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
+        )
+        .unwrap();
+        let contributions = weights.piece_contributions(&pos);
+        assert_eq!(contributions.len(), 32);
+        let (_, piece, cp) = contributions
+            .iter()
+            .find(|(square, _, _)| *square == Square::E5)
+            .copied()
+            .unwrap();
+        assert_eq!(piece, Piece::new(Color::White, PieceKind::Knight));
+        assert_eq!(cp, weights.evaluate(&pos) - weights.evaluate(&without));
+        assert!(
+            NnueWeights::zeros()
+                .piece_contributions(&pos)
+                .iter()
+                .all(|(_, _, cp)| *cp == 0)
+        );
     }
 
     /// Small deterministic weights for tests.

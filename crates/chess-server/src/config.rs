@@ -39,6 +39,9 @@ pub struct ServerConfig {
     /// Network used by the engine (reloaded when it changes); classical
     /// evaluation while the file does not exist.
     pub eval_file: PathBuf,
+    /// Stockfish binary, for comparisons with the engine on the Play page
+    /// (none if it cannot be run).
+    pub stockfish: PathBuf,
     /// Base URL of the training control daemon (`chess-train serve`), e.g.
     /// `http://trainer:4000`; training cannot be started from the UI without it.
     pub trainer_url: Option<String>,
@@ -53,6 +56,7 @@ impl Default for ServerConfig {
             max_searches: std::thread::available_parallelism().map_or(2, std::num::NonZero::get),
             engine_hash_mb: 16,
             eval_file: PathBuf::from("data/weights/main.nnue"),
+            stockfish: PathBuf::from("stockfish"),
             trainer_url: None,
         }
     }

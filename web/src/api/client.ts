@@ -7,9 +7,12 @@
 import type { ArenaView } from './generated/ArenaView';
 import type { BotInfo } from './generated/BotInfo';
 import type { CreateNetworkRequest } from './generated/CreateNetworkRequest';
+import type { EngineInfo } from './generated/EngineInfo';
 import type { EngineMoveRequest } from './generated/EngineMoveRequest';
 import type { EngineMoveResponse } from './generated/EngineMoveResponse';
 import type { ErrorResponse } from './generated/ErrorResponse';
+import type { EvalExplanation } from './generated/EvalExplanation';
+import type { ExplainRequest } from './generated/ExplainRequest';
 import type { GameRequest } from './generated/GameRequest';
 import type { HealthResponse } from './generated/HealthResponse';
 import type { NetworkParams } from './generated/NetworkParams';
@@ -18,6 +21,9 @@ import type { PgnExportResponse } from './generated/PgnExportResponse';
 import type { PgnImportResponse } from './generated/PgnImportResponse';
 import type { PositionView } from './generated/PositionView';
 import type { SaveBotRequest } from './generated/SaveBotRequest';
+import type { SelfplayView } from './generated/SelfplayView';
+import type { StockfishCompareRequest } from './generated/StockfishCompareRequest';
+import type { StockfishCompareResponse } from './generated/StockfishCompareResponse';
 import type { StartTrainingRequest } from './generated/StartTrainingRequest';
 import type { TournamentRequest } from './generated/TournamentRequest';
 import type { TournamentStarted } from './generated/TournamentStarted';
@@ -67,9 +73,20 @@ export const api = {
   position: (game: GameRequest, signal?: AbortSignal) =>
     post<PositionView>('/position', game, signal),
 
+  /** Which evaluation the engine plays with (NNUE network or PeSTO). */
+  engine: (signal?: AbortSignal) => request<EngineInfo>('/engine', { signal: signal ?? null }),
+
   /** The engine's move in a game. */
   engineMove: (body: EngineMoveRequest, signal?: AbortSignal) =>
     post<EngineMoveResponse>('/engine/move', body, signal),
+
+  /** The static evaluation of a position, taken apart (NNUE piece map, win/draw/loss). */
+  explain: (body: ExplainRequest, signal?: AbortSignal) =>
+    post<EvalExplanation>('/engine/explain', body, signal),
+
+  /** What Stockfish plays in a position, at up to 4 levels (503 without Stockfish). */
+  stockfishCompare: (body: StockfishCompareRequest, signal?: AbortSignal) =>
+    post<StockfishCompareResponse>('/stockfish/compare', body, signal),
 
   /** First game of a PGN text. */
   importPgn: (pgn: string) => post<PgnImportResponse>('/pgn/import', { pgn }),
@@ -86,6 +103,10 @@ export const api = {
       network ? `/training?network=${encodeURIComponent(network)}` : '/training',
       { signal: signal ?? null },
     ),
+
+  /** The game each self-play worker is playing. */
+  selfplay: (signal?: AbortSignal) =>
+    request<SelfplayView>('/training/selfplay', { signal: signal ?? null }),
 
   /** Starts the self-play + training pipeline of a network (409 if one is running). */
   startTraining: (body: StartTrainingRequest) => command('POST', '/training/start', body),
@@ -107,6 +128,9 @@ export const api = {
 
   /** Bots and tournaments. */
   arena: (signal?: AbortSignal) => request<ArenaView>('/arena', { signal: signal ?? null }),
+
+  /** The saved bots, newest first. */
+  bots: (signal?: AbortSignal) => request<BotInfo[]>('/bots', { signal: signal ?? null }),
 
   /** Saves a snapshot (or the latest export) of a network as a bot. */
   saveBot: (body: SaveBotRequest) => post<BotInfo>('/bots', body),

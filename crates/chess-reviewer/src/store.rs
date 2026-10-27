@@ -425,6 +425,21 @@ impl Store {
             .transpose()
     }
 
+    /// Every analysis of game `id`, the latest first.
+    ///
+    /// # Errors
+    ///
+    /// When SQLite fails or a row is corrupt.
+    pub fn analyses(&self, id: &str) -> Result<Vec<GameAnalysis>, Error> {
+        let connection = self.connection();
+        let mut statement = connection.prepare(
+            "SELECT data FROM analyses WHERE game_id = ?1 ORDER BY created_at DESC, rowid DESC",
+        )?;
+        let rows = statement.query_map([id], |row| row.get::<_, String>(0))?;
+        rows.map(|data| serde_json::from_str(&data?).map_err(|err| Error::Corrupt(err.to_string())))
+            .collect()
+    }
+
     /// Stores the analysis of game `id` (replacing one with the same key).
     ///
     /// # Errors
@@ -670,6 +685,14 @@ mod tests {
             store.latest_analysis("g1").unwrap().map(|a| a.engine),
             Some("chess-bot classic".into())
         );
+        let engines: Vec<String> = store
+            .analyses("g1")
+            .unwrap()
+            .into_iter()
+            .map(|a| a.engine)
+            .collect();
+        assert_eq!(engines, ["chess-bot classic", "Stockfish 19"]);
+        assert!(store.analyses("g2").unwrap().is_empty());
     }
 
     #[test]

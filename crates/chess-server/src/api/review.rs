@@ -557,7 +557,7 @@ pub(super) async fn game(
         .ok_or_else(|| ApiError::not_found(format!("no cached game {id}")))?;
     let played = PlayedGame::from_api(&api)
         .map_err(|err| ApiError::internal(format!("unreadable game {id}: {err}")))?;
-    let analysis = store.latest_analysis(&id).map_err(api_error)?;
+    let analysis = service.analysis_to_show(&id).map_err(api_error)?;
 
     let start = played.game.start().clone();
     let book = Book::lichess()

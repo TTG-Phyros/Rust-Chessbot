@@ -403,6 +403,25 @@ impl ReviewService {
         &self.store
     }
 
+    /// The analysis of game `id` to show: the one made with the configured
+    /// engine and default settings if there is one, the latest otherwise.
+    ///
+    /// # Errors
+    ///
+    /// When the cache fails.
+    pub fn analysis_to_show(&self, id: &str) -> Result<Option<GameAnalysis>, Error> {
+        let mut analyses = self.store.analyses(id)?;
+        let settings = self.config.search_settings();
+        let native = self.config.analysis.engine == EngineKind::Native;
+        let preferred = analyses.iter().position(|analysis| {
+            analysis.settings == settings && analysis.engine.starts_with("chess-bot") == native
+        });
+        Ok(match preferred {
+            Some(index) => Some(analyses.swap_remove(index)),
+            None => analyses.into_iter().next(),
+        })
+    }
+
     /// Whether Chess.com can be reached (a `User-Agent` is configured).
     #[must_use]
     pub const fn chesscom_enabled(&self) -> bool {

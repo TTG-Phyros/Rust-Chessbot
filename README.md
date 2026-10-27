@@ -187,6 +187,12 @@ Le niveau de log se règle avec `RUST_LOG` (ex. `RUST_LOG=debug`).
   - les boutons « Démarrer / reprendre », « Arrêter », « Repartir de zéro » et « Supprimer » ;
   - un **minuteur** : on démarre pour une durée donnée (15 min à 24 h, ou un nombre de minutes au choix, jusqu'à une semaine). À l'échéance, l'entraînement s'arrête comme avec « Arrêter » : il finit l'étape en cours, écrit un checkpoint et exporte le réseau. Pendant l'entraînement, un compte à rebours indique l'heure d'arrêt ; on peut la modifier ou retirer le minuteur.
 - **Arène** : les bots sauvegardés, plus PeSTO et **Stockfish niveaux 1 à 10**, et les **tournois** toutes-rondes entre eux : choix des participants, des parties par paire et de la réflexion de nos bots (nœuds, profondeur ou temps par coup). La **table croisée des participants** permet d'activer ou de désactiver chaque combat avant le lancement, par exemple pour ne faire jouer tes réseaux que contre Stockfish. Un clic sur un nom bascule tous ses combats, et des boutons permettent de tout activer ou de tout désactiver. Avant le lancement, le formulaire affiche la **durée estimée** du tournoi. Une fois lancé, un tournoi affiche sa progression en direct, un résumé (par exemple « main-sb305 bat Stockfish 6 et ne cède qu'au niveau 7 »), un podium, un classement Elo, une table croisée et l'historique des tournois.
+- **Chess.com** : les parties en cache d'un joueur (date, adversaire, résultat, ouverture, analysée ou non). Une partie s'ouvre dans une **revue de partie** (voir [Analyse Chess.com](#analyse-chesscom)) :
+  - un plateau navigable (boutons, flèches du clavier, clic sur un coup ou sur le graphe) avec les deux joueurs et leurs pendules `[%clk]` ;
+  - les cases du coup joué prennent la couleur de sa classe. Une flèche montre le meilleur coup de la position ; après une imprécision ou pire, une seconde flèche montre ce qu'il fallait jouer ;
+  - un graphe cliquable des chances de gain des Blancs, avec un repère sur chaque coup notable (brillant, très bon coup, imprécision, erreur, occasion manquée, gaffe) ;
+  - la liste des coups avec ces mêmes repères, le verdict du coup courant (classe, chances avant et après, précision, perte), les meilleures lignes de la position, et pour chaque joueur la précision, l'ACPL et le nombre de coups par classe ;
+  - le nom de l'ouverture.
 
 Les boutons de ces deux pages passent par le démon de contrôle : il faut le profil `train` ou `train-cpu`. Sans lui, réseaux, bots et résultats restent consultables.
 

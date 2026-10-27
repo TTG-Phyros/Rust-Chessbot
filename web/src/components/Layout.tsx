@@ -7,6 +7,7 @@ const LINKS = [
   { to: '/analysis', label: 'Analyse' },
   { to: '/training', label: 'Entraînement' },
   { to: '/arena', label: 'Arène' },
+  { to: '/review', label: 'Chess.com' },
 ] as const;
 
 /** Three bone squares and one signal square. */

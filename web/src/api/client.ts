@@ -20,6 +20,8 @@ import type { PgnExportRequest } from './generated/PgnExportRequest';
 import type { PgnExportResponse } from './generated/PgnExportResponse';
 import type { PgnImportResponse } from './generated/PgnImportResponse';
 import type { PositionView } from './generated/PositionView';
+import type { ReviewGameSummary } from './generated/ReviewGameSummary';
+import type { ReviewGameView } from './generated/ReviewGameView';
 import type { SaveBotRequest } from './generated/SaveBotRequest';
 import type { SelfplayView } from './generated/SelfplayView';
 import type { StockfishCompareRequest } from './generated/StockfishCompareRequest';
@@ -142,6 +144,19 @@ export const api = {
 
   /** Stops the tournament in progress. */
   stopTournament: () => command('POST', '/tournaments/stop', {}),
+
+  /** Cached Chess.com games of a player, most recent first (nothing is downloaded). */
+  reviewGames: (username: string, maxGames: number, signal?: AbortSignal) =>
+    request<ReviewGameSummary[]>(
+      `/review/players/${encodeURIComponent(username)}/games?maxGames=${maxGames}`,
+      { signal: signal ?? null },
+    ),
+
+  /** A cached Chess.com game with its latest analysis, moves classified (404 if unknown). */
+  reviewGame: (id: string, signal?: AbortSignal) =>
+    request<ReviewGameView>(`/review/games/${encodeURIComponent(id)}`, {
+      signal: signal ?? null,
+    }),
 };
 
 /** A command answered with an empty body (201, 202 or 204). */

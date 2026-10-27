@@ -10,6 +10,8 @@ import type { EngineLimits } from './generated/EngineLimits';
 import type { GameRequest } from './generated/GameRequest';
 import type { HealthResponse } from './generated/HealthResponse';
 import type { PositionView } from './generated/PositionView';
+import type { ReviewGameSummary } from './generated/ReviewGameSummary';
+import type { ReviewGameView } from './generated/ReviewGameView';
 import type { SelfplayView } from './generated/SelfplayView';
 import type { ServerMessage } from './generated/ServerMessage';
 import type { TrainingView } from './generated/TrainingView';
@@ -290,4 +292,68 @@ const ENGINE_POLL_MS = 30_000;
 /** Polls which evaluation the engine plays with (the server reloads the network). */
 export function useEngineInfo(): Polled<EngineInfo> {
   return usePolling('engine', (signal) => api.engine(signal), ENGINE_POLL_MS);
+}
+
+export type Fetched<T> = {
+  /** The answer for the current key; `null` while it loads or after an error. */
+  view: T | null;
+  error: string | null;
+  loading: boolean;
+};
+
+/** Fetches once per `key` (`null`: nothing to fetch). */
+function useFetched<T>(
+  key: string | null,
+  fetcher: (key: string, signal: AbortSignal) => Promise<T>,
+): Fetched<T> {
+  const [result, setResult] = useState<{ key: string; view: T | null; error: string | null }>({
+    key: '',
+    view: null,
+    error: null,
+  });
+  const fetcherRef = useRef(fetcher);
+  useEffect(() => {
+    fetcherRef.current = fetcher;
+  }, [fetcher]);
+
+  useEffect(() => {
+    if (key === null) return;
+    const controller = new AbortController();
+    fetcherRef
+      .current(key, controller.signal)
+      .then((view) => {
+        setResult({ key, view, error: null });
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        setResult({ key, view: null, error: errorMessage(error) });
+      });
+    return () => {
+      controller.abort();
+    };
+  }, [key]);
+
+  const current = key !== null && result.key === key;
+  return {
+    view: current ? result.view : null,
+    error: current ? result.error : null,
+    loading: key !== null && !current,
+  };
+}
+
+/** A cached Chess.com game, its moves classified. */
+export function useReviewGame(id: string | null): Fetched<ReviewGameView> {
+  return useFetched(id, (key, signal) => api.reviewGame(key, signal));
+}
+
+/** The cached Chess.com games of a player, most recent first. */
+export function useReviewGames(
+  username: string | null,
+  maxGames = 50,
+): Fetched<ReviewGameSummary[]> {
+  const key = username === null ? null : JSON.stringify([username, maxGames]);
+  return useFetched(key, (json, signal) => {
+    const [name, count] = JSON.parse(json) as [string, number];
+    return api.reviewGames(name, count, signal);
+  });
 }

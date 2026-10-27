@@ -10,6 +10,7 @@ export function EvalGraph({
   height = 160,
   labels = true,
   overlays = [],
+  marks = [],
 }: {
   points: readonly (number | null)[];
   /** Other series drawn as plain lines over the main one (same scale). */
@@ -21,6 +22,8 @@ export function EvalGraph({
   onSelect?: (index: number) => void;
   height?: number;
   labels?: boolean;
+  /** Colored dots on some positions (the notable moves), over the line. */
+  marks?: readonly { index: number; color: string; title: string }[];
 }) {
   const span = Math.max(1, points.length - 1);
   const x = (index: number) => (index / span) * 100;
@@ -117,6 +120,18 @@ export function EvalGraph({
           lit ? 'size-3 border-ink-950 bg-signal' : 'size-2 border-bone bg-ink-950'
         }`;
         return <span key={index} style={style} className={className} />;
+      })}
+      {marks.map(({ index, color, title }) => {
+        const pawns = points[index];
+        if (pawns === null || pawns === undefined) return null;
+        return (
+          <span
+            key={`mark-${index}`}
+            title={title}
+            style={{ left: `${x(index)}%`, top: `${y(pawns)}%`, background: color }}
+            className="absolute size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-ink-950"
+          />
+        );
       })}
       {labels && (
         <>

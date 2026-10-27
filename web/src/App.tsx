@@ -5,7 +5,8 @@ import { Layout } from './components/Layout';
 import { AnalysisPage } from './features/analysis/AnalysisPage';
 import { PlayPage } from './features/play/PlayPage';
 
-// The charts library is only needed here: load it on demand.
+// Pages not needed at startup (the training one pulls in the charts library):
+// load them on demand.
 const TrainingPage = lazy(() =>
   import('./features/training/TrainingPage').then((module) => ({ default: module.TrainingPage })),
 );

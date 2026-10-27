@@ -58,7 +58,7 @@ fn wins_a_hanging_queen() {
 
 #[test]
 fn does_not_take_a_poisoned_pawn() {
-    // Qxb7?? loses the queen to ...Rb8xb7... the rook guards b7 along the rank.
+    // Qxb7?? loses the queen to ...Rxb7: the rook on b8 guards b7 along the file.
     let result = search(
         "1r2k3/1p6/8/8/8/8/8/1Q2K3 w - - 0 1",
         &SearchLimits::depth(5),

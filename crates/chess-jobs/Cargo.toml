@@ -16,10 +16,15 @@ serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
+utoipa = { workspace = true, optional = true }
 uuid.workspace = true
 
 [dev-dependencies]
 chess-core.workspace = true
+
+[features]
+# utoipa schemas of the public types, for the REST API's OpenAPI document.
+openapi = ["chess-dataset/openapi", "dep:utoipa"]
 
 [lints]
 workspace = true

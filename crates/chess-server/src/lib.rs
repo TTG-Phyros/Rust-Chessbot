@@ -24,6 +24,8 @@ pub struct AppState {
     pub http: reqwest::Client,
     /// Chess.com reviews, when their cache could be opened.
     pub review: Option<Arc<ReviewService>>,
+    /// The NNUE lab's API (`/api/v1`), when its database could be opened.
+    pub nnue: Option<chess_nnue_api::NnueApi>,
 }
 
 impl AppState {
@@ -46,7 +48,17 @@ impl AppState {
                 .filter(|url| !url.is_empty()),
             http: reqwest::Client::new(),
             review: None,
+            nnue: None,
         }
+    }
+
+    /// Serves the NNUE lab's API `api`; activating a model there changes
+    /// the engine's network.
+    #[must_use]
+    pub fn with_nnue(mut self, api: chess_nnue_api::NnueApi) -> Self {
+        let engine = self.engine.clone();
+        self.nnue = Some(api.on_activate(Arc::new(move |file| engine.activate(file))));
+        self
     }
 
     /// Serves the Chess.com reviews of `service`.
@@ -66,6 +78,7 @@ impl Default for AppState {
             trainer_url: None,
             http: reqwest::Client::new(),
             review: None,
+            nnue: None,
         }
     }
 }

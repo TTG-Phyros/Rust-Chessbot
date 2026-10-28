@@ -152,6 +152,7 @@ async fn networks_bots_and_tournaments() {
         trainer_url: Some(fake_daemon().await),
         http: reqwest::Client::new(),
         review: None,
+        nnue: None,
     };
 
     // Networks, from the files.
@@ -237,6 +238,7 @@ async fn arena_without_a_daemon() {
         trainer_url: None,
         http: reqwest::Client::new(),
         review: None,
+        nnue: None,
     };
     let (code, arena) = call(&state, "GET", "/api/arena", Value::Null).await;
     assert_eq!(code, StatusCode::OK);

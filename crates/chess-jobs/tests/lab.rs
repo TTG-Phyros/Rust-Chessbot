@@ -56,7 +56,8 @@ fn training(lab: &Lab, dir: &std::path::Path, device: Device) -> chess_jobs::Job
         .unwrap();
     lab.create_training(&TrainingRequest {
         name: None,
-        architecture: architecture("fast-768"),
+        architecture: Some(architecture("fast-768")),
+        architecture_id: None,
         datasets: vec![dataset.id],
         hyperparameters: Hyperparameters {
             superbatches: 3,
@@ -184,7 +185,8 @@ fn batches_must_fit_in_the_datasets() {
         .unwrap();
     let mut request = TrainingRequest {
         name: None,
-        architecture: architecture("fast-768"),
+        architecture: Some(architecture("fast-768")),
+        architecture_id: None,
         datasets: vec![dataset.id],
         hyperparameters: Hyperparameters::default(),
         seed: None,
@@ -425,12 +427,14 @@ fn lists_page_newest_first() {
     let ids: Vec<_> = (0..5)
         .map(|_| training(&lab, &dir, Device::Cpu).id)
         .collect();
-    let first = lab.jobs(None, 2).unwrap();
+    let first = lab.jobs(None, None, 2).unwrap();
     assert_eq!(
         first.iter().map(|j| j.id).collect::<Vec<_>>(),
         [ids[4], ids[3]]
     );
-    let second = lab.jobs(Some(first[1].id), 10).unwrap();
+    let second = lab
+        .jobs(Some(JobKind::Training), Some(first[1].id), 10)
+        .unwrap();
     assert_eq!(
         second.iter().map(|j| j.id).collect::<Vec<_>>(),
         [ids[2], ids[1], ids[0]]
@@ -439,4 +443,156 @@ fn lists_page_newest_first() {
         lab.job(chess_jobs::JobId::generate()),
         Err(LabError::NotFound { what: "job", .. })
     ));
+}
+
+#[test]
+fn saved_architectures_feed_training_jobs() {
+    let (lab, dir) = lab("architectures");
+    let stored = lab
+        .create_architecture(&architecture("halfka-medium"))
+        .unwrap();
+    assert_eq!(
+        stored.hash,
+        presets::get("halfka-medium")
+            .unwrap()
+            .architecture
+            .hash()
+            .to_string()
+    );
+    assert_eq!(lab.architectures(None, 10).unwrap(), vec![stored.clone()]);
+    let mut bad = architecture("fast-768");
+    bad["accumulator"]["size"] = json!(7);
+    let Err(LabError::Invalid(errors)) = lab.create_architecture(&bad) else {
+        panic!("saved an invalid architecture");
+    };
+    assert_eq!(errors[0].path, "/accumulator/size");
+
+    let dataset = lab
+        .import_dataset("data", dataset_bytes(&dir, 100).as_slice(), 1 << 20)
+        .unwrap();
+    let request = |architecture: Option<Value>, id| TrainingRequest {
+        name: None,
+        architecture,
+        architecture_id: id,
+        datasets: vec![dataset.id],
+        hyperparameters: Hyperparameters {
+            batch_size: 64,
+            shuffle_records: 64,
+            ..Hyperparameters::default()
+        },
+        seed: None,
+        device: Device::Auto,
+        trainer: "burn".into(),
+    };
+    let job = lab
+        .create_training(&request(None, Some(stored.id)))
+        .unwrap();
+    let chess_jobs::JobSpec::Training(spec) = &job.spec else {
+        panic!("not a training job");
+    };
+    assert_eq!(spec.architecture_hash, stored.hash);
+    // Jobs keep their copy: the saved architecture can go.
+    lab.delete_architecture(stored.id).unwrap();
+    assert!(lab.job(job.id).is_ok());
+
+    for (architecture, id, path) in [
+        (None, None, "/architecture"),
+        (
+            Some(architecture("fast-768")),
+            Some(stored.id),
+            "/architectureId",
+        ),
+        (None, Some(stored.id), "/architectureId"),
+    ] {
+        let Err(LabError::Invalid(errors)) = lab.create_training(&request(architecture, id)) else {
+            panic!("accepted {path}");
+        };
+        assert_eq!(errors[0].path, path);
+    }
+}
+
+#[test]
+fn deletions_respect_what_uses_them() {
+    let (lab, dir) = lab("deletions");
+    let job = training(&lab, &dir, Device::Auto);
+    let chess_jobs::JobSpec::Training(spec) = &job.spec else {
+        panic!("not a training job");
+    };
+    let dataset = spec.datasets[0].id;
+    // A queued job trains on it.
+    assert!(matches!(
+        lab.delete_dataset(dataset),
+        Err(LabError::Conflict(_))
+    ));
+
+    let claim = lab.claim(&worker("w", false)).unwrap().unwrap();
+    let network = Network::pseudo_random(&presets::get("fast-768").unwrap().architecture, 1)
+        .unwrap()
+        .to_bytes();
+    let summary = TrainingSummary {
+        superbatches: 3,
+        positions: 1,
+        final_loss: None,
+        device: "CPU".into(),
+    };
+    let model = lab
+        .complete_training(claim.token(), &network, &summary)
+        .unwrap();
+    lab.delete_dataset(dataset).unwrap();
+    assert!(!lab.paths().dataset_dir(dataset).exists());
+
+    // The active model stays until another one is activated.
+    assert_eq!(lab.active_model().unwrap(), None);
+    lab.set_active_model(Some(model.id)).unwrap();
+    assert_eq!(lab.active_model().unwrap(), Some(model.id));
+    assert!(matches!(
+        lab.delete_model(model.id),
+        Err(LabError::Conflict(_))
+    ));
+    lab.set_active_model(None).unwrap();
+    lab.delete_model(model.id).unwrap();
+    assert!(!lab.paths().model_file(model.id).exists());
+    assert!(matches!(
+        lab.set_active_model(Some(model.id)),
+        Err(LabError::NotFound { .. })
+    ));
+}
+
+#[test]
+fn idempotency_keys_replay_the_first_response() {
+    let (lab, _) = lab("idempotency");
+    use chess_jobs::Idempotency;
+    assert_eq!(
+        lab.idempotency_begin("k1 POST /x", "abc", "f1").unwrap(),
+        Idempotency::New
+    );
+    // Still running.
+    assert_eq!(
+        lab.idempotency_begin("k1 POST /x", "abc", "f1").unwrap(),
+        Idempotency::InProgress
+    );
+    lab.idempotency_finish("k1 POST /x", "abc", 201, Some("application/json"), b"{}")
+        .unwrap();
+    assert_eq!(
+        lab.idempotency_begin("k1 POST /x", "abc", "f1").unwrap(),
+        Idempotency::Replay {
+            status: 201,
+            content_type: Some("application/json".into()),
+            body: b"{}".to_vec()
+        }
+    );
+    assert_eq!(
+        lab.idempotency_begin("k1 POST /x", "abc", "f2").unwrap(),
+        Idempotency::Mismatch
+    );
+    // Another client, or a forgotten key, starts over.
+    assert_eq!(
+        lab.idempotency_begin("k2 POST /x", "abc", "f2").unwrap(),
+        Idempotency::New
+    );
+    lab.idempotency_abandon("k2 POST /x", "abc").unwrap();
+    assert_eq!(
+        lab.idempotency_begin("k2 POST /x", "abc", "f3").unwrap(),
+        Idempotency::New
+    );
 }

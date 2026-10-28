@@ -1,5 +1,8 @@
 //! Server configuration: built-in defaults, then an optional TOML file, then
-//! `CHESS_SERVER_*` environment variables (highest priority).
+//! `CHESS_SERVER_*` environment variables (highest priority). The NNUE lab's
+//! settings also read `CHESS_API_*` and `CHESS_LAB_*` (`CHESS_API_KEYS`
+//! sets `api_keys`, `CHESS_LAB_DIR` sets `lab_dir`, …), the names `.env`
+//! uses.
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -21,6 +24,32 @@ pub enum LogFormat {
     Pretty,
     /// One JSON object per line, for log collectors.
     Json,
+}
+
+/// Whether `/api/v1` asks for an API key.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ApiAuth {
+    /// A key of `api_keys` is required.
+    #[default]
+    Enabled,
+    /// Anyone may call it (development only).
+    Disabled,
+}
+
+/// A secret: read from the configuration, never printed.
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct Secret(pub String);
+
+impl std::fmt::Debug for Secret {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.0.is_empty() {
+            f.write_str("\"\"")
+        } else {
+            f.write_str("\"***\"")
+        }
+    }
 }
 
 /// Runtime configuration of the server.
@@ -45,6 +74,61 @@ pub struct ServerConfig {
     /// Base URL of the training control daemon (`chess-train serve`), e.g.
     /// `http://trainer:4000`; training cannot be started from the UI without it.
     pub trainer_url: Option<String>,
+    /// Authentication of the NNUE lab's API (`CHESS_API_AUTH`).
+    pub api_auth: ApiAuth,
+    /// API keys, comma-separated (`CHESS_API_KEYS`).
+    pub api_keys: Secret,
+    /// Requests per minute per API key, 0 for no limit (`CHESS_API_RATE_LIMIT`).
+    pub api_rate_limit: u32,
+    /// The lab's database and default file locations (`CHESS_LAB_DIR`).
+    pub lab_dir: PathBuf,
+    /// Datasets (default `<lab_dir>/datasets`; `CHESS_LAB_DATASETS_DIR`).
+    pub lab_datasets_dir: Option<PathBuf>,
+    /// Model files (default `<lab_dir>/models`; `CHESS_LAB_MODELS_DIR`).
+    pub lab_models_dir: Option<PathBuf>,
+    /// Checkpoints of training runs (default `<lab_dir>/runs`; `CHESS_LAB_RUNS_DIR`).
+    pub lab_runs_dir: Option<PathBuf>,
+    /// Largest dataset upload, in MiB (`CHESS_LAB_MAX_UPLOAD_MB`).
+    pub lab_max_upload_mb: u64,
+    /// Token of the lab's workers; without one the internal API is off
+    /// (`CHESS_LAB_WORKER_TOKEN`).
+    pub lab_worker_token: Secret,
+}
+
+impl ServerConfig {
+    /// Where the lab's files are.
+    #[must_use]
+    pub fn lab_paths(&self) -> chess_jobs::LabPaths {
+        let defaults = chess_jobs::LabPaths::under(&self.lab_dir);
+        chess_jobs::LabPaths {
+            datasets: self.lab_datasets_dir.clone().unwrap_or(defaults.datasets),
+            models: self.lab_models_dir.clone().unwrap_or(defaults.models),
+            runs: self.lab_runs_dir.clone().unwrap_or(defaults.runs),
+        }
+    }
+
+    /// Settings of the lab's API.
+    #[must_use]
+    pub fn api_config(&self) -> chess_nnue_api::ApiConfig {
+        chess_nnue_api::ApiConfig {
+            auth: match self.api_auth {
+                ApiAuth::Disabled => chess_nnue_api::Auth::Disabled,
+                ApiAuth::Enabled => chess_nnue_api::Auth::Keys(
+                    self.api_keys
+                        .0
+                        .split(',')
+                        .map(str::trim)
+                        .filter(|key| !key.is_empty())
+                        .map(str::to_owned)
+                        .collect(),
+                ),
+            },
+            rate_limit: self.api_rate_limit,
+            max_upload_bytes: self.lab_max_upload_mb.saturating_mul(1 << 20),
+            worker_token: Some(self.lab_worker_token.0.trim().to_owned())
+                .filter(|token| !token.is_empty()),
+        }
+    }
 }
 
 impl Default for ServerConfig {
@@ -58,6 +142,15 @@ impl Default for ServerConfig {
             eval_file: PathBuf::from("data/weights/main.nnue"),
             stockfish: PathBuf::from("stockfish"),
             trainer_url: None,
+            api_auth: ApiAuth::Enabled,
+            api_keys: Secret::default(),
+            api_rate_limit: 600,
+            lab_dir: PathBuf::from("data/lab"),
+            lab_datasets_dir: None,
+            lab_models_dir: None,
+            lab_runs_dir: None,
+            lab_max_upload_mb: 4096,
+            lab_worker_token: Secret::default(),
         }
     }
 }
@@ -72,6 +165,10 @@ impl ServerConfig {
     fn figment(path: &str) -> Figment {
         Figment::from(Serialized::defaults(Self::default()))
             .merge(Toml::file(path))
+            .merge(
+                Env::prefixed("CHESS_")
+                    .filter(|key| key.starts_with("api_") || key.starts_with("lab_")),
+            )
             .merge(Env::prefixed("CHESS_SERVER_"))
     }
 }
@@ -103,6 +200,39 @@ mod tests {
             let config: ServerConfig = ServerConfig::figment("server.toml").extract()?;
             assert_eq!(config.bind.port(), 5000);
             assert_eq!(config.log_format, LogFormat::Json);
+            Ok(())
+        });
+    }
+
+    #[test]
+    #[allow(clippy::result_large_err)] // The closure signature is imposed by figment's Jail.
+    fn lab_settings_from_dotenv_names_and_secrets_stay_hidden() {
+        figment::Jail::expect_with(|jail| {
+            jail.set_env("CHESS_API_KEYS", "alpha, beta,");
+            jail.set_env("CHESS_API_AUTH", "disabled");
+            jail.set_env("CHESS_LAB_DIR", "/lab");
+            jail.set_env("CHESS_LAB_MODELS_DIR", "/data/models");
+            jail.set_env("CHESS_LAB_WORKER_TOKEN", "s3cret");
+            let config: ServerConfig = ServerConfig::figment("none.toml").extract()?;
+            assert_eq!(config.api_auth, ApiAuth::Disabled);
+            let paths = config.lab_paths();
+            assert_eq!(paths.datasets, PathBuf::from("/lab/datasets"));
+            assert_eq!(paths.models, PathBuf::from("/data/models"));
+            let api = ServerConfig {
+                api_auth: ApiAuth::Enabled,
+                ..config.clone()
+            }
+            .api_config();
+            assert_eq!(
+                api.auth,
+                chess_nnue_api::Auth::Keys(vec!["alpha".into(), "beta".into()])
+            );
+            assert_eq!(api.worker_token.as_deref(), Some("s3cret"));
+            let printed = format!("{config:?}");
+            assert!(
+                !printed.contains("alpha") && !printed.contains("s3cret"),
+                "{printed}"
+            );
             Ok(())
         });
     }

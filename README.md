@@ -114,6 +114,7 @@ crates/
   chess-nnue/    format réseau CBNN v2, inférence de toute architecture valide (AVX2 / portable)
   chess-dataset/ format des datasets (CBDS) : lecture/écriture en flux, import vérifié, statistiques
   chess-jobs/    laboratoire NNUE : base SQLite des datasets, jobs (entraînement, self-play) et modèles
+  chess-nnue-api/ API REST du laboratoire (/api/v1, OpenAPI 3.1, /docs) et API interne des workers
   chess-search/  alpha-beta générique sur Evaluator (ne voit que le trait), multi-PV
   chess-stockfish/ pilote UCI de Stockfish : bridé en 10 niveaux (arène, comparaisons) ou pleine force en MultiPV (analyses)
   chess-uci/     binaire UCI
@@ -252,6 +253,8 @@ L'API est **sans état** : une partie est toujours envoyée sous la forme `{ "fe
 
 Les scores renvoyés sont du point de vue des blancs. Les limites sont plafonnées côté serveur (profondeur 64, 60 s par coup, 10 min d'analyse), et le nombre de recherches simultanées est borné par `max_searches`.
 
+Le laboratoire NNUE a sa propre API, versionnée : voir [API du laboratoire](#api-du-laboratoire-apiv1).
+
 ## Entraînement (NNUE)
 
 Par défaut, le réseau suit l'architecture `768 → 256 ×2 → 1` en perspective (preset `legacy-768x256`). Les entrées sont 768 features binaires (couleur relative × pièce × case), et un feature transformer commun alimente deux moitiés : celle du camp au trait et celle de l'adversaire. Les deux passent par un ReLU borné (CReLU) avant la couche de sortie. Toute autre architecture déclarée (voir [Laboratoire NNUE](#laboratoire-nnue)) s'entraîne de la même façon : `[train] architecture` accepte un preset ou un fichier JSON/YAML.
@@ -330,7 +333,45 @@ Le laboratoire entraîne des réseaux d'**architecture déclarée** (JSON/YAML v
 - **Jobs.** Un worker prend le plus ancien job qu'il sait exécuter : **un seul job à la fois sur le GPU**, les autres attendent (ou passent sur un worker CPU s'ils l'acceptent). Il envoie progression et battements de cœur ; un job dont le worker se tait plus de 2 minutes passe `interrupted`. `stop` termine le superbatch, écrit un checkpoint et met le job `stopped` ; `resume` le remet en file et il **reprend du checkpoint**. À seed égale, le même job produit le même réseau au bit près (sur CPU).
 - **Modèles.** Le réseau final est vérifié (format v2, hash de l'architecture du job) avant d'être enregistré ; il se charge partout où le moteur charge un réseau.
 
-En attendant l'API REST, le laboratoire se pilote en ligne de commande :
+#### API du laboratoire (`/api/v1`)
+
+Documentation interactive sur **`/docs`** (Scalar, avec essai des requêtes), document OpenAPI 3.1 sur `GET /api/v1/openapi.json` ; le schéma des architectures y est exactement celui que le serveur applique.
+
+- **Authentification.** Une clé dans l'en-tête `X-API-Key` (ou `Authorization: Bearer`), parmi celles de `CHESS_API_KEYS` dans `.env` (voir [`.env.example`](.env.example)). `CHESS_API_AUTH=disabled` ouvre l'API, pour le développement seulement. Sans clé configurée, tout appel est refusé. Les anciennes routes `/api/*` restent sans clé.
+- **Erreurs.** Toujours au format RFC 9457 (`application/problem+json`) : `type` (`urn:chess-bot:problem:validation-error`, `not-found`, `conflict`, `rate-limited`…), `title`, `status`, `detail`, et pour les erreurs de validation la liste complète `errors: [{path, message}]`, chaque `path` étant un pointeur JSON.
+- **Listes.** Les plus récents d'abord, par pages : `?limit=` (1 à 200, 50 par défaut) et `?cursor=` (le `nextCursor` de la page précédente, absent sur la dernière).
+- **Créations sûres.** Les `POST` acceptent un en-tête `Idempotency-Key` : renvoyée avec la même requête (dans les 24 h), la même réponse revient (`Idempotent-Replayed: true`) sans rien créer de nouveau ; avec une autre requête, 422.
+- **Limites.** `CHESS_API_RATE_LIMIT` requêtes par minute et par clé (429 avec `Retry-After`) ; uploads jusqu'à `CHESS_LAB_MAX_UPLOAD_MB` (413 au-delà).
+- **Fichiers.** Aucun chemin ne vient du client : tout fichier est nommé d'après un identifiant généré par le serveur (UUIDv7).
+
+| Route | Rôle |
+| --- | --- |
+| `POST /api/v1/architectures:validate` | valide un document JSON ou YAML : toutes les erreurs, ou le hash, la forme normalisée, les tenseurs et les estimations |
+| `GET /api/v1/architectures/presets`, `GET /api/v1/architectures/schema` | presets (avec hash et estimations), JSON Schema des architectures |
+| `POST`, `GET /api/v1/architectures`, `GET`, `DELETE /api/v1/architectures/{id}` | architectures sauvegardées, réutilisables par `architectureId` |
+| `POST /api/v1/datasets?name=` | upload d'un fichier `CBDS` (`application/octet-stream`), vérifié enregistrement par enregistrement pendant qu'il arrive |
+| `POST /api/v1/datasets:selfplay` | génère un dataset par self-play (`{"games", "nodes", "network": <modèle>}`) |
+| `GET /api/v1/datasets`, `GET`, `DELETE /api/v1/datasets/{id}`, `GET …/{id}/stats` | datasets, avec hash de contenu et statistiques |
+| `POST`, `GET /api/v1/training-runs`, `GET /api/v1/training-runs/{id}` | entraînement : `{"architecture" \| "architectureId", "datasets", "hyperparameters", "seed", "device"}`, puis sa progression |
+| `POST /api/v1/training-runs/{id}:stop`, `…:resume` | arrêt après checkpoint, reprise depuis le checkpoint |
+| `GET /api/v1/training-runs/{id}/metrics` | courbe : perte, taux d'apprentissage, vitesse par superbatch |
+| `GET /api/v1/training-runs/{id}/events` | événements en direct (SSE) : `status`, `progress`, `checkpoint`, `model`, `log` ; reprise avec `Last-Event-ID` |
+| `GET /api/v1/selfplay-runs[/{id}]`, `POST …/{id}:stop`, `GET …/{id}/events` | les jobs de self-play |
+| `GET /api/v1/models[/{id}]`, `GET …/{id}/file`, `DELETE …/{id}` | modèles avec leur provenance, fichier réseau |
+| `POST /api/v1/models/{id}:activate`, `POST /api/v1/models:deactivate` | le moteur (partie, analyse) joue avec ce modèle, ou revient au réseau configuré |
+
+```sh
+K="X-API-Key: $CHESS_API_KEY"
+curl -H "$K" -H 'Content-Type: application/octet-stream' --data-binary @positions.bin \
+     'http://localhost:8080/api/v1/datasets?name=positions'
+curl -H "$K" -H 'Content-Type: application/json' -d '{"architectureId": "…", "datasets": ["…"]}' \
+     http://localhost:8080/api/v1/training-runs
+curl -N -H "$K" http://localhost:8080/api/v1/training-runs/<id>/events
+```
+
+Les jobs sont exécutés par les **workers** : les services `lab-worker` (GPU, profil `train`) et `lab-worker-cpu` (profil `train-cpu`) de `docker compose`. Ils prennent les jobs par l'API interne `/internal/v1` du serveur, authentifiés par `CHESS_LAB_WORKER_TOKEN`, et lisent et écrivent les mêmes fichiers que lui (datasets dans le volume `datasets`, modèles dans `data/models`, checkpoints dans `data/lab/runs`) ; nginx n'expose jamais `/internal`. Ils partagent le GPU avec le pipeline de la page Entraînement : lancer l'un ou l'autre.
+
+Le laboratoire se pilote aussi en ligne de commande, directement sur sa base :
 
 ```sh
 chess-train lab import mes-positions.bin                     # dataset vérifié, avec statistiques
@@ -340,6 +381,7 @@ chess-train lab jobs | datasets | models                     # listes (JSON)
 chess-train lab job <id>                                     # un job et ses événements
 chess-train lab stop <id> | resume <id>
 chess-train worker                                           # exécute les jobs (GPU si présent), Ctrl+C = arrêt propre
+chess-train worker --server http://localhost:3000            # même chose via l'API interne (CHESS_LAB_WORKER_TOKEN)
 ```
 
 Au premier démarrage du démon, le top 5 des réseaux entraînés avant cette fonctionnalité est **reconstruit depuis l'historique des matchs**, et leurs autres snapshots mesurés sont supprimés. Pour tous les garder, il faut copier `data/weights/<run>/` ailleurs avant de mettre à jour.

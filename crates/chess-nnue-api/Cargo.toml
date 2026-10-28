@@ -1,0 +1,32 @@
+[package]
+name = "chess-nnue-api"
+description = "REST API of the NNUE lab (/api/v1, OpenAPI 3.1, /docs) and the workers' internal API."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+chess-dataset = { workspace = true, features = ["openapi"] }
+chess-jobs = { workspace = true, features = ["openapi"] }
+chess-nnue-spec.workspace = true
+axum.workspace = true
+futures-util.workspace = true
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_norway.workspace = true
+sha2.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+utoipa.workspace = true
+
+[dev-dependencies]
+chess-core.workspace = true
+chess-nnue.workspace = true
+jsonschema.workspace = true
+tower.workspace = true
+
+[lints]
+workspace = true

@@ -36,8 +36,8 @@ pub(crate) struct Worker<'a> {
 
 impl Worker<'_> {
     /// Runs jobs until `stop` is raised, polling every `poll` when the queue
-    /// is empty (`idle` runs then). With `once`, returns after one job, or
-    /// at once when none is queued.
+    /// is empty (`idle` runs then) or unreachable (a restarting server). With
+    /// `once`, returns after one job, or at once when none is queued.
     pub(crate) fn run(
         &self,
         stop: &StopFlag,
@@ -47,17 +47,19 @@ impl Worker<'_> {
     ) -> Result<()> {
         tracing::info!(worker = %self.info.id, gpu = self.info.gpu, "lab worker started");
         while !stop.is_stopped() {
-            match self.run_one(stop)? {
-                Some(_) if once => return Ok(()),
-                Some(_) => {}
-                None if once => return Ok(()),
-                None => {
-                    idle();
-                    let until = Instant::now() + poll;
-                    while !stop.is_stopped() && Instant::now() < until {
-                        std::thread::sleep(Duration::from_millis(100));
-                    }
+            match self.run_one(stop) {
+                Ok(Some(_)) if once => return Ok(()),
+                Ok(Some(_)) => continue,
+                Ok(None) if once => return Ok(()),
+                Ok(None) => idle(),
+                Err(err) if once => return Err(err),
+                Err(err) => {
+                    tracing::warn!(error = %format!("{err:#}"), "queue unreachable, retrying")
                 }
+            }
+            let until = Instant::now() + poll;
+            while !stop.is_stopped() && Instant::now() < until {
+                std::thread::sleep(Duration::from_millis(100));
             }
         }
         Ok(())
@@ -392,7 +394,8 @@ mod tests {
     fn request(dataset: chess_jobs::DatasetId, superbatches: u64) -> TrainingRequest {
         TrainingRequest {
             name: Some("round trip".into()),
-            architecture: architecture(),
+            architecture: Some(architecture()),
+            architecture_id: None,
             datasets: vec![dataset],
             hyperparameters: Hyperparameters {
                 superbatches,
@@ -508,6 +511,62 @@ mod tests {
             panic!("no progress");
         };
         assert_eq!(progress.step, 32);
+    }
+
+    /// The same chain through the server's internal API, as a worker in
+    /// another container runs it.
+    #[test]
+    fn workers_train_over_http() {
+        let (lab, dir) = lab("worker-http");
+        let lab = std::sync::Arc::new(lab);
+        let dataset = upload(&lab, &dir);
+        let job = lab.create_training(&request(dataset.id, 2)).unwrap();
+
+        let api = chess_nnue_api::NnueApi::new(
+            std::sync::Arc::clone(&lab),
+            chess_nnue_api::ApiConfig {
+                worker_token: Some("token".into()),
+                ..chess_nnue_api::ApiConfig::default()
+            },
+        );
+        let (address, server) = {
+            let runtime = tokio::runtime::Runtime::new().unwrap();
+            let listener = runtime
+                .block_on(tokio::net::TcpListener::bind("127.0.0.1:0"))
+                .unwrap();
+            let address = listener.local_addr().unwrap();
+            let server = std::thread::spawn(move || {
+                runtime.block_on(async move {
+                    let _ = axum::serve(listener, api.router()).await;
+                });
+            });
+            (address, server)
+        };
+        let http = crate::remote::HttpBroker::new(&format!("http://{address}"), "token").unwrap();
+        let worker = Worker {
+            broker: &http,
+            ..worker(&lab)
+        };
+        assert_eq!(worker.run_one(&StopFlag::new()).unwrap(), Some(job.id));
+        let done = lab.job(job.id).unwrap();
+        assert_eq!(done.status, JobStatus::Succeeded, "{:?}", done.error);
+        let model = lab.model(done.model.unwrap()).unwrap();
+        Network::from_bytes(&std::fs::read(lab.paths().model_file(model.id)).unwrap()).unwrap();
+        assert_eq!(
+            lab.events(job.id, 0, 100).unwrap().len(),
+            8,
+            "{:?}",
+            lab.events(job.id, 0, 100)
+        );
+
+        // A worker with a wrong token is turned away.
+        let intruder =
+            crate::remote::HttpBroker::new(&format!("http://{address}"), "nope").unwrap();
+        assert!(matches!(
+            intruder.claim(&worker.info),
+            Err(LabError::Unavailable(message)) if message.starts_with("401")
+        ));
+        drop(server);
     }
 
     #[test]

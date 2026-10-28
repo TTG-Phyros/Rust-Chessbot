@@ -8,6 +8,7 @@ use crate::{Outcome, Record};
 /// Counts of values in bins of equal width, with the values below the
 /// first bin in `below` and those past the last in `above`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct Histogram {
     /// Lower bound of the first bin (inclusive).
@@ -48,6 +49,7 @@ impl Histogram {
 
 /// Game results of the positions.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct Outcomes {
     /// Positions from games White won.
@@ -60,6 +62,7 @@ pub struct Outcomes {
 
 /// What a dataset contains.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct DatasetStats {
     /// Positions.

@@ -36,8 +36,8 @@ pub(crate) const CLASSIC: &str = "classic";
 #[derive(Debug, Default)]
 struct Network {
     eval: EngineEval,
-    /// Modification time of the loaded file (`None`: classical evaluation).
-    loaded: Option<SystemTime>,
+    /// The loaded file and its modification time (`None`: classical evaluation).
+    loaded: Option<(PathBuf, SystemTime)>,
 }
 
 /// Shared engine: each search gets its own [`Searcher`], and a semaphore
@@ -47,7 +47,10 @@ struct Network {
 pub struct EngineService {
     permits: Arc<Semaphore>,
     hash_mb: usize,
+    /// Network of the configuration.
     eval_file: Option<PathBuf>,
+    /// Network activated at run time (a lab model), used instead of `eval_file`.
+    active_file: Arc<Mutex<Option<PathBuf>>>,
     network: Arc<Mutex<Network>>,
     /// Where saved bots keep their network (`<name>.nnue`).
     bots_dir: Option<PathBuf>,
@@ -67,6 +70,7 @@ impl EngineService {
             permits: Arc::new(Semaphore::new(max_searches.max(1))),
             hash_mb: hash_mb.max(1),
             eval_file,
+            active_file: Arc::new(Mutex::new(None)),
             network: Arc::new(Mutex::new(Network::default())),
             bots_dir: None,
             bots: Arc::new(Mutex::new(HashMap::new())),
@@ -97,6 +101,24 @@ impl EngineService {
         self
     }
 
+    /// Plays with the network in `file` from the next search on; `None`
+    /// goes back to the configured network.
+    pub fn activate(&self, file: Option<PathBuf>) {
+        *self
+            .active_file
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = file;
+    }
+
+    /// The network file searches use: the activated one, or the configured one.
+    fn network_file(&self) -> Option<PathBuf> {
+        self.active_file
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+            .or_else(|| self.eval_file.clone())
+    }
+
     /// The Stockfish binary and its version, if there is one.
     pub(crate) fn stockfish(&self) -> Option<&(PathBuf, String)> {
         self.stockfish.as_ref()
@@ -107,20 +129,23 @@ impl EngineService {
     /// unreadable (e.g. half-written), and uses the classical evaluation
     /// when there is no file.
     fn evaluator(&self) -> EngineEval {
+        let file = self.network_file();
         let mut network = self.network.lock().unwrap_or_else(PoisonError::into_inner);
-        let modified = self.eval_file.as_ref().and_then(|path| {
+        let modified = file.as_ref().and_then(|path| {
             std::fs::metadata(path)
                 .and_then(|meta| meta.modified())
                 .ok()
         });
-        match (modified, &self.eval_file) {
-            (Some(modified), Some(path)) if network.loaded != Some(modified) => {
+        match (modified, &file) {
+            (Some(modified), Some(path))
+                if network.loaded.as_ref() != Some(&(path.clone(), modified)) =>
+            {
                 match std::fs::read(path).map(|bytes| EngineEval::from_nnue_bytes(&bytes)) {
                     Ok(Ok(eval)) => {
                         tracing::info!(file = %path.display(), "network loaded");
                         *network = Network {
                             eval,
-                            loaded: Some(modified),
+                            loaded: Some((path.clone(), modified)),
                         };
                     }
                     Ok(Err(err)) => tracing::warn!(%err, file = %path.display(), "invalid network"),
@@ -185,11 +210,12 @@ impl EngineService {
             evaluator: eval.name().to_owned(),
             weights_file: network
                 .loaded
-                .and(self.eval_file.as_ref())
-                .map(|path| path.display().to_string()),
+                .as_ref()
+                .map(|(path, _)| path.display().to_string()),
             weights_modified: network
                 .loaded
-                .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+                .as_ref()
+                .and_then(|(_, time)| time.duration_since(UNIX_EPOCH).ok())
                 .map(|age| age.as_secs()),
             stockfish: self.stockfish.as_ref().map(|(_, version)| version.clone()),
         }

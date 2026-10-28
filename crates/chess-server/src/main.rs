@@ -38,6 +38,13 @@ async fn serve(config: ServerConfig) -> Result<()> {
         Ok(service) => state = state.with_review(Arc::new(service)),
         Err(err) => tracing::warn!("Chess.com reviews disabled: {err:#}"),
     }
+    match nnue_api(&config) {
+        Ok(api) => {
+            tokio::spawn(api.clone().maintain());
+            state = state.with_nnue(api);
+        }
+        Err(err) => tracing::warn!("NNUE lab API disabled: {err:#}"),
+    }
     axum::serve(listener, chess_server::api::router(state))
         .with_graceful_shutdown(shutdown_signal())
         .await
@@ -55,6 +62,28 @@ fn review_service() -> Result<ReviewService> {
         "Chess.com reviews"
     );
     ReviewService::new(config).context("cannot open the review cache")
+}
+
+/// The NNUE lab (`/api/v1`): its database in `lab_dir`.
+fn nnue_api(config: &ServerConfig) -> Result<chess_nnue_api::NnueApi> {
+    let paths = config.lab_paths();
+    let db = config.lab_dir.join("lab.sqlite");
+    let lab = chess_jobs::Lab::open(&db, paths.clone())
+        .with_context(|| format!("cannot open {}", db.display()))?;
+    let api_config = config.api_config();
+    tracing::info!(
+        database = %db.display(),
+        datasets = %paths.datasets.display(),
+        models = %paths.models.display(),
+        auth = ?config.api_auth,
+        keys = match &api_config.auth {
+            chess_nnue_api::Auth::Keys(keys) => keys.len(),
+            chess_nnue_api::Auth::Disabled => 0,
+        },
+        workers = api_config.worker_token.is_some(),
+        "NNUE lab API on /api/v1, documentation on /docs"
+    );
+    Ok(chess_nnue_api::NnueApi::new(Arc::new(lab), api_config))
 }
 
 /// Docker `HEALTHCHECK`: queries `/api/health` on localhost with std only, so

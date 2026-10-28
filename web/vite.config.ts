@@ -12,6 +12,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': { target: apiTarget, changeOrigin: true },
+      '/docs': { target: apiTarget, changeOrigin: true },
       '/ws': { target: apiTarget.replace(/^http/, 'ws'), ws: true, changeOrigin: true },
     },
   },

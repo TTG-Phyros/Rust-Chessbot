@@ -16,6 +16,7 @@ members = [
     "crates/chess-nnue",
     "crates/chess-dataset",
     "crates/chess-jobs",
+    "crates/chess-nnue-api",
 ]
 
 [workspace.package]
@@ -39,6 +40,7 @@ chess-nnue-spec = { path = "crates/chess-nnue-spec" }
 chess-nnue = { path = "crates/chess-nnue" }
 chess-dataset = { path = "crates/chess-dataset" }
 chess-jobs = { path = "crates/chess-jobs" }
+chess-nnue-api = { path = "crates/chess-nnue-api" }
 
 # Errors
 thiserror = "2.0.21"

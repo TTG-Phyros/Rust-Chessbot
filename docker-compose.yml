@@ -1,6 +1,9 @@
 # docker compose up                          -> UI + API on http://localhost:8080
 # docker compose --profile train up          -> training on the NVIDIA GPU
 # docker compose --profile train-cpu up      -> training on the CPU (no CUDA)
+#
+# The NNUE lab API is on http://localhost:8080/api/v1 (docs: /docs); its
+# keys and the workers' token come from .env (see .env.example).
 
 name: chess-bot
 
@@ -32,6 +35,27 @@ x-train-common: &train-common
     # filesystem of the Docker VM, much faster than a Windows bind mount.
     - datasets:/datasets
 
+x-lab-worker-common: &lab-worker-common
+  user: "${CHESS_UID:-10001}:${CHESS_GID:-10001}"
+  # Takes the lab's queued jobs from the server; never exposed outside.
+  command: ["worker", "--server", "http://server:3000"]
+  environment:
+    RUST_LOG:
+    CHESS_LAB_WORKER_TOKEN: ${CHESS_LAB_WORKER_TOKEN:-}
+    # Same files as the server sees.
+    CHESS_LAB_DATASETS_DIR: /datasets/lab
+    CHESS_LAB_MODELS_DIR: /data/models
+    CHESS_LAB_RUNS_DIR: /data/lab/runs
+  # SIGTERM ends the current superbatch and writes a checkpoint: the run is
+  # then `interrupted`, and resumes with POST /api/v1/training-runs/{id}:resume.
+  stop_grace_period: 2m
+  volumes:
+    - ./data:/data
+    - datasets:/datasets
+  depends_on:
+    server:
+      condition: service_healthy
+
 services:
   server:
     build:
@@ -55,6 +79,18 @@ services:
       CHESS_REVIEW_ELO_MODEL: /config/elo-model.json
       # Reviews by our own engine use the network of this run.
       CHESS_REVIEW_NATIVE__EVAL_FILE: /data/weights/${CHESS_TRAIN_RUN:-main}.nnue
+      # NNUE lab API (/api/v1): keys, workers' token and limits from .env.
+      CHESS_API_AUTH: ${CHESS_API_AUTH:-enabled}
+      CHESS_API_KEYS: ${CHESS_API_KEYS:-}
+      CHESS_API_RATE_LIMIT: ${CHESS_API_RATE_LIMIT:-600}
+      CHESS_LAB_WORKER_TOKEN: ${CHESS_LAB_WORKER_TOKEN:-}
+      CHESS_LAB_MAX_UPLOAD_MB: ${CHESS_LAB_MAX_UPLOAD_MB:-4096}
+      # Database in a named volume, datasets next to the pipeline's, models
+      # and checkpoints readable from the host.
+      CHESS_LAB_DIR: /lab
+      CHESS_LAB_DATASETS_DIR: /datasets/lab
+      CHESS_LAB_MODELS_DIR: /data/models
+      CHESS_LAB_RUNS_DIR: /data/lab/runs
       RUST_LOG:
     volumes:
       - ./data:/data
@@ -62,6 +98,10 @@ services:
       # SQLite cache of games and analyses: a named volume (SQLite on a
       # Windows bind mount is slow and its locking unreliable).
       - review-cache:/cache
+      # The NNUE lab's SQLite database, for the same reason.
+      - lab:/lab
+      # Uploaded and generated datasets.
+      - datasets:/datasets
     restart: unless-stopped
 
   web:
@@ -101,6 +141,35 @@ services:
       target: runtime-cpu
     image: chess-bot/train:cpu
 
+  # Lab workers: the same images, running the lab's jobs (one at a time on
+  # the GPU). They share the GPU with the training page's pipeline: run one
+  # or the other.
+  lab-worker:
+    <<: *lab-worker-common
+    profiles: [train]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.train
+      target: runtime-cuda
+    image: chess-bot/train:cuda
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  lab-worker-cpu:
+    <<: *lab-worker-common
+    profiles: [train-cpu]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.train
+      target: runtime-cpu
+    image: chess-bot/train:cpu
+
 volumes:
   datasets:
   review-cache:
+  lab:

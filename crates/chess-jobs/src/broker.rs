@@ -12,6 +12,7 @@ use crate::types::{Dataset, EventKind, Job, JobKind, Model, Progress, TrainingSu
 
 /// What a worker can run.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct WorkerInfo {
     /// Name, for the jobs it takes (e.g. its host name).
@@ -27,7 +28,9 @@ pub struct WorkerInfo {
 /// A job taken by a worker. `attempt` identifies this run of it: a worker
 /// whose job was taken away (lost heartbeat, then resumed elsewhere) can
 /// no longer report on it.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(rename_all = "camelCase")]
 pub struct Claim {
     /// The job, as it was when taken.
     pub job: Job,
@@ -50,6 +53,7 @@ impl Claim {
 
 /// Identifies a claimed job in reports.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct ClaimToken {
     /// The job.
@@ -60,6 +64,7 @@ pub struct ClaimToken {
 
 /// What the worker should do next.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum Directive {
     /// Keep going.

@@ -47,6 +47,7 @@ fn state(data_dir: PathBuf, trainer_url: Option<String>, eval_file: Option<PathB
         trainer_url,
         http: reqwest::Client::new(),
         review: None,
+        nnue: None,
     }
 }
 
@@ -184,4 +185,123 @@ async fn engine_uses_and_reloads_the_network() {
     std::fs::remove_file(&net).unwrap();
     let (_, info) = request::<EngineInfo>(shared, "GET", "/api/engine").await;
     assert_eq!(info.unwrap().evaluator, "classic");
+}
+
+#[tokio::test]
+async fn activating_a_lab_model_switches_the_engine() {
+    use chess_jobs::{Broker, Device, Hyperparameters, JobKind, TrainingSummary, WorkerInfo};
+
+    let dir = temp_dir("lab");
+    let configured = dir.join("main.nnue");
+    std::fs::write(&configured, NnueWeights::zeros().to_bytes()).unwrap();
+    let lab = std::sync::Arc::new(
+        chess_jobs::Lab::open(
+            &dir.join("lab/lab.sqlite"),
+            chess_jobs::LabPaths::under(&dir.join("lab")),
+        )
+        .unwrap(),
+    );
+    // A model, trained by a pretend worker.
+    let dataset = {
+        let path = dir.join("data.bin");
+        let mut writer = chess_dataset::DatasetWriter::create(&path).unwrap();
+        let record = chess_dataset::Record::new(
+            &chess_core::Position::startpos(),
+            0,
+            chess_dataset::Outcome::Draw,
+        );
+        for _ in 0..64 {
+            writer.write(&record).unwrap();
+        }
+        writer.finish().unwrap();
+        lab.import_dataset("d", std::fs::File::open(path).unwrap(), 1 << 20)
+            .unwrap()
+    };
+    let architecture = chess_nnue::spec::presets::get("fast-768")
+        .unwrap()
+        .architecture;
+    lab.create_training(&chess_jobs::TrainingRequest {
+        name: None,
+        architecture: Some(serde_json::to_value(&architecture).unwrap()),
+        architecture_id: None,
+        datasets: vec![dataset.id],
+        hyperparameters: Hyperparameters {
+            batch_size: 64,
+            shuffle_records: 64,
+            ..Hyperparameters::default()
+        },
+        seed: None,
+        device: Device::Cpu,
+        trainer: "burn".into(),
+    })
+    .unwrap();
+    let claim = lab
+        .claim(&WorkerInfo {
+            id: "w".into(),
+            gpu: false,
+            kinds: vec![JobKind::Training],
+            trainers: vec!["burn".into()],
+        })
+        .unwrap()
+        .unwrap();
+    let network = chess_nnue::Network::pseudo_random(&architecture, 1)
+        .unwrap()
+        .to_bytes();
+    let summary = TrainingSummary {
+        superbatches: 1,
+        positions: 64,
+        final_loss: None,
+        device: "CPU".into(),
+    };
+    let model = lab
+        .complete_training(claim.token(), &network, &summary)
+        .unwrap();
+
+    let api = chess_nnue_api::NnueApi::new(
+        std::sync::Arc::clone(&lab),
+        chess_nnue_api::ApiConfig {
+            auth: chess_nnue_api::Auth::Disabled,
+            ..chess_nnue_api::ApiConfig::default()
+        },
+    );
+    let shared = state(dir.clone(), None, Some(configured)).with_nnue(api);
+    let weights = |state: AppState| async move {
+        let (_, info) = request::<EngineInfo>(state, "GET", "/api/engine").await;
+        info.unwrap().weights_file.unwrap()
+    };
+    assert!(weights(shared.clone()).await.ends_with("main.nnue"));
+
+    let (status, _) = request::<serde_json::Value>(
+        shared.clone(),
+        "POST",
+        &format!("/api/v1/models/{}:activate", model.id),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        weights(shared.clone())
+            .await
+            .ends_with(&format!("{}.nnue", model.id))
+    );
+
+    // The activation survives a restart of the server.
+    let restarted = state(dir.clone(), None, Some(dir.join("main.nnue"))).with_nnue(
+        chess_nnue_api::NnueApi::new(lab, chess_nnue_api::ApiConfig::default()),
+    );
+    assert!(
+        weights(restarted)
+            .await
+            .ends_with(&format!("{}.nnue", model.id))
+    );
+
+    let response = router(shared.clone())
+        .oneshot(
+            Request::post("/api/v1/models:deactivate")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    assert!(weights(shared).await.ends_with("main.nnue"));
 }

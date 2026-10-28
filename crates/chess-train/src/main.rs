@@ -26,6 +26,7 @@ mod model;
 mod network;
 mod pipeline;
 mod ranking;
+mod remote;
 mod rng;
 mod selfplay;
 mod stockfish;
@@ -34,7 +35,7 @@ mod tournament;
 mod trainer;
 mod worker;
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
@@ -176,9 +177,15 @@ enum Command {
     },
     /// NNUE lab worker: runs the queued training and self-play jobs, one at a time.
     Worker {
-        /// Lab directory: database, datasets, models, checkpoints.
-        #[arg(long, env = "CHESS_LAB_DIR", default_value = "data/lab")]
-        lab: PathBuf,
+        #[command(flatten)]
+        lab: LabLocation,
+        /// Server whose queue to serve (e.g. `http://server:3000`); without
+        /// it, the lab database in the lab directory is opened directly.
+        #[arg(long, env = "CHESS_LAB_SERVER", requires = "token")]
+        server: Option<String>,
+        /// The workers' token of that server.
+        #[arg(long, env = "CHESS_LAB_WORKER_TOKEN", hide_env_values = true)]
+        token: Option<String>,
         /// Run one job (or none if the queue is empty), then exit.
         #[arg(long)]
         once: bool,
@@ -189,12 +196,44 @@ enum Command {
     /// NNUE lab: datasets, training jobs and models (until the REST API
     /// exists). `--device` says where training jobs may run.
     Lab {
-        /// Lab directory: database, datasets, models, checkpoints.
-        #[arg(long, env = "CHESS_LAB_DIR", default_value = "data/lab")]
-        lab: PathBuf,
+        #[command(flatten)]
+        lab: LabLocation,
         #[command(subcommand)]
         command: LabCommand,
     },
+}
+
+/// Where the lab's files are: the same directories as the server's.
+#[derive(Debug, Clone, clap::Args)]
+struct LabLocation {
+    /// Lab directory: database, and by default datasets, models, checkpoints.
+    #[arg(long = "lab", env = "CHESS_LAB_DIR", default_value = "data/lab")]
+    dir: PathBuf,
+    /// Datasets (default `<lab>/datasets`).
+    #[arg(long, env = "CHESS_LAB_DATASETS_DIR")]
+    datasets_dir: Option<PathBuf>,
+    /// Model files (default `<lab>/models`).
+    #[arg(long, env = "CHESS_LAB_MODELS_DIR")]
+    models_dir: Option<PathBuf>,
+    /// Checkpoints of training runs (default `<lab>/runs`).
+    #[arg(long, env = "CHESS_LAB_RUNS_DIR")]
+    runs_dir: Option<PathBuf>,
+}
+
+impl LabLocation {
+    fn paths(&self) -> LabPaths {
+        let defaults = LabPaths::under(&self.dir);
+        LabPaths {
+            datasets: self.datasets_dir.clone().unwrap_or(defaults.datasets),
+            models: self.models_dir.clone().unwrap_or(defaults.models),
+            runs: self.runs_dir.clone().unwrap_or(defaults.runs),
+        }
+    }
+
+    fn open(&self) -> Result<Lab> {
+        Lab::open(&self.dir.join("lab.sqlite"), self.paths())
+            .with_context(|| format!("cannot open the lab in {}", self.dir.display()))
+    }
 }
 
 #[derive(Debug, Subcommand)]
@@ -326,10 +365,15 @@ fn main() -> Result<()> {
         Command::Serve { port, autostart } => control::serve(config, cli.device, port, autostart),
         Command::Worker {
             lab,
+            server,
+            token,
             once,
             poll_seconds,
-        } => run_worker(&config, cli.device, &lab, once, poll_seconds),
-        Command::Lab { lab, command } => run_lab(&open_lab(&lab)?, command, cli.device),
+        } => {
+            let remote = server.zip(token);
+            run_worker(&config, cli.device, &lab, remote, once, poll_seconds)
+        }
+        Command::Lab { lab, command } => run_lab(&lab.open()?, command, cli.device),
         Command::Export { out } => {
             let out =
                 out.unwrap_or_else(|| config.weights_dir().join(format!("{}.nnue", config.run)));
@@ -575,23 +619,42 @@ pub(crate) fn run_pipeline_with(
     Ok(())
 }
 
-fn open_lab(dir: &Path) -> Result<Lab> {
-    Lab::open(&dir.join("lab.sqlite"), LabPaths::under(dir))
-        .with_context(|| format!("cannot open the lab in {}", dir.display()))
-}
-
 /// Jobs whose worker has been silent this long are marked interrupted.
 const WORKER_SILENCE: Duration = Duration::from_secs(120);
 
 fn run_worker(
     config: &Config,
     preference: DevicePreference,
-    dir: &Path,
+    location: &LabLocation,
+    remote: Option<(String, String)>,
     once: bool,
     poll_seconds: u64,
 ) -> Result<()> {
     let stop = stop_on_signal()?;
-    let lab = open_lab(dir)?;
+    // The server's queue over HTTP, or the database (whose silent workers
+    // this worker then watches for, as the server would).
+    let http = match &remote {
+        Some((_, token)) if token.trim().is_empty() => {
+            bail!(
+                "CHESS_LAB_WORKER_TOKEN is empty: set it (in .env) for the server and its workers"
+            )
+        }
+        Some((server, token)) => Some(remote::HttpBroker::new(server, token.trim())?),
+        None => None,
+    };
+    let lab = match remote {
+        Some(_) => None,
+        None => Some(location.open()?),
+    };
+    let broker: &dyn chess_jobs::Broker = match (&http, &lab) {
+        (Some(http), _) => http,
+        (None, Some(lab)) => lab,
+        (None, None) => bail!("no queue to serve"),
+    };
+    match &remote {
+        Some((server, _)) => println!("queue: {server}"),
+        None => println!("queue: {}", location.dir.join("lab.sqlite").display()),
+    }
     let selected = device::select(preference)?;
     let gpu = matches!(selected.info, DeviceInfo::Cuda(_)).then_some(&selected);
     println!("device: {}", selected.info);
@@ -599,8 +662,8 @@ fn run_worker(
         .or_else(|_| std::env::var("COMPUTERNAME"))
         .unwrap_or_else(|_| "worker".into());
     let worker = worker::Worker {
-        broker: &lab,
-        paths: lab.paths().clone(),
+        broker,
+        paths: location.paths(),
         info: WorkerInfo {
             id: format!("{host}-{}", std::process::id()),
             gpu: gpu.is_some(),
@@ -616,8 +679,9 @@ fn run_worker(
         Duration::from_secs(poll_seconds.max(1)),
         once,
         || {
-            // Until the server does it: jobs of crashed workers become resumable.
-            if let Err(err) = lab.reap_silent(WORKER_SILENCE) {
+            if let Some(lab) = &lab
+                && let Err(err) = lab.reap_silent(WORKER_SILENCE)
+            {
                 tracing::warn!(error = %err, "cannot check for silent workers");
             }
         },
@@ -684,7 +748,8 @@ fn run_lab(lab: &Lab, command: LabCommand, device: DevicePreference) -> Result<(
             };
             print(&lab.create_training(&TrainingRequest {
                 name,
-                architecture: serde_json::to_value(architecture)?,
+                architecture: Some(serde_json::to_value(architecture)?),
+                architecture_id: None,
                 datasets,
                 hyperparameters,
                 seed,
@@ -697,7 +762,7 @@ fn run_lab(lab: &Lab, command: LabCommand, device: DevicePreference) -> Result<(
             })?)
         }
         LabCommand::Datasets => print(&lab.datasets(None, chess_jobs::MAX_PAGE)?),
-        LabCommand::Jobs => print(&lab.jobs(None, chess_jobs::MAX_PAGE)?),
+        LabCommand::Jobs => print(&lab.jobs(None, None, chess_jobs::MAX_PAGE)?),
         LabCommand::Models => print(&lab.models(None, chess_jobs::MAX_PAGE)?),
         LabCommand::Job { id } => print(&serde_json::json!({
             "job": lab.job(id)?,

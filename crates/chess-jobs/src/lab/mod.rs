@@ -4,6 +4,12 @@
 //! parts — reading an upload, hashing a dataset, writing a network — run
 //! outside it, and the job's claim is checked again before committing.
 
+mod admin;
+mod architectures;
+mod idempotency;
+
+pub use idempotency::{IDEMPOTENCY_TTL, Idempotency};
+
 use std::hash::{BuildHasher, RandomState};
 use std::io::Read;
 use std::path::Path;
@@ -19,7 +25,7 @@ use sha2::{Digest, Sha256};
 
 use crate::LabError;
 use crate::broker::{Broker, Claim, ClaimToken, Directive, WorkerInfo};
-use crate::ids::{DatasetId, JobId, ModelId};
+use crate::ids::{ArchitectureId, DatasetId, JobId, ModelId};
 use crate::paths::LabPaths;
 use crate::types::{
     BURN, Dataset, DatasetRef, DatasetSource, DatasetStatus, Device, EventKind, Job, JobEvent,
@@ -28,7 +34,8 @@ use crate::types::{
 };
 
 /// Schema, one entry per version (`PRAGMA user_version`).
-const MIGRATIONS: &[&str] = &["CREATE TABLE datasets (
+const MIGRATIONS: &[&str] = &[
+    "CREATE TABLE datasets (
         id         TEXT PRIMARY KEY,
         name       TEXT NOT NULL,
         source     TEXT NOT NULL,      -- upload | selfplay
@@ -80,7 +87,31 @@ const MIGRATIONS: &[&str] = &["CREATE TABLE datasets (
         bytes             INTEGER NOT NULL,
         provenance        TEXT NOT NULL,   -- Provenance (JSON)
         created_at        INTEGER NOT NULL
-    );"];
+    );",
+    // Architectures saved for reuse, settings (the active model), and the
+    // responses of requests sent with an Idempotency-Key.
+    "CREATE TABLE architectures (
+        id           TEXT PRIMARY KEY,
+        name         TEXT NOT NULL,
+        hash         TEXT NOT NULL,
+        architecture TEXT NOT NULL,    -- normalized architecture (JSON)
+        created_at   INTEGER NOT NULL
+    );
+    CREATE TABLE settings (
+        key   TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+    );
+    CREATE TABLE idempotency (
+        scope        TEXT NOT NULL,    -- who sent it (API key), method and path
+        key          TEXT NOT NULL,
+        fingerprint  TEXT NOT NULL,    -- hash of the request
+        status       INTEGER,          -- NULL while the first request runs
+        content_type TEXT,
+        body         BLOB,
+        created_at   INTEGER NOT NULL,
+        PRIMARY KEY (scope, key)
+    );",
+];
 
 /// Most items a list returns.
 pub const MAX_PAGE: usize = 200;
@@ -258,16 +289,13 @@ impl Lab {
     /// [`LabError::Invalid`] with every problem found.
     pub fn create_training(&self, request: &TrainingRequest) -> Result<Job, LabError> {
         let mut errors = Vec::new();
-        let architecture = match chess_nnue_spec::from_value(&request.architecture) {
-            Ok(architecture) => Some(architecture.normalized()),
-            Err(found) => {
-                errors.extend(found.into_iter().map(|e| ValidationError {
-                    path: format!("/architecture{}", e.path),
-                    message: e.message,
-                }));
-                None
-            }
-        };
+        let connection = self.lock();
+        let architecture = resolve_architecture(
+            &connection,
+            request.architecture.as_ref(),
+            request.architecture_id,
+            &mut errors,
+        );
         errors.extend(request.hyperparameters.validate("/hyperparameters"));
         if !self.trainers.contains(&request.trainer) {
             errors.push(ValidationError {
@@ -290,7 +318,6 @@ impl Lab {
                     .ok()
             });
 
-        let connection = self.lock();
         let datasets = resolve_datasets(&connection, &request.datasets, &mut errors);
         let positions: u64 = datasets.iter().map(|d| d.records).sum();
         if !datasets.is_empty() && positions < request.hyperparameters.batch_size as u64 {
@@ -400,20 +427,35 @@ impl Lab {
         job_in(&self.lock(), id)
     }
 
-    /// Jobs, newest first, older than `after` (a page of `limit`).
+    /// Jobs (of `kind`, or all), newest first, older than `after` (a page
+    /// of `limit`).
     ///
     /// # Errors
     ///
     /// When the database fails.
-    pub fn jobs(&self, after: Option<JobId>, limit: usize) -> Result<Vec<Job>, LabError> {
-        list(
-            &self.lock(),
-            "jobs",
-            JOB_COLUMNS,
-            after.map(|id| id.to_string()),
-            limit,
-            job_from_row,
-        )
+    pub fn jobs(
+        &self,
+        kind: Option<JobKind>,
+        after: Option<JobId>,
+        limit: usize,
+    ) -> Result<Vec<Job>, LabError> {
+        let connection = self.lock();
+        let mut statement = connection.prepare_cached(&format!(
+            "SELECT {JOB_COLUMNS} FROM jobs
+             WHERE (?1 IS NULL OR kind = ?1) AND (?2 IS NULL OR id < ?2)
+             ORDER BY id DESC LIMIT ?3"
+        ))?;
+        let jobs = statement
+            .query_map(
+                params![
+                    kind.map(JobKind::as_str),
+                    after.map(|id| id.to_string()),
+                    limit.clamp(1, MAX_PAGE) as i64
+                ],
+                job_from_row,
+            )?
+            .collect::<Result<_, _>>()?;
+        Ok(jobs)
     }
 
     /// Events of a job after `after_seq` (0: from the start), oldest first.
@@ -864,6 +906,55 @@ fn check_name(name: &str, path: &str) -> Result<String, ValidationError> {
         return Err(error("must not contain control characters"));
     }
     Ok(name.to_owned())
+}
+
+/// The architecture of a training request, given inline or by id;
+/// problems go to `errors`.
+fn resolve_architecture(
+    connection: &Connection,
+    document: Option<&Value>,
+    id: Option<ArchitectureId>,
+    errors: &mut Vec<ValidationError>,
+) -> Option<chess_nnue_spec::Architecture> {
+    let mut error = |path: &str, message: String| {
+        errors.push(ValidationError {
+            path: path.into(),
+            message,
+        });
+    };
+    match (document, id) {
+        (Some(document), None) => match chess_nnue_spec::from_value(document) {
+            Ok(architecture) => Some(architecture.normalized()),
+            Err(found) => {
+                errors.extend(found.into_iter().map(|e| ValidationError {
+                    path: format!("/architecture{}", e.path),
+                    message: e.message,
+                }));
+                None
+            }
+        },
+        (None, Some(id)) => match architectures::architecture_in(connection, id) {
+            Ok(stored) => Some(stored.architecture),
+            Err(_) => {
+                error("/architectureId", format!("no architecture {id}"));
+                None
+            }
+        },
+        (Some(_), Some(_)) => {
+            error(
+                "/architectureId",
+                "give either architecture or architectureId, not both".into(),
+            );
+            None
+        }
+        (None, None) => {
+            error(
+                "/architecture",
+                "an architecture (or an architectureId) is required".into(),
+            );
+            None
+        }
+    }
 }
 
 /// The datasets of a training request, as references; problems go to `errors`.

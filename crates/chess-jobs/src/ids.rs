@@ -14,6 +14,11 @@ macro_rules! id_type {
             Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
         )]
         #[serde(transparent)]
+        #[cfg_attr(
+                            feature = "openapi",
+                            derive(utoipa::ToSchema),
+                            schema(value_type = String, format = "uuid")
+                        )]
         pub struct $name(Uuid);
 
         impl $name {
@@ -40,6 +45,7 @@ macro_rules! id_type {
     };
 }
 
+id_type!(ArchitectureId, "saved architecture");
 id_type!(JobId, "job");
 id_type!(DatasetId, "dataset");
 id_type!(ModelId, "model");

@@ -50,7 +50,8 @@ pub struct ApiDoc;
 /// Every route lives under `/api` or `/ws` so that a reverse proxy (Nginx in
 /// Docker, Vite in development) can expose the UI and the API on one origin.
 pub fn router(state: AppState) -> Router {
-    Router::new()
+    let nnue = state.nnue.as_ref().map(chess_nnue_api::NnueApi::router);
+    let app = Router::new()
         .route("/api/health", get(health::health))
         .route(
             "/api/openapi.json",
@@ -95,6 +96,10 @@ pub fn router(state: AppState) -> Router {
         .route("/api/review/games/{id}", get(review::game))
         .route("/api/review/games/{id}/analyse", post(review::analyse_game))
         .route("/ws", get(ws::upgrade))
-        .layer(TraceLayer::new_for_http())
-        .with_state(state)
+        .with_state(state);
+    match nnue {
+        Some(nnue) => app.merge(nnue),
+        None => app,
+    }
+    .layer(TraceLayer::new_for_http())
 }

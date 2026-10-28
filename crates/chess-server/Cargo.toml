@@ -20,6 +20,8 @@ chess-chesscom.workspace = true
 chess-openings.workspace = true
 chess-review.workspace = true
 chess-reviewer.workspace = true
+chess-jobs.workspace = true
+chess-nnue-api.workspace = true
 anyhow.workspace = true
 axum.workspace = true
 figment.workspace = true
@@ -35,6 +37,8 @@ ts-rs.workspace = true
 utoipa.workspace = true
 
 [dev-dependencies]
+chess-dataset.workspace = true
+chess-nnue.workspace = true
 figment = { workspace = true, features = ["test"] }
 tokio-tungstenite.workspace = true
 tower.workspace = true

@@ -22,13 +22,14 @@ use thiserror::Error;
 
 pub use broker::{Broker, Claim, ClaimToken, Directive, WorkerInfo};
 pub use hyper::Hyperparameters;
-pub use ids::{DatasetId, JobId, ModelId};
-pub use lab::{Lab, MAX_PAGE};
+pub use ids::{ArchitectureId, DatasetId, JobId, ModelId};
+pub use lab::{IDEMPOTENCY_TTL, Idempotency, Lab, MAX_PAGE};
 pub use paths::LabPaths;
 pub use types::{
     BURN, Dataset, DatasetRef, DatasetSource, DatasetStatus, Device, EventKind, Job, JobEvent,
     JobKind, JobSpec, JobStatus, Model, Progress, Provenance, SelfplayJob, SelfplayProgress,
-    SelfplayRequest, TrainingJob, TrainingProgress, TrainingRequest, TrainingSummary,
+    SelfplayRequest, StoredArchitecture, TrainingJob, TrainingProgress, TrainingRequest,
+    TrainingSummary,
 };
 
 /// Why a lab operation failed.
@@ -61,6 +62,16 @@ pub enum LabError {
     /// A file could not be read or written.
     #[error(transparent)]
     Io(#[from] std::io::Error),
+    /// The queue could not be reached (remote brokers).
+    #[error("lab unavailable: {0}")]
+    Unavailable(String),
+}
+
+/// Reference to the architecture schema, which the API adds to its
+/// components (it comes from `chess_nnue_spec::json_schema`).
+#[cfg(feature = "openapi")]
+fn architecture_schema() -> utoipa::openapi::Ref {
+    utoipa::openapi::Ref::from_schema_name("Architecture")
 }
 
 fn summary(errors: &[ValidationError]) -> String {

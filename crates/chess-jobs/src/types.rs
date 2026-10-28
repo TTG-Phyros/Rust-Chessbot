@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::hyper::Hyperparameters;
-use crate::ids::{DatasetId, JobId, ModelId};
+use crate::ids::{ArchitectureId, DatasetId, JobId, ModelId};
 
 /// Text values of an enum stored in a column.
 macro_rules! text_enum {
@@ -34,6 +34,7 @@ macro_rules! text_enum {
 
 /// What a job does.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum JobKind {
     /// Trains a network on datasets; produces a model.
@@ -59,6 +60,7 @@ text_enum!(JobKind {
 ///
 /// `failed` training jobs can be resumed too (from their last checkpoint).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum JobStatus {
     /// Waiting for a worker.
@@ -106,6 +108,7 @@ impl JobStatus {
 
 /// Where a training job runs.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum Device {
     /// On the GPU of a worker that has one, otherwise on a CPU worker.
@@ -125,6 +128,7 @@ text_enum!(Device {
 
 /// A dataset a training job reads, as it was when the job was created.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct DatasetRef {
     /// The dataset.
@@ -137,9 +141,11 @@ pub struct DatasetRef {
 
 /// A training job, fully resolved: everything needed to reproduce it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct TrainingJob {
     /// Architecture, normalized.
+    #[cfg_attr(feature = "openapi", schema(schema_with = crate::architecture_schema))]
     pub architecture: Architecture,
     /// Its hash.
     pub architecture_hash: String,
@@ -157,6 +163,7 @@ pub struct TrainingJob {
 
 /// A self-play job.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct SelfplayJob {
     /// Dataset filled by the games.
@@ -177,6 +184,7 @@ pub struct SelfplayJob {
 // One per job, never in hot paths: boxing the large variant buys nothing.
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum JobSpec {
     /// See [`TrainingJob`].
@@ -198,6 +206,7 @@ impl JobSpec {
 
 /// Latest progress of a training job.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct TrainingProgress {
     /// Superbatches done.
@@ -220,6 +229,7 @@ pub struct TrainingProgress {
 
 /// Latest progress of a self-play job.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct SelfplayProgress {
     /// Games played.
@@ -232,6 +242,7 @@ pub struct SelfplayProgress {
 
 /// Latest progress of a job.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum Progress {
     /// See [`TrainingProgress`].
@@ -242,6 +253,7 @@ pub enum Progress {
 
 /// A job.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct Job {
     /// Identifier.
@@ -274,6 +286,7 @@ pub struct Job {
 
 /// Kind of a job event.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum EventKind {
     /// Status change: `{status, attempt, error?}`.
@@ -298,6 +311,7 @@ text_enum!(EventKind {
 
 /// Something that happened to a job, in order (`seq` grows across jobs).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct JobEvent {
     /// Position in the log of all events.
@@ -314,6 +328,7 @@ pub struct JobEvent {
 
 /// Where a dataset comes from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum DatasetSource {
     /// Uploaded file.
@@ -329,6 +344,7 @@ text_enum!(DatasetSource {
 
 /// Whether a dataset can be trained on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum DatasetStatus {
     /// Being generated by its self-play job.
@@ -347,6 +363,7 @@ text_enum!(DatasetStatus {
 
 /// A dataset.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct Dataset {
     /// Identifier.
@@ -377,6 +394,7 @@ pub struct Dataset {
 
 /// How a model was made: enough to train it again.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct Provenance {
     /// Trainer backend.
@@ -399,6 +417,7 @@ pub struct Provenance {
 
 /// A trained network.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct Model {
     /// Identifier.
@@ -408,6 +427,7 @@ pub struct Model {
     /// Training job that produced it.
     pub job: Option<JobId>,
     /// Architecture, normalized.
+    #[cfg_attr(feature = "openapi", schema(schema_with = crate::architecture_schema))]
     pub architecture: Architecture,
     /// Its hash.
     pub architecture_hash: String,
@@ -423,13 +443,19 @@ pub struct Model {
 
 /// A training job, as a client asks for it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TrainingRequest {
     /// Name (default: the architecture's).
     #[serde(default)]
     pub name: Option<String>,
     /// Architecture document (validated like `POST /architectures:validate`).
-    pub architecture: Value,
+    #[serde(default)]
+    #[cfg_attr(feature = "openapi", schema(schema_with = crate::architecture_schema))]
+    pub architecture: Option<Value>,
+    /// A saved architecture, instead of `architecture`.
+    #[serde(default)]
+    pub architecture_id: Option<ArchitectureId>,
     /// Datasets to train on (ready ones).
     pub datasets: Vec<DatasetId>,
     /// Hyperparameters (defaults for the missing ones).
@@ -455,6 +481,7 @@ pub const BURN: &str = "burn";
 
 /// A self-play dataset, as a client asks for it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SelfplayRequest {
     /// Name of the dataset (default: from the parameters).
@@ -482,6 +509,7 @@ fn default_nodes() -> u64 {
 
 /// Report of a finished training, sent with the network.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct TrainingSummary {
     /// Superbatches trained.
@@ -492,4 +520,22 @@ pub struct TrainingSummary {
     pub final_loss: Option<f64>,
     /// Device.
     pub device: String,
+}
+
+/// An architecture saved for reuse.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(rename_all = "camelCase")]
+pub struct StoredArchitecture {
+    /// Identifier.
+    pub id: ArchitectureId,
+    /// Name (from its metadata).
+    pub name: String,
+    /// Hash.
+    pub hash: String,
+    /// Architecture, normalized (every default written out).
+    #[cfg_attr(feature = "openapi", schema(schema_with = crate::architecture_schema))]
+    pub architecture: Architecture,
+    /// Creation time (Unix milliseconds).
+    pub created_at: i64,
 }

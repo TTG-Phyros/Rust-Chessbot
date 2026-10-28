@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 
 /// How a network is trained. Every field has a default.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(default, rename_all = "camelCase", deny_unknown_fields)]
 pub struct Hyperparameters {
     /// Superbatches to train (a checkpoint is saved after each).

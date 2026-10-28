@@ -62,10 +62,11 @@ ARG UID=10001
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
-# /cache holds the review cache (SQLite): a named volume mounted there takes
-# the owner of this directory, so the unprivileged user can write to it.
+# /cache holds the review cache (SQLite), /lab the NNUE lab's database and
+# /datasets the training positions: a named volume mounted there takes the
+# owner of this directory, so the unprivileged user can write to it.
 RUN useradd --system --uid ${UID} --home-dir /data --shell /usr/sbin/nologin chess \
-    && mkdir -p /data /cache && chown chess /data /cache
+    && mkdir -p /data /cache /lab /datasets && chown chess /data /cache /lab /datasets
 COPY --from=builder /usr/local/bin/chess-server /usr/local/bin/chess-uci \
      /usr/local/bin/chess-reviewer /usr/local/bin/
 COPY --from=stockfish /usr/local/bin/stockfish /usr/local/bin/

@@ -39,7 +39,7 @@ fn find_move(pos: &Position, uci: &str) -> Move {
 }
 
 fn inference(c: &mut Criterion) {
-    let eval = NnueEval::new(weights());
+    let eval = NnueEval::from_legacy(&weights()).unwrap();
     let pos = Position::from_fen(KIWIPETE).unwrap();
     let mut state = eval.new_state(&pos);
     let mut group = c.benchmark_group("nnue");

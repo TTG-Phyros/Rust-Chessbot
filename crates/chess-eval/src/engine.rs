@@ -3,7 +3,9 @@
 
 use chess_core::{Move, Position};
 
-use crate::nnue::{NnueError, NnueEval, NnueState, NnueWeights};
+#[cfg(test)]
+use crate::nnue::NnueWeights;
+use crate::nnue::{NnueError, NnueEval, NnueState};
 use crate::{ClassicEval, Evaluator, Score};
 
 /// Classical or NNUE evaluation, decided at runtime.
@@ -22,14 +24,15 @@ impl Default for EngineEval {
 }
 
 impl EngineEval {
-    /// Network evaluation from the bytes of a `.nnue` file.
+    /// Network evaluation from the bytes of a `.nnue` file (any supported
+    /// format version and architecture).
     ///
     /// # Errors
     ///
     /// [`NnueError`] if the bytes are not a compatible network; callers
     /// usually fall back to [`EngineEval::default`].
     pub fn from_nnue_bytes(bytes: &[u8]) -> Result<Self, NnueError> {
-        Ok(Self::Nnue(NnueEval::new(NnueWeights::from_bytes(bytes)?)))
+        NnueEval::from_bytes(bytes).map(Self::Nnue)
     }
 
     /// `"nnue"` or `"classic"`.

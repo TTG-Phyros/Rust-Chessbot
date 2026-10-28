@@ -99,6 +99,18 @@ gen-types:
 nnue-validate +files:
     cargo run -q -p chess-nnue-spec --example validate -- {{ files }}
 
+# Print the header, architecture and hash of a network file
+nnue-info file:
+    cargo run -q --release -p chess-nnue -- info {{ file }}
+
+# Rewrite a network (e.g. a legacy version 1 file) in the current format
+nnue-convert input output:
+    cargo run -q --release -p chess-nnue -- convert {{ input }} {{ output }}
+
+# Write an untrained network of an architecture (preset id or file), for tests and benchmarks
+nnue-random architecture output *args:
+    cargo run -q --release -p chess-nnue -- random {{ architecture }} {{ output }} {{ args }}
+
 # lint + test
 ci: lint test
 

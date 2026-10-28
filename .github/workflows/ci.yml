@@ -30,10 +30,10 @@ jobs:
       # chess-search alone: fails if it uses a concrete evaluator instead of the trait.
       - run: cargo check -p chess-search
       # NNUE kernels: AVX2 on x86-64, portable code elsewhere; keep both compiling.
-      - name: Clippy chess-eval for AArch64
+      - name: Clippy chess-nnue for AArch64
         run: |
           rustup target add aarch64-unknown-linux-gnu
-          cargo clippy -p chess-eval --lib --target aarch64-unknown-linux-gnu -- -D warnings
+          cargo clippy -p chess-nnue --lib --target aarch64-unknown-linux-gnu -- -D warnings
       - run: cargo test --workspace
       - name: Deep perft (release)
         run: cargo test --release -p chess-core --test perft -- --include-ignored

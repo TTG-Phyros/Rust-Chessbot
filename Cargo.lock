@@ -1350,7 +1350,21 @@ name = "chess-eval"
 version = "0.1.0"
 dependencies = [
  "chess-core",
+ "chess-nnue",
  "criterion",
+]
+
+[[package]]
+name = "chess-nnue"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chess-core",
+ "chess-nnue-spec",
+ "clap",
+ "criterion",
+ "serde_json",
+ "sha2 0.11.1",
  "thiserror 2.0.21",
 ]
 

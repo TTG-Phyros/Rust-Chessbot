@@ -13,6 +13,7 @@ members = [
     "crates/chess-review",
     "crates/chess-reviewer",
     "crates/chess-nnue-spec",
+    "crates/chess-nnue",
 ]
 
 [workspace.package]
@@ -33,6 +34,7 @@ chess-openings = { path = "crates/chess-openings" }
 chess-review = { path = "crates/chess-review" }
 chess-reviewer = { path = "crates/chess-reviewer" }
 chess-nnue-spec = { path = "crates/chess-nnue-spec" }
+chess-nnue = { path = "crates/chess-nnue" }
 
 # Errors
 thiserror = "2.0.21"
@@ -111,4 +113,7 @@ opt-level = 3
 opt-level = 3
 
 [profile.dev.package.chess-search]
+opt-level = 3
+
+[profile.dev.package.chess-nnue]
 opt-level = 3

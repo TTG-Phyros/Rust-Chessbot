@@ -105,8 +105,8 @@ pub(super) async fn explain(
     let sign = position.side_to_move().sign();
     let static_cp = eval.evaluate(&position) * sign;
     let pieces = match &eval {
-        EngineEval::Nnue(network) => network
-            .weights()
+        EngineEval::Nnue(eval) => eval
+            .network()
             .piece_contributions(&position)
             .into_iter()
             .map(|(square, piece, cp)| PieceContribution {

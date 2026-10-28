@@ -82,6 +82,9 @@ pub struct AnalysisConfig {
     pub preset: String,
     /// The presets offered, fastest first.
     pub presets: Vec<Preset>,
+    /// Settings of the review of a single game, deeper than the presets:
+    /// its positions are shared out between the workers.
+    pub game: Preset,
     /// Games analysed at once, one engine each; 0 for half the CPU cores.
     pub workers: usize,
 }
@@ -157,6 +160,7 @@ impl Default for AnalysisConfig {
                 preset("balanced", "Équilibré", 14, 2),
                 preset("deep", "Approfondi", 16, 3),
             ],
+            game: preset("game", "Bilan complet", 20, 3),
             workers: 0,
         }
     }
@@ -294,6 +298,7 @@ impl ReviewConfig {
         self.analysis
             .presets
             .iter()
+            .chain([&self.analysis.game])
             .find(|preset| preset.name.eq_ignore_ascii_case(name))
     }
 

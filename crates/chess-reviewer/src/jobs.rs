@@ -3,6 +3,7 @@
 //! the progress as it goes.
 
 use std::collections::HashMap;
+use std::ops::Range;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
@@ -10,7 +11,8 @@ use std::time::{Duration, Instant};
 use chess_chesscom::{ApiGame, Client, GameFilter, PlayedGame, is_valid_username};
 use chess_review::elo::EloModel;
 use chess_review::{
-    AnalysisEngine, Budget, EngineSpec, GameAnalysis, SearchSettings, analyse_game, bench,
+    AnalysisEngine, Budget, EngineSpec, GameAnalysis, PositionEval, SearchSettings, analyse_game,
+    analyse_positions, bench,
 };
 use serde::Serialize;
 use tokio::sync::{Semaphore, watch};
@@ -30,6 +32,8 @@ pub const MAX_DEPTH: u32 = 40;
 pub const MAX_MOVETIME_MS: u64 = 60_000;
 /// Most nodes per position a request may ask for.
 pub const MAX_NODES: u64 = 100_000_000;
+/// Fewest positions a worker takes of a game shared out between workers.
+const MIN_SLICE: usize = 8;
 
 /// What to review.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -41,6 +45,17 @@ pub struct JobRequest {
     /// Engine; the configured one if `None`.
     pub engine: Option<EngineKind>,
     /// Search settings; the configured ones if `None`.
+    pub settings: Option<SearchSettings>,
+}
+
+/// What to review of a single cached game.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GameJobRequest {
+    /// The game (Chess.com UUID), already in the cache.
+    pub game_id: String,
+    /// Engine; the configured one if `None`.
+    pub engine: Option<EngineKind>,
+    /// Search settings; those of `analysis.game` if `None`.
     pub settings: Option<SearchSettings>,
 }
 
@@ -208,7 +223,7 @@ struct Plan {
 pub struct Job {
     /// Identifier.
     pub id: u64,
-    /// Player reviewed.
+    /// Player reviewed (empty for the review of a single game).
     pub username: String,
     cancelled: AtomicBool,
     progress: watch::Sender<JobProgress>,
@@ -284,6 +299,18 @@ impl Job {
             progress.eta_secs = None;
         });
         *self.finished.lock().unwrap_or_else(PoisonError::into_inner) = Some(Instant::now());
+    }
+
+    /// Ends the job with the outcome of its work.
+    fn conclude(&self, result: Result<(), Error>) {
+        match result {
+            Ok(()) if self.is_cancelled() => self.finish(JobState::Cancelled, None),
+            Ok(()) => self.finish(JobState::Done, None),
+            Err(err) => {
+                tracing::warn!(job = self.id, %err, "review failed");
+                self.finish(JobState::Failed, Some(err.to_string()));
+            }
+        }
     }
 
     fn finished_since(&self) -> Option<Duration> {
@@ -426,6 +453,24 @@ impl ReviewService {
         })
     }
 
+    /// The analysis of game `id` to show on its own page: the deepest one
+    /// (the highest mean depth reached), then the one with the most lines,
+    /// then the latest. A game reviewed on its own thus keeps its review
+    /// when a quicker review of many games covers it again.
+    ///
+    /// # Errors
+    ///
+    /// When the cache fails.
+    pub fn deepest_analysis(&self, id: &str) -> Result<Option<GameAnalysis>, Error> {
+        let analyses = self.store.analyses(id)?;
+        // Latest first, and `max_by` keeps the last of equals: oldest first.
+        Ok(analyses.into_iter().rev().max_by(|a, b| {
+            mean_depth(a)
+                .total_cmp(&mean_depth(b))
+                .then(a.settings.multipv.cmp(&b.settings.multipv))
+        }))
+    }
+
     /// Profile of `username` over their cached games kept by `filter` that
     /// have an analysis (see [`Self::analysis_to_show`]); also returns how
     /// many of these games have none.
@@ -501,34 +546,179 @@ impl ReviewService {
             .unwrap_or_else(|| self.config.search_settings());
         check_settings(&settings)?;
 
+        let job = self.new_job(request.username.clone());
+        let kind = request.engine.unwrap_or(self.config.analysis.engine);
+        let service = Arc::clone(self);
+        let running = Arc::clone(&job);
+        tokio::spawn(async move {
+            let result = service.run(&running, &request, kind, settings).await;
+            running.conclude(result);
+        });
+        Ok(job)
+    }
+
+    /// Checks `request` and starts reviewing one cached game in the
+    /// background, its positions shared out between the workers. Nothing
+    /// is analysed when the game already has an analysis with these
+    /// settings.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Invalid`] for settings out of bounds or a game missing
+    /// from the cache (or unreadable).
+    pub fn start_game(self: &Arc<Self>, request: GameJobRequest) -> Result<Arc<Job>, Error> {
+        let settings = request
+            .settings
+            .unwrap_or_else(|| self.config.analysis.game.settings());
+        check_settings(&settings)?;
+        let api = self
+            .store
+            .game(&request.game_id)?
+            .ok_or_else(|| Error::Invalid(format!("no cached game {}", request.game_id)))?;
+        let game = PlayedGame::from_api(&api)
+            .map_err(|err| Error::Invalid(format!("unreadable game {}: {err}", api.id())))?;
+
+        let job = self.new_job(String::new());
+        job.update(|p| {
+            p.games = vec![game.id.clone()];
+            p.state = JobState::Analysing;
+        });
+        let kind = request.engine.unwrap_or(self.config.analysis.engine);
+        let service = Arc::clone(self);
+        let running = Arc::clone(&job);
+        tokio::spawn(async move {
+            let result = service.run_game(&running, game, kind, settings).await;
+            running.conclude(result);
+        });
+        Ok(job)
+    }
+
+    fn new_job(&self, username: String) -> Arc<Job> {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let job = Arc::new(Job {
             id,
-            username: request.username.clone(),
+            username,
             cancelled: AtomicBool::new(false),
             progress: watch::Sender::new(JobProgress::new()),
             finished: Mutex::new(None),
             timing: Mutex::new(Timing::default()),
         });
-        {
-            let mut jobs = self.jobs();
-            jobs.retain(|_, job| job.finished_since().is_none_or(|age| age < RETENTION));
-            jobs.insert(id, Arc::clone(&job));
+        let mut jobs = self.jobs();
+        jobs.retain(|_, job| job.finished_since().is_none_or(|age| age < RETENTION));
+        jobs.insert(id, Arc::clone(&job));
+        job
+    }
+
+    async fn run_game(
+        self: &Arc<Self>,
+        job: &Arc<Job>,
+        game: PlayedGame,
+        kind: EngineKind,
+        settings: SearchSettings,
+    ) -> Result<(), Error> {
+        let pool = Arc::clone(&self.pools[&kind]);
+        let engine = engine_id(&pool).await?;
+        let key = analysis_key(&engine, &settings);
+        job.update(|p| p.engine = Some(engine.clone()));
+        if self.store.analysis(&game.id, &key)?.is_some() {
+            job.update(|p| p.games_cached = 1);
+            return Ok(());
         }
-        let kind = request.engine.unwrap_or(self.config.analysis.engine);
-        let service = Arc::clone(self);
-        let running = Arc::clone(&job);
-        tokio::spawn(async move {
-            match service.run(&running, &request, kind, settings).await {
-                Ok(()) if running.is_cancelled() => running.finish(JobState::Cancelled, None),
-                Ok(()) => running.finish(JobState::Done, None),
-                Err(err) => {
-                    tracing::warn!(job = running.id, %err, "review failed");
-                    running.finish(JobState::Failed, Some(err.to_string()));
+
+        let total = positions_of(&game);
+        let slices = slices(total, self.config.workers());
+        job.start_analyses(total, self.known_speed(&key)?, slices.len());
+        let game = Arc::new(game);
+        let mut tasks = JoinSet::new();
+        for (index, plies) in slices.into_iter().enumerate() {
+            let (service, job, pool, game) = (
+                Arc::clone(self),
+                Arc::clone(job),
+                Arc::clone(&pool),
+                Arc::clone(&game),
+            );
+            tasks.spawn(async move {
+                let result = service
+                    .analyse_slice(&job, &pool, &game, plies, settings)
+                    .await;
+                (index, result)
+            });
+        }
+        let mut parts = Vec::new();
+        let mut seconds = 0.0;
+        let mut failure = None;
+        while let Some(joined) = tasks.join_next().await {
+            match joined {
+                Ok((index, Ok(Some((positions, time))))) => {
+                    parts.push((index, positions));
+                    seconds += time;
                 }
+                Ok((_, Ok(None))) => {}
+                Ok((_, Err(err))) => failure = Some(format!("{err:#}")),
+                Err(err) => failure = Some(err.to_string()),
             }
-        });
-        Ok(job)
+            if failure.is_some() {
+                // Without one slice, the others are of no use.
+                job.cancel();
+            }
+        }
+        if let Some(err) = failure {
+            job.update(|p| p.games_failed = 1);
+            return Err(Error::Engine(err));
+        }
+        if job.is_cancelled() {
+            return Ok(());
+        }
+        parts.sort_unstable_by_key(|(index, _)| *index);
+        let analysis = GameAnalysis {
+            engine,
+            settings,
+            positions: parts.into_iter().flat_map(|(_, part)| part).collect(),
+        };
+        // Engine time per position, as for whole games: the next estimates.
+        #[allow(clippy::cast_precision_loss)] // Position counts.
+        let positions = analysis.positions.len() as f64;
+        self.store
+            .save_analysis(&game.id, &analysis, crate::now())?;
+        self.store.record_speed(&key, positions, seconds)?;
+        job.update(|p| p.games_done = 1);
+        Ok(())
+    }
+
+    /// Analyses the positions `plies` of `game` once a worker is free, with
+    /// the engine time it took (seconds); `None` when cancelled.
+    async fn analyse_slice(
+        &self,
+        job: &Arc<Job>,
+        pool: &Arc<EnginePool>,
+        game: &Arc<PlayedGame>,
+        plies: Range<usize>,
+        settings: SearchSettings,
+    ) -> anyhow::Result<Option<(Vec<PositionEval>, f64)>> {
+        let _permit = Arc::clone(&self.workers).acquire_owned().await?;
+        if job.is_cancelled() {
+            return Ok(None);
+        }
+        let (job, pool, game) = (Arc::clone(job), Arc::clone(pool), Arc::clone(game));
+        tokio::task::spawn_blocking(move || {
+            let mut engine = pool.take()?;
+            let clock = Instant::now();
+            let positions = analyse_positions(
+                engine.as_mut(),
+                game.game.start(),
+                game.game.moves(),
+                plies,
+                &settings,
+                |_| {
+                    job.advance();
+                    !job.is_cancelled()
+                },
+            )?;
+            let seconds = clock.elapsed().as_secs_f64();
+            pool.give_back(engine);
+            Ok(positions.map(|positions| (positions, seconds)))
+        })
+        .await?
     }
 
     async fn run(
@@ -813,6 +1003,27 @@ fn positions_of(game: &PlayedGame) -> usize {
     game.game.moves().len() + 1
 }
 
+/// Contiguous slices of the `total` positions of a game for at most
+/// `workers` workers, none shorter than [`MIN_SLICE`] (unless the game is).
+fn slices(total: usize, workers: usize) -> Vec<Range<usize>> {
+    let count = workers.min(total / MIN_SLICE).max(1);
+    (0..count)
+        .map(|index| index * total / count..(index + 1) * total / count)
+        .collect()
+}
+
+/// Mean depth reached by the best lines of an analysis (0 without any).
+fn mean_depth(analysis: &GameAnalysis) -> f64 {
+    let depths: Vec<f64> = analysis
+        .positions
+        .iter()
+        .filter_map(|position| position.lines.first().map(|line| f64::from(line.depth)))
+        .collect();
+    #[allow(clippy::cast_precision_loss)] // Position counts.
+    let count = depths.len().max(1) as f64;
+    depths.iter().sum::<f64>() / count
+}
+
 /// Identity of the engines of `pool`, read from one of them.
 async fn engine_id(pool: &Arc<EnginePool>) -> Result<String, Error> {
     let pool = Arc::clone(pool);
@@ -872,6 +1083,16 @@ mod tests {
         // More workers than games.
         assert!((review_time(&[80], 0.5, 8) - 40.0).abs() < 1e-9);
         assert!(review_time(&[], 0.5, 4).abs() < 1e-9);
+    }
+
+    #[test]
+    fn games_are_sliced_for_the_workers() {
+        assert_eq!(slices(80, 4), [0..20, 20..40, 40..60, 60..80]);
+        assert_eq!(slices(81, 4), [0..20, 20..40, 40..60, 60..81]);
+        // Short games: slices of at least MIN_SLICE positions.
+        assert_eq!(slices(20, 4), [0..10, 10..20]);
+        assert_eq!(slices(5, 4), vec![0..5]);
+        assert_eq!(slices(1, 0), vec![0..1]);
     }
 
     #[test]

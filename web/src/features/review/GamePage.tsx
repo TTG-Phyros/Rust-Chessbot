@@ -1,11 +1,12 @@
-import { type CSSProperties, useEffect, useMemo, useState } from 'react';
+import { type CSSProperties, useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 
 import type { ReviewGameView } from '../../api/generated/ReviewGameView';
+import type { ReviewOptions } from '../../api/generated/ReviewOptions';
 import type { ReviewPlayer } from '../../api/generated/ReviewPlayer';
 import type { ReviewPlayerStats } from '../../api/generated/ReviewPlayerStats';
 import type { Side } from '../../api/generated/Side';
-import { usePosition, useReviewGame } from '../../api/hooks';
+import { usePosition, useReviewGame, useReviewOptions } from '../../api/hooks';
 import { Board } from '../../components/Board';
 import { EvalBar } from '../../components/EvalBar';
 import { EvalGraph } from '../../components/EvalGraph';
@@ -15,6 +16,7 @@ import { formatLine, moveLabel, newGame } from '../../lib/game';
 import { frenchSan } from '../../lib/san';
 import { formatScore } from '../../lib/score';
 import { ClassBadge } from './ClassBadge';
+import { GameAnalysisPanel } from './GameAnalysisPanel';
 import { formatElo } from './profile';
 import {
   BEST_ARROW,
@@ -27,19 +29,34 @@ import {
   formatDate,
   formatResult,
   isNotable,
+  keyMoments,
+  nextMoment,
   reviewArrows,
   sideOf,
 } from './review';
 
 /** Moves after which the board shows nothing wrong. */
 const SOUND = new Set(['brilliant', 'great', 'best', 'book']);
+/** Moves after which the best move is what should have been played. */
+const WRONG = new Set(['inaccuracy', 'mistake', 'miss', 'blunder']);
 
 export function GamePage() {
   const { id = '' } = useParams();
   const [search] = useSearchParams();
   const player = search.get('player');
   const ply = Number.parseInt(search.get('ply') ?? '0', 10);
-  const { view, error } = useReviewGame(id);
+  // Bumped when a review of the game ends: it is read again.
+  const [version, setVersion] = useState(0);
+  const refresh = useCallback(() => {
+    setVersion((value) => value + 1);
+  }, []);
+  const fetched = useReviewGame(id, version);
+  const options = useReviewOptions();
+  // The game stays on screen while it is read again.
+  const [latest, setLatest] = useState<ReviewGameView | null>(null);
+  if (fetched.view && fetched.view !== latest) setLatest(fetched.view);
+  const view = fetched.view ?? (latest?.game.id === id ? latest : null);
+  const error = fetched.error;
 
   if (error) {
     return (
@@ -56,6 +73,8 @@ export function GamePage() {
     <GameReview
       key={`${view.game.id}-${String(start)}`}
       view={view}
+      options={options.view}
+      onReviewed={refresh}
       player={player}
       start={start}
     />
@@ -176,9 +195,7 @@ function Verdict({ view, shown }: { view: ReviewGameView; shown: number }) {
   if (!analysis) {
     return (
       <Card title="Coup joué">
-        <p className="text-sm text-dim">
-          Partie pas encore analysée : lancez l'analyse des parties de ce joueur.
-        </p>
+        <p className="text-sm text-dim">Partie pas encore analysée : lancez son bilan ci-dessus.</p>
       </Card>
     );
   }
@@ -216,7 +233,7 @@ function Verdict({ view, shown }: { view: ReviewGameView; shown: number }) {
       {best && !SOUND.has(verdict.class) && (
         <p className="mt-4 text-sm text-mute">
           <span className="mr-2 inline-block size-2 rounded-full bg-think" aria-hidden />
-          Il fallait jouer{' '}
+          {WRONG.has(verdict.class) ? 'Il fallait jouer' : 'Le meilleur coup était'}{' '}
           <span className="font-mono text-bone">{frenchSan(best.san[0] ?? '')}</span>{' '}
           <span className="font-mono text-dim">({formatScore(best.score)})</span>
         </p>
@@ -253,10 +270,15 @@ function BestLines({ view, shown }: { view: ReviewGameView; shown: number }) {
 
 function GameReview({
   view,
+  options,
+  onReviewed,
   player,
   start,
 }: {
   view: ReviewGameView;
+  options: ReviewOptions | null;
+  /** Called once a review of the game ends. */
+  onReviewed: () => void;
   player: string | null;
   /** Moves shown at first. */
   start: number;
@@ -306,6 +328,12 @@ function GameReview({
         )
       : {};
   const boardView = position.view && verdict ? { ...position.view, lastMove: null } : position.view;
+  // The class of the move played, on its square, as on Chess.com.
+  const squareBadges =
+    verdict && last ? { [last.uci.slice(2, 4)]: <ClassBadge kind={verdict.class} fill /> } : {};
+  const moments = keyMoments(view);
+  const previousMoment = nextMoment(moments, shown, false);
+  const nextMomentAt = nextMoment(moments, shown, true);
   const toMove = position.view?.sideToMove ?? 'white';
   const top: Side = orientation === 'white' ? 'black' : 'white';
   const strip = (side: Side) => (
@@ -382,6 +410,7 @@ function GameReview({
                   onMove={() => undefined}
                   arrows={reviewArrows(view, shown)}
                   squareTints={squareTints}
+                  squareBadges={squareBadges}
                 />
               </div>
             </div>
@@ -417,6 +446,32 @@ function GameReview({
             <span className="font-mono text-xs text-dim">
               demi-coup {shown} / {length}
             </span>
+            {moments.length > 0 && (
+              <div className="flex gap-1">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  title="Coup clé précédent (brillant, très bon coup, erreur…)"
+                  disabled={previousMoment === null}
+                  onClick={() => {
+                    if (previousMoment !== null) setShown(previousMoment);
+                  }}
+                >
+                  ‹ coup clé
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  title="Coup clé suivant (brillant, très bon coup, erreur…)"
+                  disabled={nextMomentAt === null}
+                  onClick={() => {
+                    if (nextMomentAt !== null) setShown(nextMomentAt);
+                  }}
+                >
+                  coup clé ›
+                </Button>
+              </div>
+            )}
             <span className="flex-1" />
             {analysis && (
               <span className="flex gap-3 text-xs text-dim">
@@ -454,6 +509,7 @@ function GameReview({
         </div>
 
         <div className="space-y-4">
+          {options && <GameAnalysisPanel view={view} options={options} onDone={onReviewed} />}
           <Verdict view={view} shown={shown} />
           <Card title="Coups">
             <MoveList
@@ -464,7 +520,7 @@ function GameReview({
               maxHeight="max-h-96"
               decorate={(ply) => {
                 const kind = analysis?.moves[ply]?.class;
-                return kind && isNotable(kind) ? <ClassBadge kind={kind} /> : null;
+                return kind ? <ClassBadge kind={kind} /> : null;
               }}
             />
           </Card>

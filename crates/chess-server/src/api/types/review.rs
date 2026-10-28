@@ -67,6 +67,27 @@ pub struct ReviewRequest {
     pub multipv: Option<u32>,
 }
 
+/// Body of `POST /api/review/games/{id}/analyse`: how deep to review one
+/// game. Every field is optional (the settings of a single game's review).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
+pub struct ReviewGameRequest {
+    /// Engine.
+    pub engine: Option<ReviewEngine>,
+    /// Preset (`name` of a [`ReviewPreset`], or of the game preset); the
+    /// game preset if absent. `depth`, `movetimeMs` and `multipv` override
+    /// its values.
+    pub preset: Option<String>,
+    /// Depth of each search.
+    pub depth: Option<u32>,
+    /// Time of each search, in milliseconds (instead of a depth).
+    #[ts(type = "number", optional = nullable)]
+    pub movetime_ms: Option<u64>,
+    /// Best lines per position (1 to 5).
+    pub multipv: Option<u32>,
+}
+
 /// Named search settings offered to the user.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -98,6 +119,9 @@ pub struct ReviewOptions {
     pub presets: Vec<ReviewPreset>,
     /// Preset used by default.
     pub default_preset: String,
+    /// Settings of the review of a single game (deeper than the presets,
+    /// its positions shared out between the workers).
+    pub game_preset: ReviewPreset,
     /// Games analysed at once.
     pub workers: u32,
     /// Most games per review.

@@ -23,6 +23,11 @@ presets: Array<ReviewPreset>,
  */
 defaultPreset: string, 
 /**
+ * Settings of the review of a single game (deeper than the presets,
+ * its positions shared out between the workers).
+ */
+gamePreset: ReviewPreset, 
+/**
  * Games analysed at once.
  */
 workers: number, 

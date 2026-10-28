@@ -346,9 +346,13 @@ function useFetched<T>(
   };
 }
 
-/** A cached Chess.com game, its moves classified. */
-export function useReviewGame(id: string | null): Fetched<ReviewGameView> {
-  return useFetched(id, (key, signal) => api.reviewGame(key, signal));
+/** A cached Chess.com game, its moves classified; fetched again when `version` changes. */
+export function useReviewGame(id: string | null, version = 0): Fetched<ReviewGameView> {
+  const key = id === null ? null : JSON.stringify([id, version]);
+  return useFetched(key, (json, signal) => {
+    const [game] = JSON.parse(json) as [string];
+    return api.reviewGame(game, signal);
+  });
 }
 
 /**

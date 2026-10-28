@@ -136,3 +136,33 @@ export function outcomeFor(result: string, side: Side): Outcome {
   if (result === '0-1') return side === 'black' ? 'win' : 'loss';
   return 'draw';
 }
+
+/** Shown positions (moves played) after each notable move, in order. */
+export function keyMoments(view: ReviewGameView): number[] {
+  return (view.analysis?.moves ?? []).flatMap((move, ply) =>
+    isNotable(move.class) ? [ply + 1] : [],
+  );
+}
+
+/** The key moment after (or before) `shown`, if any. */
+export function nextMoment(moments: number[], shown: number, forward: boolean): number | null {
+  const found = forward
+    ? moments.find((moment) => moment > shown)
+    : moments.findLast((moment) => moment < shown);
+  return found ?? null;
+}
+
+/**
+ * Whether `preset` would review deeper than the analysis made at `budget`
+ * (`depth 16`, as the API spells it) with `multipv` lines: deeper, or more
+ * lines. A time budget cannot be compared: only more lines count then.
+ */
+export function deeperThan(
+  preset: { depth?: number | null; multipv: number },
+  budget: string,
+  multipv: number,
+): boolean {
+  const depth = /^depth (\d+)$/.exec(budget)?.[1];
+  const deeper = preset.depth != null && depth != null && preset.depth > Number(depth);
+  return deeper || preset.multipv > multipv;
+}

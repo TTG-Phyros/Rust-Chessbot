@@ -62,6 +62,15 @@ label = "Approfondi"
 depth = 16
 multipv = 3
 
+# Review of a single game (from its page): deeper, its positions shared out
+# between the workers (about 3 s per position on one core, so a minute or two
+# for a game on 4 workers). Requests may also pick one of the presets above.
+[analysis.game]
+name = "game"
+label = "Bilan complet"
+depth = 20
+multipv = 3
+
 [stockfish]
 binary = "stockfish"
 threads = 1

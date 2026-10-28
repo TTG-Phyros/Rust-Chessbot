@@ -25,6 +25,6 @@ pub mod engine;
 pub mod exchange;
 pub mod motifs;
 
-pub use analysis::{GameAnalysis, PositionEval, analyse_game};
+pub use analysis::{GameAnalysis, PositionEval, analyse_game, analyse_positions};
 pub use classify::{GameReview, MoveClass, MoveReview, PlayerReview, Thresholds, review_game};
 pub use engine::{AnalysisEngine, Budget, EngineSpec, Line, Score, SearchSettings};

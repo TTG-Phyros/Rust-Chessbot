@@ -24,7 +24,9 @@ use chess_review::{
 };
 use chess_reviewer::jobs::{MAX_DEPTH, MAX_MULTIPV};
 use chess_reviewer::profile::{GameRef, OpeningStats, Profile, Record, WeaknessKind};
-use chess_reviewer::{EngineKind, Job, JobProgress, JobRequest, JobState, ReviewService};
+use chess_reviewer::{
+    EngineKind, GameJobRequest, Job, JobProgress, JobRequest, JobState, Preset, ReviewService,
+};
 use futures_util::Stream;
 use serde::Deserialize;
 use utoipa::IntoParams;
@@ -32,13 +34,13 @@ use utoipa::IntoParams;
 use super::error::ApiError;
 use super::types::review::{
     ReviewAnalysis, ReviewClass, ReviewClassCounts, ReviewConversion, ReviewElo, ReviewEloStats,
-    ReviewEngine, ReviewEstimate, ReviewEstimates, ReviewGameRef, ReviewGameSummary,
-    ReviewGameView, ReviewJobState, ReviewJobView, ReviewLine, ReviewLineStats, ReviewMotif,
-    ReviewMotifStats, ReviewMove, ReviewOpening, ReviewOpeningStats, ReviewOptions, ReviewPhase,
-    ReviewPhaseStats, ReviewPlayedMove, ReviewPlayer, ReviewPlayerStats, ReviewPosition,
-    ReviewPreset, ReviewProfile, ReviewProfileGame, ReviewRecord, ReviewRepertoire, ReviewRequest,
-    ReviewStarted, ReviewTimeStats, ReviewVerdict, ReviewWeakness, ReviewWeaknessKind,
-    TimeClassView,
+    ReviewEngine, ReviewEstimate, ReviewEstimates, ReviewGameRef, ReviewGameRequest,
+    ReviewGameSummary, ReviewGameView, ReviewJobState, ReviewJobView, ReviewLine, ReviewLineStats,
+    ReviewMotif, ReviewMotifStats, ReviewMove, ReviewOpening, ReviewOpeningStats, ReviewOptions,
+    ReviewPhase, ReviewPhaseStats, ReviewPlayedMove, ReviewPlayer, ReviewPlayerStats,
+    ReviewPosition, ReviewPreset, ReviewProfile, ReviewProfileGame, ReviewRecord, ReviewRepertoire,
+    ReviewRequest, ReviewStarted, ReviewTimeStats, ReviewVerdict, ReviewWeakness,
+    ReviewWeaknessKind, TimeClassView,
 };
 use super::types::{ErrorResponse, ScoreView, Side};
 use crate::AppState;
@@ -128,23 +130,33 @@ fn filter(request: &ReviewRequest) -> Result<GameFilter, ApiError> {
 /// The search settings of a request: its preset (the default one if it
 /// names none), overridden by its own depth, time and lines.
 fn settings(service: &ReviewService, request: &ReviewRequest) -> Result<SearchSettings, ApiError> {
-    let config = service.config();
-    let base = match request.preset.as_deref() {
-        Some(name) => config
+    let base = service.config().search_settings();
+    let overrides = (request.depth, request.movetime_ms, request.multipv);
+    search_settings(service, request.preset.as_deref(), base, overrides)
+}
+
+/// `preset` (`base` without one), overridden by a depth, a time and lines.
+fn search_settings(
+    service: &ReviewService,
+    preset: Option<&str>,
+    base: SearchSettings,
+    (depth, movetime_ms, multipv): (Option<u32>, Option<u64>, Option<u32>),
+) -> Result<SearchSettings, ApiError> {
+    let base = match preset {
+        Some(name) => service
+            .config()
             .preset(name)
             .ok_or_else(|| ApiError::unprocessable(format!("unknown preset {name:?}")))?
             .settings(),
-        None => config.search_settings(),
+        None => base,
     };
     Ok(SearchSettings {
-        budget: match (request.depth, request.movetime_ms) {
+        budget: match (depth, movetime_ms) {
             (Some(depth), _) => Budget::Depth(depth),
             (None, Some(ms)) => Budget::MoveTimeMs(ms),
             (None, None) => base.budget,
         },
-        multipv: request
-            .multipv
-            .map_or(base.multipv, |n| usize::try_from(n).unwrap_or(0)),
+        multipv: multipv.map_or(base.multipv, |n| usize::try_from(n).unwrap_or(0)),
     })
 }
 
@@ -205,22 +217,7 @@ pub(super) async fn options(
 ) -> Result<Json<ReviewOptions>, ApiError> {
     let service = service(&state)?;
     let config = service.config();
-    let presets = config
-        .analysis
-        .presets
-        .iter()
-        .map(|preset| {
-            let settings = preset.settings();
-            let (depth, movetime_ms) = budget_fields(settings.budget);
-            ReviewPreset {
-                name: preset.name.clone(),
-                label: preset.label.clone(),
-                depth,
-                movetime_ms,
-                multipv: count(settings.multipv),
-            }
-        })
-        .collect();
+    let presets = config.analysis.presets.iter().map(preset_view).collect();
     Ok(Json(ReviewOptions {
         chesscom_enabled: service.chesscom_enabled(),
         default_engine: match config.analysis.engine {
@@ -232,11 +229,24 @@ pub(super) async fn options(
             .default_preset()
             .map(|preset| preset.name.clone())
             .unwrap_or_default(),
+        game_preset: preset_view(&config.analysis.game),
         workers: count(config.workers()),
         max_games: count(config.max_games),
         max_multipv: count(MAX_MULTIPV),
         max_depth: MAX_DEPTH,
     }))
+}
+
+fn preset_view(preset: &Preset) -> ReviewPreset {
+    let settings = preset.settings();
+    let (depth, movetime_ms) = budget_fields(settings.budget);
+    ReviewPreset {
+        name: preset.name.clone(),
+        label: preset.label.clone(),
+        depth,
+        movetime_ms,
+        multipv: count(settings.multipv),
+    }
 }
 
 /// How long reviewing the requested games would take with each preset
@@ -547,7 +557,45 @@ fn summary(api: &ApiGame, analysed: bool) -> ReviewGameSummary {
     }
 }
 
-/// A cached game with its latest analysis.
+/// Starts reviewing one cached game, deeper than a review of many games by
+/// default: its positions are shared out between the workers. The job's
+/// progress is read as any other's; the game then shows the deepest of its
+/// analyses.
+#[utoipa::path(
+    post,
+    path = "/api/review/games/{id}/analyse",
+    tag = "review",
+    params(("id" = String, Path, description = "Game identifier (Chess.com UUID)")),
+    request_body = ReviewGameRequest,
+    responses(
+        (status = 202, description = "Job started", body = ReviewStarted),
+        (status = 404, description = "Game not in the cache", body = ErrorResponse),
+        (status = 422, description = "Invalid preset or settings", body = ErrorResponse),
+    )
+)]
+pub(super) async fn analyse_game(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(request): Json<ReviewGameRequest>,
+) -> Result<(StatusCode, Json<ReviewStarted>), ApiError> {
+    let service = service(&state)?;
+    if service.store().game(&id).map_err(api_error)?.is_none() {
+        return Err(ApiError::not_found(format!("no cached game {id}")));
+    }
+    let base = service.config().analysis.game.settings();
+    let overrides = (request.depth, request.movetime_ms, request.multipv);
+    let settings = search_settings(service, request.preset.as_deref(), base, overrides)?;
+    let job = service
+        .start_game(GameJobRequest {
+            game_id: id,
+            engine: request.engine.map(engine_kind),
+            settings: Some(settings),
+        })
+        .map_err(api_error)?;
+    Ok((StatusCode::ACCEPTED, Json(ReviewStarted { job_id: job.id })))
+}
+
+/// A cached game with its deepest analysis.
 #[utoipa::path(
     get,
     path = "/api/review/games/{id}",
@@ -570,7 +618,7 @@ pub(super) async fn game(
         .ok_or_else(|| ApiError::not_found(format!("no cached game {id}")))?;
     let played = PlayedGame::from_api(&api)
         .map_err(|err| ApiError::internal(format!("unreadable game {id}: {err}")))?;
-    let analysis = service.analysis_to_show(&id).map_err(api_error)?;
+    let analysis = service.deepest_analysis(&id).map_err(api_error)?;
 
     let start = played.game.start().clone();
     let book = Book::lichess()

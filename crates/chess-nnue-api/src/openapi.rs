@@ -11,9 +11,12 @@ use std::borrow::Cow;
 use axum::routing::get;
 use axum::{Json, Router};
 use serde_json::{Map, Value, json};
+use utoipa::openapi::schema::{KnownFormat, ObjectBuilder, SchemaFormat, Type};
 use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
 use utoipa::openapi::{Ref, RefOr, Schema};
 use utoipa::{Modify, OpenApi, PartialSchema, ToSchema};
+
+use chess_jobs::JobEvent;
 
 use crate::NnueApi;
 use crate::pagination::{ArchitecturePage, DatasetPage, JobPage, ModelPage};
@@ -45,6 +48,20 @@ macro_rules! external_schema {
     };
 }
 
+/// Raw bytes: the body of uploads and downloads.
+pub(crate) struct Binary;
+
+impl PartialSchema for Binary {
+    fn schema() -> RefOr<Schema> {
+        ObjectBuilder::new()
+            .schema_type(Type::String)
+            .format(Some(SchemaFormat::KnownFormat(KnownFormat::Binary)))
+            .into()
+    }
+}
+
+impl ToSchema for Binary {}
+
 external_schema!(ArchitectureSchema, "Architecture", architecture_ref);
 external_schema!(LayoutSchema, "Layout", layout_ref);
 external_schema!(EstimateSchema, "Estimate", estimate_ref);
@@ -73,7 +90,7 @@ external_schema!(EstimateSchema, "Estimate", estimate_ref);
         models::delete,
     ),
     components(schemas(
-        Problem, FieldError, ArchitecturePage, DatasetPage, JobPage, ModelPage,
+        Problem, FieldError, JobEvent, ArchitecturePage, DatasetPage, JobPage, ModelPage,
         ArchitectureSchema, LayoutSchema, EstimateSchema,
     )),
     modifiers(&Security),
@@ -84,6 +101,7 @@ external_schema!(EstimateSchema, "Estimate", estimate_ref);
         (name = "training-runs", description = "Training jobs: progress, stop and resume, live events"),
         (name = "selfplay-runs", description = "Self-play jobs generating datasets"),
         (name = "models", description = "Trained networks: provenance, files, the active one"),
+        (name = "meta", description = "This API's description"),
     )
 )]
 struct ApiDoc;
@@ -155,9 +173,9 @@ pub fn openapi() -> Value {
         paths.insert(
             "/api/v1/openapi.json".into(),
             json!({ "get": {
-                "tags": ["architectures"],
+                "tags": ["meta"],
                 "summary": "This document",
-                "operationId": "openapi",
+                "operationId": "getOpenApiDocument",
                 "security": [],
                 "responses": { "200": { "description": "OpenAPI 3.1 document",
                     "content": { "application/json": { "schema": {} } } } }
@@ -185,6 +203,10 @@ fn hoist(schemas: &mut Map<String, Value>, name: &str, mut schema: Value) {
     schemas.insert(name.into(), schema);
 }
 
+/// Rewrites the `#/$defs/` references as component ones, and the
+/// enumerations written as a `oneOf` of documented constants (as schemars
+/// writes them) as a plain `enum` with `x-enum-descriptions`: the same
+/// values, in the form SDK generators turn into enumerations.
 fn rewrite_refs(value: &mut Value) {
     match value {
         Value::Object(object) => {
@@ -193,11 +215,40 @@ fn rewrite_refs(value: &mut Value) {
             {
                 *reference = format!("#/components/schemas/{def}");
             }
+            if let Some(constants) = object
+                .get("oneOf")
+                .and_then(Value::as_array)
+                .and_then(|variants| string_constants(variants))
+            {
+                object.remove("oneOf");
+                let (values, descriptions): (Vec<_>, Vec<_>) = constants.into_iter().unzip();
+                object.insert("type".into(), "string".into());
+                object.insert("enum".into(), values.into());
+                object.insert("x-enum-descriptions".into(), descriptions.into());
+            }
             object.values_mut().for_each(rewrite_refs);
         }
         Value::Array(items) => items.iter_mut().for_each(rewrite_refs),
         _ => {}
     }
+}
+
+/// The values and descriptions of `variants` if they are all string constants.
+fn string_constants(variants: &[Value]) -> Option<Vec<(Value, Value)>> {
+    if variants.is_empty() {
+        return None;
+    }
+    variants
+        .iter()
+        .map(|variant| {
+            let value = variant.get("const").filter(|c| c.is_string())?;
+            let description = variant
+                .get("description")
+                .cloned()
+                .unwrap_or_else(|| "".into());
+            Some((value.clone(), description))
+        })
+        .collect()
 }
 
 pub(crate) fn router() -> Router<NnueApi> {

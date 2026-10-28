@@ -44,12 +44,13 @@ pub(crate) struct SelfplayStarted {
 #[utoipa::path(
     post,
     path = "/api/v1/datasets",
+    operation_id = "uploadDataset",
     tag = "datasets",
     params(
         UploadQuery,
         ("Idempotency-Key" = Option<String>, Header, description = "Makes retries safe"),
     ),
-    request_body(content = Vec<u8>, content_type = "application/octet-stream", description = "The CBDS file"),
+    request_body(content = inline(crate::openapi::Binary), content_type = "application/octet-stream", description = "The CBDS file"),
     responses(
         (status = 201, description = "Stored, with its hash and statistics", body = Dataset),
         (status = 413, description = "Larger than the server's limit", body = Problem, content_type = "application/problem+json"),
@@ -140,6 +141,7 @@ impl Read for ChannelReader {
 #[utoipa::path(
     post,
     path = "/api/v1/datasets:selfplay",
+    operation_id = "startSelfplay",
     tag = "datasets",
     params(("Idempotency-Key" = Option<String>, Header, description = "Makes retries safe")),
     request_body = SelfplayRequest,
@@ -163,6 +165,7 @@ pub(crate) async fn selfplay(
 #[utoipa::path(
     get,
     path = "/api/v1/datasets",
+    operation_id = "listDatasets",
     tag = "datasets",
     params(PageQuery),
     responses(
@@ -186,6 +189,7 @@ pub(crate) async fn list(
 #[utoipa::path(
     get,
     path = "/api/v1/datasets/{id}",
+    operation_id = "getDataset",
     tag = "datasets",
     params(("id" = String, Path, description = "Dataset id")),
     responses(
@@ -204,6 +208,7 @@ pub(crate) async fn get(
 #[utoipa::path(
     get,
     path = "/api/v1/datasets/{id}/stats",
+    operation_id = "getDatasetStats",
     tag = "datasets",
     params(("id" = String, Path, description = "Dataset id")),
     responses(
@@ -231,6 +236,7 @@ pub(crate) async fn stats(
 #[utoipa::path(
     delete,
     path = "/api/v1/datasets/{id}",
+    operation_id = "deleteDataset",
     tag = "datasets",
     params(("id" = String, Path, description = "Dataset id")),
     responses(

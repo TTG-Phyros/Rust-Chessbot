@@ -14,11 +14,8 @@ macro_rules! id_type {
             Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
         )]
         #[serde(transparent)]
-        #[cfg_attr(
-                            feature = "openapi",
-                            derive(utoipa::ToSchema),
-                            schema(value_type = String, format = "uuid")
-                        )]
+        #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+        #[cfg_attr(feature = "openapi", schema(value_type = String, format = "uuid"))]
         pub struct $name(Uuid);
 
         impl $name {

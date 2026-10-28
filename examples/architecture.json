@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "metadata": {
+    "name": "Example 768→128×2→16→1",
+    "description": "A small network for the API examples: quick to train, one hidden layer, 8 output buckets by material.",
+    "tags": ["example"]
+  },
+  "features": { "set": "Chess768", "perspective": true },
+  "accumulator": { "size": 128, "activation": "SCReLU" },
+  "hiddenLayers": [{ "size": 16, "activation": "CReLU" }],
+  "outputBuckets": { "strategy": "material", "count": 8 },
+  "quantization": { "weights": "i8", "qa": 255, "qb": 64, "evalScale": 400 }
+}

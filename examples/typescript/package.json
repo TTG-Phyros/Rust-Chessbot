@@ -1,0 +1,17 @@
+{
+  "name": "chess-nnue-lab-example",
+  "private": true,
+  "type": "module",
+  "description": "Trains a network through the NNUE lab API with the TypeScript SDK",
+  "scripts": {
+    "train": "node train.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "chess-nnue-lab": "file:../../sdk/typescript"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}

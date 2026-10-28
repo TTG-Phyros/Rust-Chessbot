@@ -101,7 +101,8 @@ Sous Windows : `winget install Rustlang.Rustup Casey.Just OpenJS.NodeJS.LTS`, pl
 | `just bench` | benchmarks criterion : génération de coups, recherche, inférence NNUE |
 | `just engine-bench` | signature et vitesse (nœuds/s) du moteur, via `chess-uci bench` |
 | `just play` | moteur UCI sur stdin/stdout |
-| `just gen-types` | régénère les types TypeScript depuis les structs Rust |
+| `just gen-types` | régénère les types TypeScript, les JSON Schemas et le document OpenAPI depuis le code Rust |
+| `just gen-sdk` | régénère les SDK Python et TypeScript (`sdk/`) depuis le document OpenAPI (Docker) |
 | `just chesscom <pseudo> [options]` | synchronise les parties Chess.com d'un joueur dans le cache et les liste (voir [Analyse Chess.com](#analyse-chesscom)) |
 
 ## Architecture
@@ -128,6 +129,9 @@ crates/
   chess-reviewer/ cache SQLite des parties et des analyses, synchronisation, jobs et workers, profil,
                  calibration de l'Elo, CLI
 web/             React + TypeScript + Vite + Tailwind
+schemas/         documents générés et versionnés : JSON Schema des architectures, OpenAPI de /api/v1
+sdk/             SDK Python et TypeScript de /api/v1, générés depuis le document OpenAPI
+examples/        un même scénario d'entraînement via l'API en curl, Python, TypeScript et Go
 docker/          Dockerfiles (engine, train, web) + nginx.conf
 config/          configuration de l'analyse Chess.com (review.toml)
 data/            poids, checkpoints, métriques, cache (ignoré par git)
@@ -368,6 +372,8 @@ curl -H "$K" -H 'Content-Type: application/json' -d '{"architectureId": "…", "
      http://localhost:8080/api/v1/training-runs
 curl -N -H "$K" http://localhost:8080/api/v1/training-runs/<id>/events
 ```
+
+**SDK et exemples.** Les SDK [Python](sdk/python) et [TypeScript](sdk/typescript) sont générés depuis [le document OpenAPI](schemas/nnue-api.v1.openapi.json) par openapi-generator (image Docker épinglée) : `just gen-sdk` après toute modification de l'API, et la CI échoue si `schemas/` ou `sdk/` ne sont pas à jour (voir [sdk/README.md](sdk/README.md)). [examples/](examples) déroule le même scénario en curl, Python, TypeScript et Go : valider et sauvegarder une architecture, envoyer un dataset, entraîner en suivant les événements, activer et télécharger le modèle. La CI exécute les quatre contre un vrai serveur et un worker CPU, et vérifie qu'ils produisent le même réseau au bit près.
 
 Les jobs sont exécutés par les **workers** : les services `lab-worker` (GPU, profil `train`) et `lab-worker-cpu` (profil `train-cpu`) de `docker compose`. Ils prennent les jobs par l'API interne `/internal/v1` du serveur, authentifiés par `CHESS_LAB_WORKER_TOKEN`, et lisent et écrivent les mêmes fichiers que lui (datasets dans le volume `datasets`, modèles dans `data/models`, checkpoints dans `data/lab/runs`) ; nginx n'expose jamais `/internal`. Ils partagent le GPU avec le pipeline de la page Entraînement : lancer l'un ou l'autre.
 

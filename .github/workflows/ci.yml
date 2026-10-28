@@ -12,6 +12,8 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
+  # SDK generator (`just gen-sdk` uses the same image).
+  OPENAPI_GENERATOR: openapitools/openapi-generator-cli:v7.26.0@sha256:a304ddf1e2e5f24f68fa3153568d6174cea4959d09aa8e3db6d526fd0782326d
 
 jobs:
   rust:
@@ -38,13 +40,82 @@ jobs:
       - name: Deep perft (release)
         run: cargo test --release -p chess-core --test perft -- --include-ignored
 
-      - name: TypeScript bindings and JSON Schemas are up to date
+      - name: TypeScript bindings, JSON Schemas and OpenAPI document are up to date
         run: |
           if [ -n "$(git status --porcelain web/src/api/generated schemas)" ]; then
             git status --porcelain web/src/api/generated schemas
             echo "::error::Generated files changed: run 'just gen-types' and commit web/src/api/generated and schemas"
             exit 1
           fi
+
+  sdk:
+    name: SDKs and examples (in sync, end to end)
+    runs-on: ubuntu-latest
+    env:
+      CHESS_API_URL: http://127.0.0.1:3000
+      CHESS_API_KEY: ci-key
+    steps:
+      - uses: actions/checkout@v4
+
+      # The SDKs are generated from the committed OpenAPI document (whose
+      # freshness the rust job checks) with the pinned generator.
+      - name: SDKs match the OpenAPI document
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/local" -w /local             ${{ env.OPENAPI_GENERATOR }} batch --clean sdk/python.yaml sdk/typescript.yaml
+          if [ -n "$(git status --porcelain sdk)" ]; then
+            git status --porcelain sdk
+            echo "::error::The SDKs are out of date: run 'just gen-sdk' and commit sdk/"
+            exit 1
+          fi
+
+      - run: rustup show active-toolchain
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release -p chess-server -p chess-train
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache: false
+
+      - name: Build the SDKs and check the examples
+        run: |
+          pip install ./sdk/python
+          npm --prefix sdk/typescript install --no-audit --no-fund
+          npm --prefix sdk/typescript run build
+          npm --prefix examples/typescript ci --no-audit --no-fund
+          npm --prefix examples/typescript run typecheck
+          (cd examples/go && go vet . && test -z "$(gofmt -l .)")
+
+      - name: Start a server and a CPU worker, with a small self-play dataset
+        run: |
+          lab=$RUNNER_TEMP/lab
+          CHESS_TRAIN_DATA_DIR=$RUNNER_TEMP/train CHESS_TRAIN_DATASET_DIR=$RUNNER_TEMP/selfplay             target/release/chess-train --device cpu selfplay --games 200 --nodes 300
+          cp "$(ls "$RUNNER_TEMP"/selfplay/*.bin | head -1)" "$RUNNER_TEMP/positions.cbds"
+          CHESS_SERVER_BIND=127.0.0.1:3000 CHESS_SERVER_DATA_DIR=$RUNNER_TEMP/data             CHESS_API_KEYS=$CHESS_API_KEY CHESS_LAB_DIR=$lab CHESS_LAB_WORKER_TOKEN=ci-worker             target/release/chess-server > "$RUNNER_TEMP/server.log" 2>&1 &
+          target/release/chess-train --device cpu worker --server "$CHESS_API_URL"             --token ci-worker --lab "$lab" > "$RUNNER_TEMP/worker.log" 2>&1 &
+          curl -sS --retry 30 --retry-connrefused --retry-delay 1 -o served.json             "$CHESS_API_URL/api/v1/openapi.json"
+          # The server serves the committed document.
+          diff <(jq -S . served.json) <(jq -S . schemas/nnue-api.v1.openapi.json)
+
+      - name: Example curl
+        run: mkdir -p out/curl && cd out/curl && ../../examples/curl/train.sh "$RUNNER_TEMP/positions.cbds"
+      - name: Example Python
+        run: mkdir -p out/python && cd out/python && python ../../examples/python/train.py "$RUNNER_TEMP/positions.cbds"
+      - name: Example TypeScript
+        run: cd examples/typescript && node train.ts "$RUNNER_TEMP/positions.cbds"
+      - name: Example Go
+        run: cd examples/go && go run . "$RUNNER_TEMP/positions.cbds"
+      - name: The four runs (same seed) trained the same network
+        run: test "$(sha256sum out/*/*.nnue examples/typescript/*.nnue examples/go/*.nnue | cut -d' ' -f1 | sort -u | wc -l)" = 1
+
+      - name: Server and worker logs
+        if: failure()
+        run: cat "$RUNNER_TEMP/server.log" "$RUNNER_TEMP/worker.log"
 
   web:
     name: Front (lint, typecheck, test, build)

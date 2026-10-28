@@ -33,6 +33,7 @@ fn view(api: &NnueApi, model: Model) -> ApiResult<ModelView> {
 #[utoipa::path(
     get,
     path = "/api/v1/models",
+    operation_id = "listModels",
     tag = "models",
     params(PageQuery),
     responses(
@@ -63,6 +64,7 @@ pub(crate) async fn list(
 #[utoipa::path(
     get,
     path = "/api/v1/models/{id}",
+    operation_id = "getModel",
     tag = "models",
     params(("id" = String, Path, description = "Model id")),
     responses(
@@ -83,10 +85,11 @@ pub(crate) async fn get(
 #[utoipa::path(
     get,
     path = "/api/v1/models/{id}/file",
+    operation_id = "downloadModel",
     tag = "models",
     params(("id" = String, Path, description = "Model id")),
     responses(
-        (status = 200, description = "The network", body = Vec<u8>, content_type = "application/octet-stream"),
+        (status = 200, description = "The network", body = inline(crate::openapi::Binary), content_type = "application/octet-stream"),
         (status = 404, description = "Unknown id", body = Problem, content_type = "application/problem+json"),
     )
 )]
@@ -117,6 +120,7 @@ pub(crate) async fn file(
 #[utoipa::path(
     post,
     path = "/api/v1/models/{id}:activate",
+    operation_id = "activateModel",
     tag = "models",
     params(("id" = String, Path, description = "Model id")),
     responses(
@@ -149,6 +153,7 @@ pub(crate) async fn act(
 #[utoipa::path(
     post,
     path = "/api/v1/models:deactivate",
+    operation_id = "deactivateModel",
     tag = "models",
     responses((status = 204, description = "No model is active any more"))
 )]
@@ -162,6 +167,7 @@ pub(crate) async fn deactivate(State(api): State<NnueApi>) -> ApiResult<StatusCo
 #[utoipa::path(
     delete,
     path = "/api/v1/models/{id}",
+    operation_id = "deleteModel",
     tag = "models",
     params(("id" = String, Path, description = "Model id")),
     responses(

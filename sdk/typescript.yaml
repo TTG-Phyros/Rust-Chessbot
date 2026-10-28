@@ -1,0 +1,16 @@
+# openapi-generator configuration of the TypeScript SDK (`just gen-sdk`).
+generatorName: typescript-fetch
+inputSpec: schemas/nnue-api.v1.openapi.json
+outputDir: sdk/typescript
+# Left out: the generator's publishing script.
+openapiGeneratorIgnoreList:
+  - git_push.sh
+gitUserId: TTG-Phyros
+gitRepoId: Rust-Chessbot
+additionalProperties:
+  npmName: chess-nnue-lab
+  npmVersion: 1.0.0
+  supportsES6: true
+  importFileExtension: .js
+  withInterfaces: true
+  hideGenerationTimestamp: true

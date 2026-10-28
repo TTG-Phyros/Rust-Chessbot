@@ -1,0 +1,21 @@
+# openapi-generator configuration of the Python SDK (`just gen-sdk`).
+generatorName: python
+inputSpec: schemas/nnue-api.v1.openapi.json
+outputDir: sdk/python
+# Left out: the generator's CI and publishing templates and empty test stubs.
+openapiGeneratorIgnoreList:
+  - .github/**
+  - .gitlab-ci.yml
+  - .travis.yml
+  - git_push.sh
+  - test/**
+  - test-requirements.txt
+  - tox.ini
+gitUserId: TTG-Phyros
+gitRepoId: Rust-Chessbot
+additionalProperties:
+  packageName: chess_nnue_lab
+  projectName: chess-nnue-lab
+  packageVersion: 1.0.0
+  library: urllib3
+  hideGenerationTimestamp: true

@@ -60,6 +60,7 @@ pub(crate) struct EventsQuery {
 #[utoipa::path(
     post,
     path = "/api/v1/training-runs",
+    operation_id = "createTrainingRun",
     tag = "training-runs",
     params(("Idempotency-Key" = Option<String>, Header, description = "Makes retries safe")),
     request_body = TrainingRequest,
@@ -105,6 +106,7 @@ fn job_of(api: &NnueApi, kind: JobKind, id: &str) -> ApiResult<Job> {
 #[utoipa::path(
     get,
     path = "/api/v1/training-runs",
+    operation_id = "listTrainingRuns",
     tag = "training-runs",
     params(PageQuery),
     responses(
@@ -123,6 +125,7 @@ pub(crate) async fn list_training(
 #[utoipa::path(
     get,
     path = "/api/v1/training-runs/{id}",
+    operation_id = "getTrainingRun",
     tag = "training-runs",
     params(("id" = String, Path, description = "Run id")),
     responses(
@@ -142,6 +145,7 @@ pub(crate) async fn get_training(
 #[utoipa::path(
     post,
     path = "/api/v1/training-runs/{id}:stop",
+    operation_id = "stopTrainingRun",
     tag = "training-runs",
     params(("id" = String, Path, description = "Run id")),
     responses(
@@ -158,6 +162,7 @@ pub(crate) async fn stop_training_doc() {}
 #[utoipa::path(
     post,
     path = "/api/v1/training-runs/{id}:resume",
+    operation_id = "resumeTrainingRun",
     tag = "training-runs",
     params(("id" = String, Path, description = "Run id")),
     responses(
@@ -192,6 +197,7 @@ pub(crate) async fn act_training(
 #[utoipa::path(
     get,
     path = "/api/v1/training-runs/{id}/metrics",
+    operation_id = "getTrainingMetrics",
     tag = "training-runs",
     params(("id" = String, Path, description = "Run id")),
     responses(
@@ -235,6 +241,7 @@ pub(crate) async fn metrics(
 #[utoipa::path(
     get,
     path = "/api/v1/training-runs/{id}/events",
+    operation_id = "streamTrainingEvents",
     tag = "training-runs",
     params(
         ("id" = String, Path, description = "Run id"),
@@ -242,7 +249,7 @@ pub(crate) async fn metrics(
         ("Last-Event-ID" = Option<String>, Header, description = "Resume after this event"),
     ),
     responses(
-        (status = 200, description = "Event stream; each `data` is a JobEvent", body = JobEvent, content_type = "text/event-stream"),
+        (status = 200, description = "Event stream; each `data` is a JobEvent (JSON)", body = String, content_type = "text/event-stream"),
         (status = 404, description = "Unknown id", body = Problem, content_type = "application/problem+json"),
     )
 )]
@@ -260,6 +267,7 @@ pub(crate) async fn events_training(
 #[utoipa::path(
     get,
     path = "/api/v1/selfplay-runs",
+    operation_id = "listSelfplayRuns",
     tag = "selfplay-runs",
     params(PageQuery),
     responses(
@@ -278,6 +286,7 @@ pub(crate) async fn list_selfplay(
 #[utoipa::path(
     get,
     path = "/api/v1/selfplay-runs/{id}",
+    operation_id = "getSelfplayRun",
     tag = "selfplay-runs",
     params(("id" = String, Path, description = "Run id")),
     responses(
@@ -296,6 +305,7 @@ pub(crate) async fn get_selfplay(
 #[utoipa::path(
     post,
     path = "/api/v1/selfplay-runs/{id}:stop",
+    operation_id = "stopSelfplayRun",
     tag = "selfplay-runs",
     params(("id" = String, Path, description = "Run id")),
     responses(
@@ -326,6 +336,7 @@ pub(crate) async fn act_selfplay(
 #[utoipa::path(
     get,
     path = "/api/v1/selfplay-runs/{id}/events",
+    operation_id = "streamSelfplayEvents",
     tag = "selfplay-runs",
     params(
         ("id" = String, Path, description = "Run id"),
@@ -333,7 +344,7 @@ pub(crate) async fn act_selfplay(
         ("Last-Event-ID" = Option<String>, Header, description = "Resume after this event"),
     ),
     responses(
-        (status = 200, description = "Event stream; each `data` is a JobEvent", body = JobEvent, content_type = "text/event-stream"),
+        (status = 200, description = "Event stream; each `data` is a JobEvent (JSON)", body = String, content_type = "text/event-stream"),
         (status = 404, description = "Unknown id", body = Problem, content_type = "application/problem+json"),
     )
 )]

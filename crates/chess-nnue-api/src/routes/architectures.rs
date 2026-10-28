@@ -60,6 +60,7 @@ pub(crate) struct Preset {
 #[utoipa::path(
     post,
     path = "/api/v1/architectures:validate",
+    operation_id = "validateArchitecture",
     tag = "architectures",
     request_body(
         description = "Architecture document",
@@ -105,6 +106,7 @@ pub(crate) async fn validate(Document(document): Document) -> Json<ValidationRep
 #[utoipa::path(
     get,
     path = "/api/v1/architectures/presets",
+    operation_id = "listPresets",
     tag = "architectures",
     responses((status = 200, description = "Every preset", body = Vec<Preset>))
 )]
@@ -126,6 +128,7 @@ pub(crate) async fn presets() -> Json<Vec<Preset>> {
 #[utoipa::path(
     get,
     path = "/api/v1/architectures/schema",
+    operation_id = "getArchitectureSchema",
     tag = "architectures",
     responses((status = 200, description = "JSON Schema 2020-12", body = Object, content_type = "application/schema+json"))
 )]
@@ -142,6 +145,7 @@ pub(crate) async fn schema() -> Response {
 #[utoipa::path(
     post,
     path = "/api/v1/architectures",
+    operation_id = "createArchitecture",
     tag = "architectures",
     params(("Idempotency-Key" = Option<String>, Header, description = "Makes retries safe")),
     request_body(
@@ -171,6 +175,7 @@ pub(crate) async fn create(
 #[utoipa::path(
     get,
     path = "/api/v1/architectures",
+    operation_id = "listArchitectures",
     tag = "architectures",
     params(PageQuery),
     responses(
@@ -194,6 +199,7 @@ pub(crate) async fn list(
 #[utoipa::path(
     get,
     path = "/api/v1/architectures/{id}",
+    operation_id = "getArchitecture",
     tag = "architectures",
     params(("id" = String, Path, description = "Architecture id")),
     responses(
@@ -213,6 +219,7 @@ pub(crate) async fn get(
 #[utoipa::path(
     delete,
     path = "/api/v1/architectures/{id}",
+    operation_id = "deleteArchitecture",
     tag = "architectures",
     params(("id" = String, Path, description = "Architecture id")),
     responses(

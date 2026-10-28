@@ -4,6 +4,8 @@
 set windows-shell := ["powershell.exe", "-NoLogo", "-NoProfile", "-Command"]
 
 cuda_image := "nvidia/cuda:12.9.1-base-ubuntu24.04"
+# Same image as OPENAPI_GENERATOR in .github/workflows/ci.yml
+openapi_generator := "openapitools/openapi-generator-cli:v7.26.0@sha256:a304ddf1e2e5f24f68fa3153568d6174cea4959d09aa8e3db6d526fd0782326d"
 
 # List recipes
 default:
@@ -90,10 +92,15 @@ lint:
     npm --prefix web run typecheck
     npm --prefix web run format:check
 
-# Regenerate the TypeScript API types (ts-rs) and the JSON Schemas (schemas/) from the Rust structs
+# Regenerate the TypeScript API types (ts-rs), the JSON Schemas and the lab's OpenAPI document (schemas/) from the Rust code
 gen-types:
     cargo test -p chess-server --lib
     cargo test -p chess-nnue-spec --test schema
+    cargo test -p chess-nnue-api --test openapi
+
+# Regenerate the Python and TypeScript SDKs (sdk/) from the OpenAPI document, with the generator pinned in the CI
+gen-sdk: gen-types
+    docker run --rm -v "{{ justfile_directory() }}:/local" -w /local {{ openapi_generator }} batch --clean sdk/python.yaml sdk/typescript.yaml
 
 # Validate NNUE architecture documents (JSON or YAML) and print their hash and size, e.g. `just nnue-validate my-arch.yaml`
 nnue-validate +files:

@@ -10,6 +10,11 @@ web/node_modules
 web/dist
 *.tsbuildinfo
 
+# SDKs and examples: installed packages, networks the examples download
+/sdk/typescript/package-lock.json
+/examples/typescript/node_modules
+/examples/**/*.nnue
+
 # Misc
 *.log
 .env

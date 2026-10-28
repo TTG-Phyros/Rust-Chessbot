@@ -36,7 +36,7 @@ pub enum MoveClass {
     Inaccuracy,
     /// A clear advantage lost.
     Mistake,
-    /// A winning chance offered by the opponent's mistake, let go.
+    /// A chance offered by the opponent's blunder, let go.
     Miss,
     /// A decisive advantage lost.
     Blunder,
@@ -101,7 +101,8 @@ pub struct Thresholds {
     pub sacrifice: i32,
     /// Most a Brilliant move may lose.
     pub brilliant_loss: f64,
-    /// Chances from which the game is won already: no Brilliant then.
+    /// Chances from which the game is won without the move (with the best
+    /// other one): no Brilliant then.
     pub won: f64,
 }
 
@@ -292,7 +293,7 @@ pub fn review_game(
     }
 
     let accuracies: Vec<f64> = reviews.iter().map(|review| review.accuracy).collect();
-    let accuracy = game_accuracy(&white_wins, &accuracies, first);
+    let accuracy = game_accuracy(&accuracies, first);
     let mut players: [PlayerReview; 2] = Default::default();
     let mut cp_losses = [0.0; 2];
     for (ply, review) in reviews.iter().enumerate() {
@@ -404,11 +405,20 @@ impl Judged<'_> {
     }
 
     /// A sacrifice that keeps (nearly) the best chances, unless the game
-    /// was won already or is still lost after it.
+    /// was won even without it (the best other line wins) or is still lost
+    /// after it. Never out of check: giving material there is forced.
     fn is_brilliant(&self, t: &Thresholds) -> bool {
+        let uci = self.mv.to_string();
+        let without = self
+            .eval
+            .lines
+            .iter()
+            .find(|line| line.pv.first() != Some(&uci))
+            .map_or(self.before, |line| win_percent(line.score));
         self.loss <= t.brilliant_loss
-            && self.before < t.won
+            && without < t.won
             && self.after > t.losing
+            && !self.position.in_check()
             && self.position.legal_moves().len() > 1
             && exchange::sacrifice(self.position, self.mv) >= t.sacrifice
     }
@@ -433,29 +443,25 @@ impl Judged<'_> {
     }
 
     /// A move anyone finds, however forced: taking back a piece just
-    /// captured, taking a piece left hanging, moving away a piece under
-    /// attack, or one of the only two answers to a check.
+    /// captured, or moving away a piece under attack. Not taking a piece
+    /// left hanging nor answering a check: Chess.com counts them as Great.
     fn is_obvious(&self) -> bool {
-        let (from, to) = (self.mv.from(), self.mv.to());
-        let capture = self.mv.is_capture();
-        let recapture = capture
+        let recapture = self.mv.is_capture()
             && self
                 .previous
-                .is_some_and(|previous| previous.captured_on == Some(to));
-        recapture
-            || (capture && exchange::exchange(self.position, from, to) > 0)
-            || exchange::threat(self.position, from) > 0
-            || (self.position.in_check() && self.position.legal_moves().len() <= 2)
+                .is_some_and(|previous| previous.captured_on == Some(self.mv.to()));
+        recapture || exchange::threat(self.position, self.mv.from()) > 0
     }
 
-    /// After the opponent's mistake, a won position let go (but not lost).
+    /// After the opponent's blunder, more than an inaccuracy lost: the
+    /// chance it offered let go, whatever the position (Chess.com calls a
+    /// Miss what would otherwise be a Mistake or a Blunder there, even when
+    /// the game is lost after it).
     fn is_miss(&self, t: &Thresholds) -> bool {
         self.loss > t.inaccuracy
             && self
                 .previous
-                .is_some_and(|previous| previous.loss > t.inaccuracy)
-            && self.before >= t.winning
-            && self.after >= t.losing
+                .is_some_and(|previous| previous.loss > t.mistake)
     }
 }
 
@@ -568,7 +574,8 @@ mod tests {
 
     #[test]
     fn obvious_moves_are_not_great() {
-        // Taking a hanging knight: the only winning move, but anyone sees it.
+        // Taking a hanging knight, the only winning move: Great (as on
+        // Chess.com).
         let start = Position::from_fen("4k3/8/8/3n4/8/8/8/3RK3 w - - 0 1").unwrap();
         let positions = [
             eval(vec![
@@ -578,9 +585,21 @@ mod tests {
             eval(vec![line("e8e7", Score::Cp(-500))]),
         ];
         let taken = review(&start, &["d1d5"], &positions, 0);
-        assert_eq!(classes(&taken), [MoveClass::Best]);
+        assert_eq!(classes(&taken), [MoveClass::Great]);
 
-        // 2. exd5 Qxd5: forced, but anyone sees it.
+        // Saving the knight attacked by a pawn: forced, but anyone sees it.
+        let start = Position::from_fen("4k3/8/4p3/3N4/8/8/8/4K3 w - - 0 1").unwrap();
+        let positions = [
+            eval(vec![
+                line("d5c3", Score::Cp(250)),
+                line("e1e2", Score::Cp(-50)),
+            ]),
+            eval(vec![line("e8e7", Score::Cp(-250))]),
+        ];
+        let saved = review(&start, &["d5c3"], &positions, 0);
+        assert_eq!(classes(&saved), [MoveClass::Best]);
+
+        // 2. exd5 Qxd5: taking back, forced, but anyone sees it.
         let start = after("e4 d5");
         let positions = [
             eval(vec![line("e4d5", Score::Cp(30))]),
@@ -629,13 +648,37 @@ mod tests {
         assert_eq!(black.moves, 1);
         assert_eq!(black.counts.get(MoveClass::Blunder), 1);
         assert_eq!(black.acpl, Some(980.0));
-        // One move: the game accuracy is the move's.
-        assert!((black.accuracy.unwrap() - blunder.accuracy).abs() < 1e-9);
+        // One move: the game accuracy is the move's (1 at least).
+        assert!(blunder.accuracy < 1.0);
+        assert!((black.accuracy.unwrap() - 1.0).abs() < 1e-9);
         assert_eq!(review.player(Color::White).counts.get(MoveClass::Miss), 1);
         // Black to move first: White's chances are the complement.
         assert!((review.white_wins[0] - (100.0 - 48.1598)).abs() < 1e-3);
         assert!((review.white_wins[1] - 100.0).abs() < 1e-9);
         assert_eq!(review.white_wins.len(), 3);
+    }
+
+    #[test]
+    fn a_miss_needs_a_blunder_but_may_lose_the_game() {
+        let start = after("e4 e5 Bc4 Nc6 Qh5");
+        let game = |chances: Score, after: i32| {
+            let positions = [
+                eval(vec![line("g7g6", Score::Cp(-20))]),
+                eval(vec![line("h5f7", chances)]),
+                eval(vec![line("g7g6", Score::Cp(after))]),
+            ];
+            classes(&review(&start, &["g8f6", "h5e2"], &positions, 0))
+        };
+        // Lost after letting the mate go: a Miss all the same.
+        assert_eq!(
+            game(Score::Mate(1), 400),
+            [MoveClass::Blunder, MoveClass::Miss]
+        );
+        // After a mere Mistake (+1.5), letting it go is a Mistake.
+        assert_eq!(
+            game(Score::Cp(150), 30),
+            [MoveClass::Mistake, MoveClass::Mistake]
+        );
     }
 
     #[test]

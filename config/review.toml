@@ -97,18 +97,19 @@ winning = 70.0
 losing = 30.0
 # Great: the best move, ahead of the second line by at least this much, the
 # second line leading to another outcome (won, drawn, lost). Obvious moves
-# are never Great: recaptures, taking a hanging piece, saving an attacked
-# piece, answering a check that leaves two moves at most.
+# are never Great: recaptures, saving an attacked piece (taking a hanging
+# piece or answering a check may be, as on Chess.com).
 only_move = 10.0
 # Brilliant: a move losing at most brilliant_loss that gives away at least
 # `sacrifice` centipawns of material (what the opponent can then win by a
-# capture, less what the move takes, less what was hanging already); not
-# when the chances were `won` already, nor when they are still lost after.
+# capture of the piece moved, less what it takes; or more on a piece it
+# uncovers); not when the best other move wins already (`won`), nor when
+# the chances are still lost after it.
 sacrifice = 200
 brilliant_loss = 2.0
 won = 90.0
-# Miss: after an opponent's Mistake or Blunder had given a won position, a
-# move losing more than an Inaccuracy, without losing the game.
+# Miss: after an opponent's Blunder, a move losing more than an Inaccuracy
+# (the chance let go), whatever the position before and after it.
 
 # Profile of a player over their analysed games.
 [profile]

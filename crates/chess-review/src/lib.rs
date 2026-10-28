@@ -9,7 +9,8 @@
 //! - [`classify`]: the class of each move (Brilliant, Great, Best… Miss,
 //!   Blunder) and the accuracy of the players, from such an analysis.
 //! - [`elo`]: the rating estimated from how a player played.
-//! - [`accuracy`]: the formulas of Lichess for winning chances and accuracy.
+//! - [`accuracy`]: winning chances (Lichess's curve) and accuracy (fitted on
+//!   Chess.com's).
 //! - [`exchange`]: material at stake on the board (sacrifices).
 //! - [`motifs`]: the phase of a position and the tactical motif of a mistake.
 //! - [`bench`]: how long an engine takes per position, for estimates.

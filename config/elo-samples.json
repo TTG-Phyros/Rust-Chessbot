@@ -37,7 +37,7 @@
       "username": "acdrizzy",
       "rating": 784,
       "features": {
-        "accuracy": 85.2301544991787,
+        "accuracy": 75.66807390562299,
         "acpl": 87.625,
         "blunders": 0.0,
         "mistakes": 9.090909090909092,
@@ -51,7 +51,7 @@
       "username": "eagl1997",
       "rating": 622,
       "features": {
-        "accuracy": 69.27620546247323,
+        "accuracy": 62.95773826357625,
         "acpl": 139.56521739130434,
         "blunders": 4.545454545454546,
         "mistakes": 13.636363636363637,
@@ -65,7 +65,7 @@
       "username": "salman_sigma",
       "rating": 640,
       "features": {
-        "accuracy": 44.61338741761604,
+        "accuracy": 65.70099081906909,
         "acpl": 157.75,
         "blunders": 11.11111111111111,
         "mistakes": 0.0,
@@ -79,7 +79,7 @@
       "username": "salman_sigma",
       "rating": 627,
       "features": {
-        "accuracy": 43.094376097624675,
+        "accuracy": 55.36066485575463,
         "acpl": 190.5,
         "blunders": 20.408163265306122,
         "mistakes": 4.081632653061225,
@@ -93,10 +93,10 @@
       "username": "k100073",
       "rating": 614,
       "features": {
-        "accuracy": 36.14948079459133,
+        "accuracy": 51.21191890047107,
         "acpl": 259.02941176470586,
-        "blunders": 15.625,
-        "mistakes": 9.375,
+        "blunders": 18.75,
+        "mistakes": 6.25,
         "inaccuracies": 12.5
       }
     },
@@ -107,7 +107,7 @@
       "username": "grandmaster_og",
       "rating": 652,
       "features": {
-        "accuracy": 37.71984292490403,
+        "accuracy": 50.849589266172316,
         "acpl": 235.3235294117647,
         "blunders": 18.181818181818183,
         "mistakes": 3.0303030303030303,
@@ -121,7 +121,7 @@
       "username": "k100073",
       "rating": 660,
       "features": {
-        "accuracy": 40.413932575231925,
+        "accuracy": 55.81134145977602,
         "acpl": 166.7391304347826,
         "blunders": 14.285714285714286,
         "mistakes": 14.285714285714286,
@@ -135,7 +135,7 @@
       "username": "newdelhi92",
       "rating": 700,
       "features": {
-        "accuracy": 58.30691156078825,
+        "accuracy": 57.06007664304826,
         "acpl": 122.34782608695652,
         "blunders": 14.285714285714286,
         "mistakes": 9.523809523809524,
@@ -149,7 +149,7 @@
       "username": "tresorisateur",
       "rating": 770,
       "features": {
-        "accuracy": 74.26152152065023,
+        "accuracy": 68.39031974280402,
         "acpl": 82.02173913043478,
         "blunders": 6.666666666666667,
         "mistakes": 11.11111111111111,
@@ -163,7 +163,7 @@
       "username": "k100073",
       "rating": 713,
       "features": {
-        "accuracy": 78.57182712998869,
+        "accuracy": 73.47877913190429,
         "acpl": 69.24444444444444,
         "blunders": 4.444444444444445,
         "mistakes": 4.444444444444445,
@@ -177,7 +177,7 @@
       "username": "dzh3jh",
       "rating": 410,
       "features": {
-        "accuracy": 78.38085281052824,
+        "accuracy": 78.56166718662206,
         "acpl": 82.88,
         "blunders": 4.3478260869565215,
         "mistakes": 4.3478260869565215,
@@ -191,7 +191,7 @@
       "username": "sojed",
       "rating": 485,
       "features": {
-        "accuracy": 95.43397252909645,
+        "accuracy": 91.24338364679174,
         "acpl": 46.24,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -205,7 +205,7 @@
       "username": "sojed",
       "rating": 408,
       "features": {
-        "accuracy": 56.64735476046077,
+        "accuracy": 73.35032227773806,
         "acpl": 88.3103448275862,
         "blunders": 11.538461538461538,
         "mistakes": 3.8461538461538463,
@@ -219,7 +219,7 @@
       "username": "crisstyyan",
       "rating": 559,
       "features": {
-        "accuracy": 71.91612586783938,
+        "accuracy": 83.76868667861865,
         "acpl": 56.6551724137931,
         "blunders": 3.7037037037037037,
         "mistakes": 3.7037037037037037,
@@ -233,7 +233,7 @@
       "username": "sojed",
       "rating": 486,
       "features": {
-        "accuracy": 58.970473298818604,
+        "accuracy": 53.88990062460128,
         "acpl": 191.24,
         "blunders": 23.80952380952381,
         "mistakes": 4.761904761904762,
@@ -247,7 +247,7 @@
       "username": "lawenomed120",
       "rating": 622,
       "features": {
-        "accuracy": 50.85819024247981,
+        "accuracy": 47.72029097035815,
         "acpl": 225.72,
         "blunders": 22.727272727272727,
         "mistakes": 0.0,
@@ -261,10 +261,10 @@
       "username": "dr1taha",
       "rating": 926,
       "features": {
-        "accuracy": 63.77737517773076,
+        "accuracy": 59.847028332675,
         "acpl": 119.72,
-        "blunders": 8.333333333333334,
-        "mistakes": 8.333333333333334,
+        "blunders": 12.5,
+        "mistakes": 4.166666666666667,
         "inaccuracies": 20.833333333333332
       }
     },
@@ -275,7 +275,7 @@
       "username": "sojed",
       "rating": 614,
       "features": {
-        "accuracy": 54.99979269032243,
+        "accuracy": 49.862151984816514,
         "acpl": 158.125,
         "blunders": 17.391304347826086,
         "mistakes": 4.3478260869565215,
@@ -289,7 +289,7 @@
       "username": "julesbjt",
       "rating": 489,
       "features": {
-        "accuracy": 48.20890213110459,
+        "accuracy": 71.07275028899613,
         "acpl": 127.92592592592592,
         "blunders": 7.6923076923076925,
         "mistakes": 0.0,
@@ -303,7 +303,7 @@
       "username": "777vontez777",
       "rating": 440,
       "features": {
-        "accuracy": 79.54502419914601,
+        "accuracy": 70.97128423173457,
         "acpl": 105.38461538461539,
         "blunders": 3.8461538461538463,
         "mistakes": 3.8461538461538463,
@@ -317,10 +317,10 @@
       "username": "julesbjt",
       "rating": 460,
       "features": {
-        "accuracy": 26.53804097288306,
+        "accuracy": 50.266508377126726,
         "acpl": 222.5,
-        "blunders": 25.0,
-        "mistakes": 8.333333333333334,
+        "blunders": 33.333333333333336,
+        "mistakes": 0.0,
         "inaccuracies": 0.0
       }
     },
@@ -331,7 +331,7 @@
       "username": "siwatbakaaa",
       "rating": 504,
       "features": {
-        "accuracy": 43.48538418249677,
+        "accuracy": 52.37194599613017,
         "acpl": 148.71428571428572,
         "blunders": 25.0,
         "mistakes": 0.0,
@@ -345,7 +345,7 @@
       "username": "julesbjt",
       "rating": 468,
       "features": {
-        "accuracy": 78.5392654009246,
+        "accuracy": 74.93680394924198,
         "acpl": 64.34146341463415,
         "blunders": 5.128205128205129,
         "mistakes": 5.128205128205129,
@@ -359,10 +359,10 @@
       "username": "shaheerasif2000",
       "rating": 428,
       "features": {
-        "accuracy": 84.33532839211168,
+        "accuracy": 81.39327567504728,
         "acpl": 40.65,
-        "blunders": 5.2631578947368425,
-        "mistakes": 2.6315789473684212,
+        "blunders": 2.6315789473684212,
+        "mistakes": 5.2631578947368425,
         "inaccuracies": 10.526315789473685
       }
     },
@@ -373,7 +373,7 @@
       "username": "tausip96",
       "rating": 431,
       "features": {
-        "accuracy": 75.80458138800383,
+        "accuracy": 72.83593955521106,
         "acpl": 68.38235294117646,
         "blunders": 6.451612903225806,
         "mistakes": 9.67741935483871,
@@ -387,7 +387,7 @@
       "username": "julesbjt",
       "rating": 460,
       "features": {
-        "accuracy": 87.73596511388217,
+        "accuracy": 80.41349002598608,
         "acpl": 47.35294117647059,
         "blunders": 0.0,
         "mistakes": 3.125,
@@ -401,7 +401,7 @@
       "username": "tiagoteixeira1988",
       "rating": 422,
       "features": {
-        "accuracy": 63.51376811350569,
+        "accuracy": 65.2383620401495,
         "acpl": 128.27586206896552,
         "blunders": 11.11111111111111,
         "mistakes": 3.7037037037037037,
@@ -415,7 +415,7 @@
       "username": "c0smic_ant",
       "rating": 422,
       "features": {
-        "accuracy": 92.53942912572582,
+        "accuracy": 87.77944547615307,
         "acpl": 40.10526315789474,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -429,7 +429,7 @@
       "username": "ravlam72",
       "rating": 435,
       "features": {
-        "accuracy": 97.35535580572451,
+        "accuracy": 94.21798188917977,
         "acpl": 21.466666666666665,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -443,7 +443,7 @@
       "username": "fle_xing",
       "rating": 406,
       "features": {
-        "accuracy": 43.78261434211549,
+        "accuracy": 63.08673678776693,
         "acpl": 142.0,
         "blunders": 16.666666666666668,
         "mistakes": 0.0,
@@ -457,7 +457,7 @@
       "username": "kuierru",
       "rating": 829,
       "features": {
-        "accuracy": 90.72372425972921,
+        "accuracy": 85.46979293664896,
         "acpl": 33.15,
         "blunders": 0.0,
         "mistakes": 2.7027027027027026,
@@ -471,7 +471,7 @@
       "username": "newdelhi92",
       "rating": 810,
       "features": {
-        "accuracy": 69.49798861160058,
+        "accuracy": 82.41091995144915,
         "acpl": 55.717948717948715,
         "blunders": 2.7777777777777777,
         "mistakes": 5.555555555555555,
@@ -485,7 +485,7 @@
       "username": "the-swans",
       "rating": 777,
       "features": {
-        "accuracy": 87.7201646744015,
+        "accuracy": 82.43159710383233,
         "acpl": 41.935483870967744,
         "blunders": 0.0,
         "mistakes": 10.344827586206897,
@@ -499,7 +499,7 @@
       "username": "newdelhi92",
       "rating": 818,
       "features": {
-        "accuracy": 80.67705778434892,
+        "accuracy": 80.63349984040279,
         "acpl": 51.61290322580645,
         "blunders": 3.4482758620689653,
         "mistakes": 6.896551724137931,
@@ -513,7 +513,7 @@
       "username": "newdelhi92",
       "rating": 810,
       "features": {
-        "accuracy": 44.90346529975824,
+        "accuracy": 64.83838728898583,
         "acpl": 125.61290322580645,
         "blunders": 10.344827586206897,
         "mistakes": 0.0,
@@ -527,7 +527,7 @@
       "username": "heyayee",
       "rating": 741,
       "features": {
-        "accuracy": 39.0958482815271,
+        "accuracy": 61.596559793009014,
         "acpl": 156.52272727272728,
         "blunders": 10.0,
         "mistakes": 15.0,
@@ -541,10 +541,10 @@
       "username": "newdelhi92",
       "rating": 803,
       "features": {
-        "accuracy": 41.63621048061532,
+        "accuracy": 70.07742501331197,
         "acpl": 134.65116279069767,
-        "blunders": 12.5,
-        "mistakes": 2.5,
+        "blunders": 7.5,
+        "mistakes": 7.5,
         "inaccuracies": 2.5
       }
     },
@@ -555,7 +555,7 @@
       "username": "heyayee",
       "rating": 724,
       "features": {
-        "accuracy": 81.5083490950427,
+        "accuracy": 76.14135791741275,
         "acpl": 65.41935483870968,
         "blunders": 0.0,
         "mistakes": 10.0,
@@ -569,10 +569,10 @@
       "username": "fortisfortuna-nara",
       "rating": 786,
       "features": {
-        "accuracy": 90.37628513889392,
+        "accuracy": 86.33024010440026,
         "acpl": 35.58064516129032,
-        "blunders": 3.225806451612903,
-        "mistakes": 0.0,
+        "blunders": 0.0,
+        "mistakes": 3.225806451612903,
         "inaccuracies": 6.451612903225806
       }
     },
@@ -583,10 +583,10 @@
       "username": "heyayee",
       "rating": 731,
       "features": {
-        "accuracy": 48.26792311004972,
+        "accuracy": 62.87909350079792,
         "acpl": 115.05405405405405,
-        "blunders": 20.0,
-        "mistakes": 8.571428571428571,
+        "blunders": 17.142857142857142,
+        "mistakes": 11.428571428571429,
         "inaccuracies": 2.857142857142857
       }
     },
@@ -597,7 +597,7 @@
       "username": "mlkyhtp",
       "rating": 826,
       "features": {
-        "accuracy": 61.503086405556786,
+        "accuracy": 66.01741888471827,
         "acpl": 87.75675675675676,
         "blunders": 8.333333333333334,
         "mistakes": 11.11111111111111,
@@ -611,7 +611,7 @@
       "username": "heyayee",
       "rating": 739,
       "features": {
-        "accuracy": 51.1392613319984,
+        "accuracy": 66.95428200994574,
         "acpl": 121.58823529411765,
         "blunders": 9.375,
         "mistakes": 3.125,
@@ -625,7 +625,7 @@
       "username": "rexbeyazz",
       "rating": 725,
       "features": {
-        "accuracy": 62.146630377682264,
+        "accuracy": 71.90306345002419,
         "acpl": 98.93939393939394,
         "blunders": 9.67741935483871,
         "mistakes": 3.225806451612903,
@@ -639,10 +639,10 @@
       "username": "magnuscarlsenhikaruek",
       "rating": 716,
       "features": {
-        "accuracy": 33.86825688545238,
+        "accuracy": 35.60198647351816,
         "acpl": 282.075,
-        "blunders": 28.94736842105263,
-        "mistakes": 15.789473684210526,
+        "blunders": 31.57894736842105,
+        "mistakes": 13.157894736842104,
         "inaccuracies": 10.526315789473685
       }
     },
@@ -653,7 +653,7 @@
       "username": "heyayee",
       "rating": 730,
       "features": {
-        "accuracy": 33.13758176691056,
+        "accuracy": 36.83786225352673,
         "acpl": 298.85,
         "blunders": 26.31578947368421,
         "mistakes": 10.526315789473685,
@@ -667,10 +667,10 @@
       "username": "tresorisateur",
       "rating": 726,
       "features": {
-        "accuracy": 53.83599984594662,
+        "accuracy": 58.66589479818157,
         "acpl": 136.5,
-        "blunders": 12.0,
-        "mistakes": 8.0,
+        "blunders": 16.0,
+        "mistakes": 4.0,
         "inaccuracies": 16.0
       }
     },
@@ -681,10 +681,10 @@
       "username": "loloolana",
       "rating": 711,
       "features": {
-        "accuracy": 44.56371666199425,
+        "accuracy": 52.428164681456856,
         "acpl": 172.2,
-        "blunders": 12.5,
-        "mistakes": 20.833333333333332,
+        "blunders": 16.666666666666668,
+        "mistakes": 16.666666666666668,
         "inaccuracies": 8.333333333333334
       }
     },
@@ -695,7 +695,7 @@
       "username": "btennyson039",
       "rating": 741,
       "features": {
-        "accuracy": 89.79537293833235,
+        "accuracy": 85.65783650429718,
         "acpl": 40.46875,
         "blunders": 0.0,
         "mistakes": 9.67741935483871,
@@ -709,7 +709,7 @@
       "username": "tresorisateur",
       "rating": 718,
       "features": {
-        "accuracy": 80.88802296474844,
+        "accuracy": 77.34553331494756,
         "acpl": 70.38709677419355,
         "blunders": 3.3333333333333335,
         "mistakes": 6.666666666666667,
@@ -723,7 +723,7 @@
       "username": "tresorisateur",
       "rating": 726,
       "features": {
-        "accuracy": 58.49972139871538,
+        "accuracy": 46.637009088125076,
         "acpl": 151.92307692307693,
         "blunders": 20.833333333333332,
         "mistakes": 16.666666666666668,
@@ -737,7 +737,7 @@
       "username": "dr1taha",
       "rating": 1478,
       "features": {
-        "accuracy": 92.87042298809064,
+        "accuracy": 87.6297284634388,
         "acpl": 52.972972972972975,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -751,7 +751,7 @@
       "username": "volendyulgerov2",
       "rating": 1531,
       "features": {
-        "accuracy": 87.35620512983988,
+        "accuracy": 81.41713263850656,
         "acpl": 63.32432432432432,
         "blunders": 0.0,
         "mistakes": 2.857142857142857,
@@ -765,7 +765,7 @@
       "username": "dr1taha",
       "rating": 1513,
       "features": {
-        "accuracy": 92.89869477184763,
+        "accuracy": 88.06120777303467,
         "acpl": 27.037037037037038,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -779,7 +779,7 @@
       "username": "eeezberbozannn",
       "rating": 1300,
       "features": {
-        "accuracy": 87.60502110188028,
+        "accuracy": 80.25534266290502,
         "acpl": 44.15384615384615,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -793,7 +793,7 @@
       "username": "iaman5123",
       "rating": 1393,
       "features": {
-        "accuracy": 62.581883745223614,
+        "accuracy": 53.24908547270758,
         "acpl": 130.6206896551724,
         "blunders": 23.076923076923077,
         "mistakes": 3.8461538461538463,
@@ -807,7 +807,7 @@
       "username": "eeezberbozannn",
       "rating": 1375,
       "features": {
-        "accuracy": 66.67273275693132,
+        "accuracy": 60.59700904991948,
         "acpl": 96.89285714285714,
         "blunders": 15.384615384615385,
         "mistakes": 3.8461538461538463,
@@ -821,7 +821,7 @@
       "username": "eeezberbozannn",
       "rating": 1383,
       "features": {
-        "accuracy": 91.22329751557417,
+        "accuracy": 85.23112956844037,
         "acpl": 57.528301886792455,
         "blunders": 0.0,
         "mistakes": 1.9607843137254901,
@@ -835,7 +835,7 @@
       "username": "jambarree",
       "rating": 1405,
       "features": {
-        "accuracy": 84.8606313285834,
+        "accuracy": 79.01536842498017,
         "acpl": 78.69811320754717,
         "blunders": 1.9230769230769231,
         "mistakes": 3.8461538461538463,
@@ -849,7 +849,7 @@
       "username": "farmer617",
       "rating": 1401,
       "features": {
-        "accuracy": 72.90808985326083,
+        "accuracy": 68.04025496016281,
         "acpl": 86.58333333333333,
         "blunders": 8.823529411764707,
         "mistakes": 5.882352941176471,
@@ -863,7 +863,7 @@
       "username": "eeezberbozannn",
       "rating": 1391,
       "features": {
-        "accuracy": 80.24026394315143,
+        "accuracy": 72.27857929586816,
         "acpl": 64.17142857142858,
         "blunders": 3.0303030303030303,
         "mistakes": 12.121212121212121,
@@ -877,7 +877,7 @@
       "username": "eeezberbozannn",
       "rating": 1399,
       "features": {
-        "accuracy": 64.35503293483583,
+        "accuracy": 61.22941976460883,
         "acpl": 109.61904761904762,
         "blunders": 10.526315789473685,
         "mistakes": 10.526315789473685,
@@ -891,7 +891,7 @@
       "username": "ffnmaori",
       "rating": 1375,
       "features": {
-        "accuracy": 53.17499232196063,
+        "accuracy": 52.30049237594635,
         "acpl": 156.55,
         "blunders": 15.789473684210526,
         "mistakes": 10.526315789473685,
@@ -905,7 +905,7 @@
       "username": "ffnmaori",
       "rating": 1198,
       "features": {
-        "accuracy": 72.03877138252193,
+        "accuracy": 63.5902537394726,
         "acpl": 77.8,
         "blunders": 7.142857142857143,
         "mistakes": 17.857142857142858,
@@ -919,7 +919,7 @@
       "username": "mchalmers08",
       "rating": 1186,
       "features": {
-        "accuracy": 75.18442337870404,
+        "accuracy": 68.82656762285957,
         "acpl": 67.96551724137932,
         "blunders": 11.11111111111111,
         "mistakes": 11.11111111111111,
@@ -933,7 +933,7 @@
       "username": "maximum-kpd",
       "rating": 1200,
       "features": {
-        "accuracy": 63.016427916465304,
+        "accuracy": 55.85180195023871,
         "acpl": 84.625,
         "blunders": 21.428571428571427,
         "mistakes": 14.285714285714286,
@@ -947,7 +947,7 @@
       "username": "ffnmaori",
       "rating": 1190,
       "features": {
-        "accuracy": 56.7727977626559,
+        "accuracy": 48.1605964677492,
         "acpl": 108.73333333333333,
         "blunders": 21.428571428571427,
         "mistakes": 14.285714285714286,
@@ -961,10 +961,10 @@
       "username": "ffnmaori",
       "rating": 1198,
       "features": {
-        "accuracy": 72.11703414135235,
+        "accuracy": 62.50083186871574,
         "acpl": 102.33333333333333,
-        "blunders": 16.129032258064516,
-        "mistakes": 12.903225806451612,
+        "blunders": 12.903225806451612,
+        "mistakes": 16.129032258064516,
         "inaccuracies": 19.35483870967742
       }
     },
@@ -975,7 +975,7 @@
       "username": "cuca-fresca",
       "rating": 1217,
       "features": {
-        "accuracy": 77.28580059343278,
+        "accuracy": 70.6326507963679,
         "acpl": 73.45454545454545,
         "blunders": 9.67741935483871,
         "mistakes": 9.67741935483871,
@@ -989,7 +989,7 @@
       "username": "aurdiiales",
       "rating": 1093,
       "features": {
-        "accuracy": 41.987072416321894,
+        "accuracy": 62.257906797494556,
         "acpl": 164.0,
         "blunders": 10.714285714285714,
         "mistakes": 7.142857142857143,
@@ -1003,7 +1003,7 @@
       "username": "mchalmers08",
       "rating": 1129,
       "features": {
-        "accuracy": 46.91684345135185,
+        "accuracy": 67.07358830331624,
         "acpl": 126.6,
         "blunders": 10.344827586206897,
         "mistakes": 3.4482758620689653,
@@ -1017,7 +1017,7 @@
       "username": "clwck",
       "rating": 1084,
       "features": {
-        "accuracy": 78.56236205114052,
+        "accuracy": 77.74866938155226,
         "acpl": 59.68571428571428,
         "blunders": 3.0303030303030303,
         "mistakes": 6.0606060606060606,
@@ -1031,7 +1031,7 @@
       "username": "mchalmers08",
       "rating": 1122,
       "features": {
-        "accuracy": 89.40385361017374,
+        "accuracy": 86.34881082750638,
         "acpl": 31.857142857142858,
         "blunders": 3.0303030303030303,
         "mistakes": 6.0606060606060606,
@@ -1045,7 +1045,7 @@
       "username": "mchalmers08",
       "rating": 1115,
       "features": {
-        "accuracy": 43.546013721361305,
+        "accuracy": 63.060199503930896,
         "acpl": 115.55,
         "blunders": 11.764705882352942,
         "mistakes": 5.882352941176471,
@@ -1059,7 +1059,7 @@
       "username": "nguyenhaidag",
       "rating": 1152,
       "features": {
-        "accuracy": 64.99409508811391,
+        "accuracy": 66.81643424363277,
         "acpl": 79.2,
         "blunders": 11.11111111111111,
         "mistakes": 5.555555555555555,
@@ -1073,10 +1073,10 @@
       "username": "mchalmers08",
       "rating": 1123,
       "features": {
-        "accuracy": 38.6040137722549,
+        "accuracy": 54.49804181522645,
         "acpl": 197.21875,
-        "blunders": 24.137931034482758,
-        "mistakes": 0.0,
+        "blunders": 20.689655172413794,
+        "mistakes": 3.4482758620689653,
         "inaccuracies": 6.896551724137931
       }
     },
@@ -1087,7 +1087,7 @@
       "username": "gracikiki",
       "rating": 1143,
       "features": {
-        "accuracy": 42.558181683612716,
+        "accuracy": 53.1161592163239,
         "acpl": 166.15625,
         "blunders": 20.689655172413794,
         "mistakes": 13.793103448275861,
@@ -1101,7 +1101,7 @@
       "username": "iaman5123",
       "rating": 1305,
       "features": {
-        "accuracy": 80.85778699912845,
+        "accuracy": 75.23006653661973,
         "acpl": 64.92156862745098,
         "blunders": 4.166666666666667,
         "mistakes": 12.5,
@@ -1115,10 +1115,10 @@
       "username": "vinicius_seba",
       "rating": 1308,
       "features": {
-        "accuracy": 57.09576672852012,
+        "accuracy": 75.26165503785943,
         "acpl": 85.1,
-        "blunders": 6.25,
-        "mistakes": 8.333333333333334,
+        "blunders": 2.0833333333333335,
+        "mistakes": 12.5,
         "inaccuracies": 4.166666666666667
       }
     },
@@ -1129,7 +1129,7 @@
       "username": "joey98from",
       "rating": 1297,
       "features": {
-        "accuracy": 42.17581406765776,
+        "accuracy": 49.01788996036066,
         "acpl": 153.10344827586206,
         "blunders": 18.51851851851852,
         "mistakes": 11.11111111111111,
@@ -1143,7 +1143,7 @@
       "username": "iaman5123",
       "rating": 1297,
       "features": {
-        "accuracy": 45.03724322347291,
+        "accuracy": 55.05727255120561,
         "acpl": 133.28571428571428,
         "blunders": 14.814814814814815,
         "mistakes": 14.814814814814815,
@@ -1157,7 +1157,7 @@
       "username": "iaman5123",
       "rating": 1305,
       "features": {
-        "accuracy": 77.81586929012187,
+        "accuracy": 73.65414339919002,
         "acpl": 70.51851851851852,
         "blunders": 3.8461538461538463,
         "mistakes": 15.384615384615385,
@@ -1171,7 +1171,7 @@
       "username": "porcamiseria2",
       "rating": 1327,
       "features": {
-        "accuracy": 49.218719212902045,
+        "accuracy": 76.04516487811327,
         "acpl": 93.25925925925925,
         "blunders": 3.8461538461538463,
         "mistakes": 7.6923076923076925,
@@ -1185,7 +1185,7 @@
       "username": "iaman5123",
       "rating": 1313,
       "features": {
-        "accuracy": 77.89473570929695,
+        "accuracy": 81.46135919203377,
         "acpl": 45.4,
         "blunders": 2.9411764705882355,
         "mistakes": 2.9411764705882355,
@@ -1199,7 +1199,7 @@
       "username": "ifedmyqueen",
       "rating": 1344,
       "features": {
-        "accuracy": 93.63306494013256,
+        "accuracy": 89.04705767923889,
         "acpl": 15.428571428571429,
         "blunders": 0.0,
         "mistakes": 2.857142857142857,
@@ -1213,7 +1213,7 @@
       "username": "clwck",
       "rating": 1085,
       "features": {
-        "accuracy": 82.26999593908738,
+        "accuracy": 74.91340205503622,
         "acpl": 42.72,
         "blunders": 4.166666666666667,
         "mistakes": 0.0,
@@ -1227,7 +1227,7 @@
       "username": "ixolib64",
       "rating": 1090,
       "features": {
-        "accuracy": 68.57333881686444,
+        "accuracy": 65.60261630756872,
         "acpl": 78.04166666666667,
         "blunders": 8.695652173913043,
         "mistakes": 13.043478260869565,
@@ -1241,7 +1241,7 @@
       "username": "ixolib64",
       "rating": 1099,
       "features": {
-        "accuracy": 61.147393732718044,
+        "accuracy": 62.43845767322545,
         "acpl": 112.65853658536585,
         "blunders": 7.5,
         "mistakes": 7.5,
@@ -1255,7 +1255,7 @@
       "username": "clwck",
       "rating": 1076,
       "features": {
-        "accuracy": 69.80108352306553,
+        "accuracy": 65.07799409873635,
         "acpl": 88.475,
         "blunders": 7.6923076923076925,
         "mistakes": 5.128205128205129,
@@ -1269,7 +1269,7 @@
       "username": "clwck",
       "rating": 1091,
       "features": {
-        "accuracy": 50.36310250406335,
+        "accuracy": 63.12773049486272,
         "acpl": 104.53333333333333,
         "blunders": 16.666666666666668,
         "mistakes": 0.0,
@@ -1283,7 +1283,7 @@
       "username": "ambjor0",
       "rating": 1066,
       "features": {
-        "accuracy": 42.55402816223315,
+        "accuracy": 43.014908948804425,
         "acpl": 184.35714285714286,
         "blunders": 27.272727272727273,
         "mistakes": 9.090909090909092,
@@ -1297,7 +1297,7 @@
       "username": "franeksor",
       "rating": 1403,
       "features": {
-        "accuracy": 65.75640158125124,
+        "accuracy": 78.94019302802883,
         "acpl": 67.14893617021276,
         "blunders": 4.545454545454546,
         "mistakes": 4.545454545454546,
@@ -1311,10 +1311,10 @@
       "username": "vinicius_seba",
       "rating": 1386,
       "features": {
-        "accuracy": 55.29554920814144,
+        "accuracy": 72.61145181594576,
         "acpl": 91.43478260869566,
-        "blunders": 2.272727272727273,
-        "mistakes": 9.090909090909092,
+        "blunders": 4.545454545454546,
+        "mistakes": 6.818181818181818,
         "inaccuracies": 15.909090909090908
       }
     },
@@ -1325,10 +1325,10 @@
       "username": "paulodalit",
       "rating": 1386,
       "features": {
-        "accuracy": 70.27541803278464,
+        "accuracy": 61.5816982718724,
         "acpl": 113.9,
-        "blunders": 18.91891891891892,
-        "mistakes": 2.7027027027027026,
+        "blunders": 13.513513513513514,
+        "mistakes": 8.108108108108109,
         "inaccuracies": 18.91891891891892
       }
     },
@@ -1339,10 +1339,10 @@
       "username": "vinicius_seba",
       "rating": 1394,
       "features": {
-        "accuracy": 75.4988511048526,
+        "accuracy": 67.91063527411478,
         "acpl": 86.5,
-        "blunders": 5.2631578947368425,
-        "mistakes": 15.789473684210526,
+        "blunders": 13.157894736842104,
+        "mistakes": 7.894736842105263,
         "inaccuracies": 13.157894736842104
       }
     },
@@ -1353,7 +1353,7 @@
       "username": "vinicius_seba",
       "rating": 1386,
       "features": {
-        "accuracy": 56.925365787061665,
+        "accuracy": 78.50538769789456,
         "acpl": 94.76470588235294,
         "blunders": 6.666666666666667,
         "mistakes": 0.0,
@@ -1367,7 +1367,7 @@
       "username": "serdarowsky",
       "rating": 1381,
       "features": {
-        "accuracy": 92.94985021476089,
+        "accuracy": 90.0004845562984,
         "acpl": 47.294117647058826,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -1381,7 +1381,7 @@
       "username": "dragomir32131",
       "rating": 1420,
       "features": {
-        "accuracy": 78.52146003718912,
+        "accuracy": 85.80124836081933,
         "acpl": 44.696969696969695,
         "blunders": 3.225806451612903,
         "mistakes": 0.0,
@@ -1395,7 +1395,7 @@
       "username": "szn123",
       "rating": 1070,
       "features": {
-        "accuracy": 92.96551879432928,
+        "accuracy": 89.33782876757923,
         "acpl": 24.62162162162162,
         "blunders": 0.0,
         "mistakes": 2.7777777777777777,
@@ -1409,7 +1409,7 @@
       "username": "ambjor0",
       "rating": 1066,
       "features": {
-        "accuracy": 81.22849164928047,
+        "accuracy": 82.30227736897241,
         "acpl": 52.02777777777778,
         "blunders": 2.7777777777777777,
         "mistakes": 5.555555555555555,
@@ -1423,7 +1423,7 @@
       "username": "abo_38ab2009",
       "rating": 1073,
       "features": {
-        "accuracy": 72.14530295653455,
+        "accuracy": 68.60061253255175,
         "acpl": 78.63414634146342,
         "blunders": 10.256410256410257,
         "mistakes": 2.5641025641025643,
@@ -1437,7 +1437,7 @@
       "username": "rizkybay",
       "rating": 1835,
       "features": {
-        "accuracy": 94.23727597603019,
+        "accuracy": 91.22920333413852,
         "acpl": 16.37037037037037,
         "blunders": 0.0,
         "mistakes": 4.3478260869565215,
@@ -1451,7 +1451,7 @@
       "username": "paulgeorge93",
       "rating": 1857,
       "features": {
-        "accuracy": 79.39503592338542,
+        "accuracy": 80.01935328940907,
         "acpl": 52.7037037037037,
         "blunders": 4.166666666666667,
         "mistakes": 8.333333333333334,
@@ -1465,7 +1465,7 @@
       "username": "rizkybay",
       "rating": 1843,
       "features": {
-        "accuracy": 87.52727205713465,
+        "accuracy": 78.88224974118694,
         "acpl": 32.166666666666664,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -1479,7 +1479,7 @@
       "username": "bong1101",
       "rating": 1806,
       "features": {
-        "accuracy": 64.55222709465954,
+        "accuracy": 64.23600203810395,
         "acpl": 89.70588235294117,
         "blunders": 6.666666666666667,
         "mistakes": 0.0,
@@ -1493,7 +1493,7 @@
       "username": "vinitok",
       "rating": 1768,
       "features": {
-        "accuracy": 73.63037386576195,
+        "accuracy": 74.61892154534611,
         "acpl": 102.6,
         "blunders": 5.882352941176471,
         "mistakes": 11.764705882352942,
@@ -1507,7 +1507,7 @@
       "username": "rizkybay",
       "rating": 1835,
       "features": {
-        "accuracy": 93.8072835448539,
+        "accuracy": 91.96336498338937,
         "acpl": 38.45,
         "blunders": 0.0,
         "mistakes": 5.882352941176471,
@@ -1521,7 +1521,7 @@
       "username": "knightmaneuver_12",
       "rating": 1809,
       "features": {
-        "accuracy": 86.03196322525835,
+        "accuracy": 88.96408379410602,
         "acpl": 33.65853658536585,
         "blunders": 2.5641025641025643,
         "mistakes": 0.0,
@@ -1535,7 +1535,7 @@
       "username": "rizkybay",
       "rating": 1828,
       "features": {
-        "accuracy": 98.18360630340655,
+        "accuracy": 96.70918325887915,
         "acpl": 11.121951219512194,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -1549,7 +1549,7 @@
       "username": "freeyourmind111",
       "rating": 1767,
       "features": {
-        "accuracy": 85.3535065285038,
+        "accuracy": 83.42311660260054,
         "acpl": 46.35897435897436,
         "blunders": 2.7777777777777777,
         "mistakes": 2.7777777777777777,
@@ -1563,7 +1563,7 @@
       "username": "vinitok",
       "rating": 1762,
       "features": {
-        "accuracy": 96.04225757884751,
+        "accuracy": 92.6565312830748,
         "acpl": 18.657894736842106,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -1577,7 +1577,7 @@
       "username": "jacv150989",
       "rating": 1757,
       "features": {
-        "accuracy": 97.21694608391905,
+        "accuracy": 95.24203405269412,
         "acpl": 6.588235294117647,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -1591,7 +1591,7 @@
       "username": "vinitok",
       "rating": 1754,
       "features": {
-        "accuracy": 62.5080598087427,
+        "accuracy": 77.46540627152893,
         "acpl": 65.8125,
         "blunders": 6.666666666666667,
         "mistakes": 0.0,
@@ -1605,7 +1605,7 @@
       "username": "vinitok",
       "rating": 1762,
       "features": {
-        "accuracy": 75.2055277556338,
+        "accuracy": 64.22135523991751,
         "acpl": 92.6842105263158,
         "blunders": 2.7777777777777777,
         "mistakes": 22.22222222222222,
@@ -1619,10 +1619,10 @@
       "username": "gary4444",
       "rating": 1725,
       "features": {
-        "accuracy": 64.84120300163131,
+        "accuracy": 59.70355991101827,
         "acpl": 110.08108108108108,
-        "blunders": 11.428571428571429,
-        "mistakes": 14.285714285714286,
+        "blunders": 8.571428571428571,
+        "mistakes": 17.142857142857142,
         "inaccuracies": 17.142857142857142
       }
     },
@@ -1633,7 +1633,7 @@
       "username": "thomv10",
       "rating": 1766,
       "features": {
-        "accuracy": 81.93448934658741,
+        "accuracy": 81.66636970928242,
         "acpl": 44.224137931034484,
         "blunders": 5.357142857142857,
         "mistakes": 1.7857142857142858,
@@ -1647,7 +1647,7 @@
       "username": "vinitok",
       "rating": 1755,
       "features": {
-        "accuracy": 61.645242661479074,
+        "accuracy": 80.93271408548235,
         "acpl": 53.8448275862069,
         "blunders": 5.357142857142857,
         "mistakes": 1.7857142857142858,
@@ -1661,7 +1661,7 @@
       "username": "kinleymack",
       "rating": 1772,
       "features": {
-        "accuracy": 78.84302534558418,
+        "accuracy": 72.85293965286503,
         "acpl": 83.8780487804878,
         "blunders": 2.5,
         "mistakes": 17.5,
@@ -1675,7 +1675,7 @@
       "username": "gary4444",
       "rating": 1734,
       "features": {
-        "accuracy": 83.24617634444056,
+        "accuracy": 79.50596192876291,
         "acpl": 63.65,
         "blunders": 2.5641025641025643,
         "mistakes": 5.128205128205129,
@@ -1689,7 +1689,7 @@
       "username": "gary4444",
       "rating": 1741,
       "features": {
-        "accuracy": 70.23495774074945,
+        "accuracy": 61.53351544888111,
         "acpl": 110.42222222222222,
         "blunders": 9.30232558139535,
         "mistakes": 13.953488372093023,
@@ -1703,7 +1703,7 @@
       "username": "homosb1",
       "rating": 1721,
       "features": {
-        "accuracy": 64.97338403104197,
+        "accuracy": 58.56554594598987,
         "acpl": 125.75,
         "blunders": 6.976744186046512,
         "mistakes": 9.30232558139535,
@@ -1717,7 +1717,7 @@
       "username": "heatwavesm",
       "rating": 1709,
       "features": {
-        "accuracy": 69.75137915054009,
+        "accuracy": 67.41523483633269,
         "acpl": 82.125,
         "blunders": 7.142857142857143,
         "mistakes": 7.142857142857143,
@@ -1731,7 +1731,7 @@
       "username": "gary4444",
       "rating": 1733,
       "features": {
-        "accuracy": 92.58905594163042,
+        "accuracy": 88.93046212255459,
         "acpl": 27.1875,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -1745,10 +1745,10 @@
       "username": "heatwavesm",
       "rating": 1701,
       "features": {
-        "accuracy": 54.72062363666056,
+        "accuracy": 61.421719334428616,
         "acpl": 96.05882352941177,
-        "blunders": 21.428571428571427,
-        "mistakes": 7.142857142857143,
+        "blunders": 14.285714285714286,
+        "mistakes": 14.285714285714286,
         "inaccuracies": 7.142857142857143
       }
     },
@@ -1759,7 +1759,7 @@
       "username": "theycallmethebest",
       "rating": 1719,
       "features": {
-        "accuracy": 68.50407543352702,
+        "accuracy": 63.72335155756583,
         "acpl": 78.41176470588235,
         "blunders": 6.666666666666667,
         "mistakes": 20.0,
@@ -1773,7 +1773,7 @@
       "username": "u09772380804",
       "rating": 1714,
       "features": {
-        "accuracy": 68.44312554187033,
+        "accuracy": 64.2230562533208,
         "acpl": 76.6470588235294,
         "blunders": 10.0,
         "mistakes": 10.0,
@@ -1787,7 +1787,7 @@
       "username": "jorbit30",
       "rating": 1916,
       "features": {
-        "accuracy": 85.56949359669153,
+        "accuracy": 82.70132958432178,
         "acpl": 35.170212765957444,
         "blunders": 4.444444444444445,
         "mistakes": 4.444444444444445,
@@ -1801,7 +1801,7 @@
       "username": "gm-pyjoe",
       "rating": 1967,
       "features": {
-        "accuracy": 68.5273436936735,
+        "accuracy": 62.9112270008714,
         "acpl": 102.4,
         "blunders": 10.344827586206897,
         "mistakes": 10.344827586206897,
@@ -1815,7 +1815,7 @@
       "username": "gm-pyjoe",
       "rating": 1952,
       "features": {
-        "accuracy": 76.95539263935291,
+        "accuracy": 71.34015874805657,
         "acpl": 81.34615384615384,
         "blunders": 4.0,
         "mistakes": 12.0,
@@ -1829,7 +1829,7 @@
       "username": "3palestine-quran17-4",
       "rating": 1948,
       "features": {
-        "accuracy": 89.46739547651805,
+        "accuracy": 82.89908445938306,
         "acpl": 36.69230769230769,
         "blunders": 0.0,
         "mistakes": 7.6923076923076925,
@@ -1843,7 +1843,7 @@
       "username": "gm-pyjoe",
       "rating": 1961,
       "features": {
-        "accuracy": 53.60519907398438,
+        "accuracy": 77.09388026988854,
         "acpl": 85.46153846153847,
         "blunders": 6.0,
         "mistakes": 0.0,
@@ -1857,7 +1857,7 @@
       "username": "hotshot84920",
       "rating": 1964,
       "features": {
-        "accuracy": 55.227374133952615,
+        "accuracy": 72.88855479870797,
         "acpl": 92.15384615384616,
         "blunders": 5.882352941176471,
         "mistakes": 5.882352941176471,
@@ -1871,7 +1871,7 @@
       "username": "cesarmeneses",
       "rating": 2006,
       "features": {
-        "accuracy": 83.27863602880365,
+        "accuracy": 83.66930384741482,
         "acpl": 48.693548387096776,
         "blunders": 3.389830508474576,
         "mistakes": 3.389830508474576,
@@ -1885,7 +1885,7 @@
       "username": "gm-pyjoe",
       "rating": 1969,
       "features": {
-        "accuracy": 88.82889801018541,
+        "accuracy": 84.15034840845163,
         "acpl": 47.18032786885246,
         "blunders": 1.7241379310344827,
         "mistakes": 3.4482758620689653,
@@ -1899,7 +1899,7 @@
       "username": "gm-pyjoe",
       "rating": 1976,
       "features": {
-        "accuracy": 81.96024260459274,
+        "accuracy": 77.61096644367066,
         "acpl": 53.108108108108105,
         "blunders": 2.7777777777777777,
         "mistakes": 2.7777777777777777,
@@ -1913,10 +1913,10 @@
       "username": "pekengtao01",
       "rating": 1957,
       "features": {
-        "accuracy": 53.15166886808754,
+        "accuracy": 74.36953881414351,
         "acpl": 88.88888888888889,
-        "blunders": 8.333333333333334,
-        "mistakes": 0.0,
+        "blunders": 5.555555555555555,
+        "mistakes": 2.7777777777777777,
         "inaccuracies": 8.333333333333334
       }
     },
@@ -1927,7 +1927,7 @@
       "username": "3palestine-quran17-4",
       "rating": 1933,
       "features": {
-        "accuracy": 74.79207335464542,
+        "accuracy": 68.66035234721768,
         "acpl": 68.27272727272727,
         "blunders": 7.6923076923076925,
         "mistakes": 5.128205128205129,
@@ -1941,7 +1941,7 @@
       "username": "jambi02",
       "rating": 1951,
       "features": {
-        "accuracy": 67.3201122652011,
+        "accuracy": 67.09658164089235,
         "acpl": 76.8409090909091,
         "blunders": 7.6923076923076925,
         "mistakes": 10.256410256410257,
@@ -1955,10 +1955,10 @@
       "username": "3palestine-quran17-4",
       "rating": 1932,
       "features": {
-        "accuracy": 47.01062277081981,
+        "accuracy": 58.734598575346574,
         "acpl": 123.25,
-        "blunders": 17.24137931034483,
-        "mistakes": 3.4482758620689653,
+        "blunders": 13.793103448275861,
+        "mistakes": 6.896551724137931,
         "inaccuracies": 17.24137931034483
       }
     },
@@ -1969,7 +1969,7 @@
       "username": "john10170815",
       "rating": 1960,
       "features": {
-        "accuracy": 45.31646956364717,
+        "accuracy": 61.3475522788148,
         "acpl": 121.75,
         "blunders": 10.0,
         "mistakes": 10.0,
@@ -1983,7 +1983,7 @@
       "username": "danitrev",
       "rating": 1929,
       "features": {
-        "accuracy": 74.95690912859394,
+        "accuracy": 75.30251847139735,
         "acpl": 57.325,
         "blunders": 5.2631578947368425,
         "mistakes": 2.6315789473684212,
@@ -1997,7 +1997,7 @@
       "username": "3palestine-quran17-4",
       "rating": 1947,
       "features": {
-        "accuracy": 84.80984830184107,
+        "accuracy": 80.84571745231868,
         "acpl": 32.625,
         "blunders": 2.6315789473684212,
         "mistakes": 5.2631578947368425,
@@ -2011,7 +2011,7 @@
       "username": "rhetoricus",
       "rating": 1941,
       "features": {
-        "accuracy": 85.37304897917848,
+        "accuracy": 80.14791624076825,
         "acpl": 44.4,
         "blunders": 0.0,
         "mistakes": 11.538461538461538,
@@ -2025,7 +2025,7 @@
       "username": "danitrev",
       "rating": 1921,
       "features": {
-        "accuracy": 75.59059792839307,
+        "accuracy": 69.51361785272145,
         "acpl": 76.93103448275862,
         "blunders": 4.0,
         "mistakes": 24.0,
@@ -2039,7 +2039,7 @@
       "username": "rhaaa",
       "rating": 1951,
       "features": {
-        "accuracy": 84.52922533237043,
+        "accuracy": 79.17142064137045,
         "acpl": 35.791666666666664,
         "blunders": 0.0,
         "mistakes": 8.695652173913043,
@@ -2053,10 +2053,10 @@
       "username": "danitrev",
       "rating": 1937,
       "features": {
-        "accuracy": 56.31578247122439,
+        "accuracy": 73.20436419248102,
         "acpl": 73.95652173913044,
-        "blunders": 9.090909090909092,
-        "mistakes": 4.545454545454546,
+        "blunders": 4.545454545454546,
+        "mistakes": 9.090909090909092,
         "inaccuracies": 9.090909090909092
       }
     },
@@ -2067,10 +2067,10 @@
       "username": "danitrev",
       "rating": 1945,
       "features": {
-        "accuracy": 61.441591537966644,
+        "accuracy": 53.79354792650449,
         "acpl": 124.96296296296296,
-        "blunders": 19.23076923076923,
-        "mistakes": 15.384615384615385,
+        "blunders": 15.384615384615385,
+        "mistakes": 19.23076923076923,
         "inaccuracies": 11.538461538461538
       }
     },
@@ -2081,7 +2081,7 @@
       "username": "no_attack",
       "rating": 1935,
       "features": {
-        "accuracy": 42.0810549194719,
+        "accuracy": 50.264907626768206,
         "acpl": 169.57692307692307,
         "blunders": 15.384615384615385,
         "mistakes": 15.384615384615385,
@@ -2095,7 +2095,7 @@
       "username": "leon123u",
       "rating": 1919,
       "features": {
-        "accuracy": 85.06763965120638,
+        "accuracy": 90.63279151859881,
         "acpl": 32.283018867924525,
         "blunders": 2.0,
         "mistakes": 0.0,
@@ -2109,7 +2109,7 @@
       "username": "no_attack",
       "rating": 1921,
       "features": {
-        "accuracy": 96.72672169184122,
+        "accuracy": 94.46337337892184,
         "acpl": 17.339622641509433,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -2123,7 +2123,7 @@
       "username": "thefaustmeister",
       "rating": 1904,
       "features": {
-        "accuracy": 45.55590927783161,
+        "accuracy": 52.15005082198277,
         "acpl": 158.36363636363637,
         "blunders": 22.580645161290324,
         "mistakes": 6.451612903225806,
@@ -2137,7 +2137,7 @@
       "username": "hustlathegreat",
       "rating": 2206,
       "features": {
-        "accuracy": 74.41245669778672,
+        "accuracy": 69.46437736416257,
         "acpl": 59.56818181818182,
         "blunders": 11.627906976744185,
         "mistakes": 6.976744186046512,
@@ -2151,7 +2151,7 @@
       "username": "digitoplays",
       "rating": 2372,
       "features": {
-        "accuracy": 80.41138275551859,
+        "accuracy": 75.31861455497918,
         "acpl": 70.92307692307692,
         "blunders": 4.166666666666667,
         "mistakes": 4.166666666666667,
@@ -2165,7 +2165,7 @@
       "username": "hustlathegreat",
       "rating": 2218,
       "features": {
-        "accuracy": 92.25216823054672,
+        "accuracy": 86.73068842976905,
         "acpl": 39.19230769230769,
         "blunders": 0.0,
         "mistakes": 4.166666666666667,
@@ -2179,10 +2179,10 @@
       "username": "valbertcarvalho",
       "rating": 2202,
       "features": {
-        "accuracy": 70.63368587728866,
+        "accuracy": 66.12968783369952,
         "acpl": 81.69014084507042,
-        "blunders": 11.594202898550725,
-        "mistakes": 2.898550724637681,
+        "blunders": 10.144927536231885,
+        "mistakes": 4.3478260869565215,
         "inaccuracies": 15.942028985507246
       }
     },
@@ -2193,7 +2193,7 @@
       "username": "valbertcarvalho",
       "rating": 2211,
       "features": {
-        "accuracy": 94.2238280176728,
+        "accuracy": 90.10926522230056,
         "acpl": 39.142857142857146,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -2207,7 +2207,7 @@
       "username": "suiton",
       "rating": 2216,
       "features": {
-        "accuracy": 79.8185908758224,
+        "accuracy": 82.29381656158561,
         "acpl": 68.41176470588235,
         "blunders": 3.125,
         "mistakes": 0.0,
@@ -2221,10 +2221,10 @@
       "username": "valbertcarvalho",
       "rating": 2210,
       "features": {
-        "accuracy": 67.42408200464487,
+        "accuracy": 62.391365676246,
         "acpl": 86.21538461538462,
-        "blunders": 14.0625,
-        "mistakes": 9.375,
+        "blunders": 12.5,
+        "mistakes": 10.9375,
         "inaccuracies": 6.25
       }
     },
@@ -2235,7 +2235,7 @@
       "username": "valbertcarvalho",
       "rating": 2202,
       "features": {
-        "accuracy": 43.61130835586857,
+        "accuracy": 66.26206365142934,
         "acpl": 112.6086956521739,
         "blunders": 9.523809523809524,
         "mistakes": 0.0,
@@ -2249,7 +2249,7 @@
       "username": "chessandisback",
       "rating": 2317,
       "features": {
-        "accuracy": 50.53426074709854,
+        "accuracy": 80.68345619606208,
         "acpl": 64.08695652173913,
         "blunders": 4.761904761904762,
         "mistakes": 0.0,
@@ -2263,7 +2263,7 @@
       "username": "suiton",
       "rating": 2207,
       "features": {
-        "accuracy": 72.11907927782704,
+        "accuracy": 69.55448288414493,
         "acpl": 57.95454545454545,
         "blunders": 5.2631578947368425,
         "mistakes": 5.2631578947368425,
@@ -2277,10 +2277,10 @@
       "username": "suiton",
       "rating": 2225,
       "features": {
-        "accuracy": 68.43811767344317,
+        "accuracy": 62.82259784144679,
         "acpl": 102.09756097560975,
-        "blunders": 13.157894736842104,
-        "mistakes": 13.157894736842104,
+        "blunders": 10.526315789473685,
+        "mistakes": 15.789473684210526,
         "inaccuracies": 10.526315789473685
       }
     },
@@ -2291,10 +2291,10 @@
       "username": "veenanow",
       "rating": 2249,
       "features": {
-        "accuracy": 75.23793177343846,
+        "accuracy": 68.56112192036787,
         "acpl": 77.04878048780488,
-        "blunders": 7.6923076923076925,
-        "mistakes": 10.256410256410257,
+        "blunders": 5.128205128205129,
+        "mistakes": 12.820512820512821,
         "inaccuracies": 12.820512820512821
       }
     },
@@ -2305,7 +2305,7 @@
       "username": "punkerman1346",
       "rating": 2270,
       "features": {
-        "accuracy": 86.88269770650761,
+        "accuracy": 80.37346710661335,
         "acpl": 54.47457627118644,
         "blunders": 1.7543859649122806,
         "mistakes": 3.508771929824561,
@@ -2319,7 +2319,7 @@
       "username": "suiton",
       "rating": 2233,
       "features": {
-        "accuracy": 83.09708029980682,
+        "accuracy": 81.93510186745499,
         "acpl": 54.10344827586207,
         "blunders": 3.5714285714285716,
         "mistakes": 1.7857142857142858,
@@ -2333,7 +2333,7 @@
       "username": "veenanow",
       "rating": 2241,
       "features": {
-        "accuracy": 70.20458040462591,
+        "accuracy": 69.22680846480745,
         "acpl": 75.625,
         "blunders": 9.523809523809524,
         "mistakes": 9.523809523809524,
@@ -2347,10 +2347,10 @@
       "username": "veenanow",
       "rating": 2234,
       "features": {
-        "accuracy": 71.67115970312344,
+        "accuracy": 64.73067241863819,
         "acpl": 84.9375,
-        "blunders": 8.88888888888889,
-        "mistakes": 13.333333333333334,
+        "blunders": 13.333333333333334,
+        "mistakes": 8.88888888888889,
         "inaccuracies": 8.88888888888889
       }
     },
@@ -2361,10 +2361,10 @@
       "username": "handaddio",
       "rating": 2207,
       "features": {
-        "accuracy": 79.31955048829175,
+        "accuracy": 72.96902777438146,
         "acpl": 56.5531914893617,
-        "blunders": 13.333333333333334,
-        "mistakes": 2.2222222222222223,
+        "blunders": 11.11111111111111,
+        "mistakes": 4.444444444444445,
         "inaccuracies": 6.666666666666667
       }
     },
@@ -2375,7 +2375,7 @@
       "username": "veenanow",
       "rating": 2226,
       "features": {
-        "accuracy": 89.1093484517278,
+        "accuracy": 81.65672233861758,
         "acpl": 28.5625,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -2389,7 +2389,7 @@
       "username": "handaddio",
       "rating": 2244,
       "features": {
-        "accuracy": 92.29193095271206,
+        "accuracy": 90.12776780851495,
         "acpl": 34.15384615384615,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -2403,7 +2403,7 @@
       "username": "1h4forlife",
       "rating": 2248,
       "features": {
-        "accuracy": 48.26135465986695,
+        "accuracy": 73.66785442385583,
         "acpl": 99.58333333333333,
         "blunders": 10.0,
         "mistakes": 0.0,
@@ -2417,10 +2417,10 @@
       "username": "handaddio",
       "rating": 2235,
       "features": {
-        "accuracy": 68.04599027623034,
+        "accuracy": 61.31326075968493,
         "acpl": 91.78688524590164,
-        "blunders": 10.344827586206897,
-        "mistakes": 13.793103448275861,
+        "blunders": 12.068965517241379,
+        "mistakes": 12.068965517241379,
         "inaccuracies": 13.793103448275861
       }
     },
@@ -2431,7 +2431,7 @@
       "username": "handaddio",
       "rating": 2228,
       "features": {
-        "accuracy": 61.230727151499465,
+        "accuracy": 65.00944828656641,
         "acpl": 85.81481481481481,
         "blunders": 9.615384615384615,
         "mistakes": 3.8461538461538463,
@@ -2445,7 +2445,7 @@
       "username": "1h4forlife",
       "rating": 2262,
       "features": {
-        "accuracy": 57.80811410224874,
+        "accuracy": 62.70923290373201,
         "acpl": 92.38888888888889,
         "blunders": 13.461538461538462,
         "mistakes": 7.6923076923076925,
@@ -2459,7 +2459,7 @@
       "username": "blindone1",
       "rating": 2235,
       "features": {
-        "accuracy": 84.1219360713819,
+        "accuracy": 82.32277493546552,
         "acpl": 33.472972972972975,
         "blunders": 4.166666666666667,
         "mistakes": 4.166666666666667,
@@ -2473,7 +2473,7 @@
       "username": "handaddio",
       "rating": 2236,
       "features": {
-        "accuracy": 84.85258504384524,
+        "accuracy": 82.56384905450619,
         "acpl": 32.10958904109589,
         "blunders": 4.225352112676056,
         "mistakes": 1.408450704225352,
@@ -2487,10 +2487,10 @@
       "username": "danzha",
       "rating": 2738,
       "features": {
-        "accuracy": 87.98709837080264,
+        "accuracy": 86.98813143860966,
         "acpl": 35.30434782608695,
-        "blunders": 4.444444444444445,
-        "mistakes": 0.0,
+        "blunders": 2.2222222222222223,
+        "mistakes": 2.2222222222222223,
         "inaccuracies": 2.2222222222222223
       }
     },
@@ -2501,7 +2501,7 @@
       "username": "danzha",
       "rating": 2721,
       "features": {
-        "accuracy": 88.21871821143415,
+        "accuracy": 84.75920785955054,
         "acpl": 53.359375,
         "blunders": 0.0,
         "mistakes": 4.761904761904762,
@@ -2515,7 +2515,7 @@
       "username": "ivanooob",
       "rating": 2747,
       "features": {
-        "accuracy": 91.24560672338639,
+        "accuracy": 89.14914035656027,
         "acpl": 37.6875,
         "blunders": 0.0,
         "mistakes": 3.1746031746031744,
@@ -2529,10 +2529,10 @@
       "username": "fronk98",
       "rating": 2667,
       "features": {
-        "accuracy": 76.40431543629546,
+        "accuracy": 74.55322897970134,
         "acpl": 53.82857142857143,
-        "blunders": 10.606060606060606,
-        "mistakes": 1.5151515151515151,
+        "blunders": 7.575757575757576,
+        "mistakes": 4.545454545454546,
         "inaccuracies": 10.606060606060606
       }
     },
@@ -2543,7 +2543,7 @@
       "username": "danzha",
       "rating": 2729,
       "features": {
-        "accuracy": 79.23657854199703,
+        "accuracy": 75.34935505054173,
         "acpl": 50.3768115942029,
         "blunders": 6.153846153846154,
         "mistakes": 9.23076923076923,
@@ -2557,7 +2557,7 @@
       "username": "alexanderjasinski",
       "rating": 2752,
       "features": {
-        "accuracy": 90.75875200543442,
+        "accuracy": 85.11015311302029,
         "acpl": 28.828125,
         "blunders": 0.0,
         "mistakes": 4.838709677419355,
@@ -2571,7 +2571,7 @@
       "username": "danzha",
       "rating": 2730,
       "features": {
-        "accuracy": 85.36729151507174,
+        "accuracy": 79.84840905226977,
         "acpl": 45.698412698412696,
         "blunders": 1.639344262295082,
         "mistakes": 1.639344262295082,
@@ -2585,7 +2585,7 @@
       "username": "jeyhun_huseynzade",
       "rating": 2667,
       "features": {
-        "accuracy": 67.57072362047514,
+        "accuracy": 63.578575927891045,
         "acpl": 101.53191489361703,
         "blunders": 11.627906976744185,
         "mistakes": 9.30232558139535,
@@ -2599,10 +2599,10 @@
       "username": "fronk98",
       "rating": 2668,
       "features": {
-        "accuracy": 71.468440362226,
+        "accuracy": 67.7355713819104,
         "acpl": 83.63829787234043,
-        "blunders": 11.627906976744185,
-        "mistakes": 6.976744186046512,
+        "blunders": 9.30232558139535,
+        "mistakes": 9.30232558139535,
         "inaccuracies": 11.627906976744185
       }
     },
@@ -2613,7 +2613,7 @@
       "username": "fronk98",
       "rating": 2660,
       "features": {
-        "accuracy": 74.9797815058663,
+        "accuracy": 75.78220008346351,
         "acpl": 64.5,
         "blunders": 6.666666666666667,
         "mistakes": 0.0,
@@ -2627,7 +2627,7 @@
       "username": "chikki2021",
       "rating": 2652,
       "features": {
-        "accuracy": 82.64109346513679,
+        "accuracy": 83.1947173258875,
         "acpl": 40.729166666666664,
         "blunders": 4.444444444444445,
         "mistakes": 0.0,
@@ -2641,7 +2641,7 @@
       "username": "fronk98",
       "rating": 2669,
       "features": {
-        "accuracy": 87.2416566740987,
+        "accuracy": 89.46258835324794,
         "acpl": 24.694444444444443,
         "blunders": 1.4285714285714286,
         "mistakes": 1.4285714285714286,
@@ -2655,7 +2655,7 @@
       "username": "lnfinitymoves",
       "rating": 2716,
       "features": {
-        "accuracy": 89.20031668445829,
+        "accuracy": 84.33168866044367,
         "acpl": 34.22222222222222,
         "blunders": 2.857142857142857,
         "mistakes": 4.285714285714286,
@@ -2669,7 +2669,7 @@
       "username": "lnfinitymoves",
       "rating": 2709,
       "features": {
-        "accuracy": 55.80303470908544,
+        "accuracy": 71.3116600773876,
         "acpl": 83.67567567567568,
         "blunders": 8.333333333333334,
         "mistakes": 2.7777777777777777,
@@ -2683,7 +2683,7 @@
       "username": "fronk98",
       "rating": 2676,
       "features": {
-        "accuracy": 61.12177621185563,
+        "accuracy": 78.08071815738869,
         "acpl": 58.189189189189186,
         "blunders": 2.7777777777777777,
         "mistakes": 2.7777777777777777,
@@ -2697,7 +2697,7 @@
       "username": "chikki2021",
       "rating": 2643,
       "features": {
-        "accuracy": 72.90181652475508,
+        "accuracy": 75.67318844016145,
         "acpl": 49.94444444444444,
         "blunders": 7.6923076923076925,
         "mistakes": 7.6923076923076925,
@@ -2711,7 +2711,7 @@
       "username": "zephyrfinal",
       "rating": 2696,
       "features": {
-        "accuracy": 96.61530736396796,
+        "accuracy": 92.90492855207985,
         "acpl": 10.722222222222221,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -2725,7 +2725,7 @@
       "username": "idkidk21986",
       "rating": 2655,
       "features": {
-        "accuracy": 65.82726270303041,
+        "accuracy": 68.14059018356507,
         "acpl": 77.14285714285714,
         "blunders": 8.333333333333334,
         "mistakes": 25.0,
@@ -2739,7 +2739,7 @@
       "username": "chikki2021",
       "rating": 2650,
       "features": {
-        "accuracy": 89.43197789765492,
+        "accuracy": 88.92246080825787,
         "acpl": 16.0,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -2753,7 +2753,7 @@
       "username": "chikki2021",
       "rating": 2642,
       "features": {
-        "accuracy": 56.87796734655243,
+        "accuracy": 80.17672867284782,
         "acpl": 65.0,
         "blunders": 4.3478260869565215,
         "mistakes": 6.521739130434782,
@@ -2767,7 +2767,7 @@
       "username": "swinghigh11",
       "rating": 2672,
       "features": {
-        "accuracy": 80.53733943301577,
+        "accuracy": 80.02569179699903,
         "acpl": 61.395833333333336,
         "blunders": 6.382978723404255,
         "mistakes": 0.0,
@@ -2781,7 +2781,7 @@
       "username": "idkidk21986",
       "rating": 2643,
       "features": {
-        "accuracy": 82.50704038907764,
+        "accuracy": 78.61657575715954,
         "acpl": 48.0,
         "blunders": 0.0,
         "mistakes": 8.0,
@@ -2795,7 +2795,7 @@
       "username": "swinghigh11",
       "rating": 2680,
       "features": {
-        "accuracy": 97.00046003328214,
+        "accuracy": 93.30916559800905,
         "acpl": 9.148148148148149,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -2809,7 +2809,7 @@
       "username": "ryadad1",
       "rating": 2679,
       "features": {
-        "accuracy": 91.79220891872322,
+        "accuracy": 89.511005006372,
         "acpl": 16.88372093023256,
         "blunders": 2.7027027027027026,
         "mistakes": 2.7027027027027026,
@@ -2823,7 +2823,7 @@
       "username": "idkidk21986",
       "rating": 2651,
       "features": {
-        "accuracy": 85.77333933628157,
+        "accuracy": 83.5460714624274,
         "acpl": 31.071428571428573,
         "blunders": 5.555555555555555,
         "mistakes": 2.7777777777777777,
@@ -2837,7 +2837,7 @@
       "username": "toggi_fischer",
       "rating": 549,
       "features": {
-        "accuracy": 69.22498826857313,
+        "accuracy": 61.92375046124784,
         "acpl": 109.0,
         "blunders": 17.857142857142858,
         "mistakes": 3.5714285714285716,
@@ -2851,7 +2851,7 @@
       "username": "dori1305",
       "rating": 951,
       "features": {
-        "accuracy": 82.40108595399707,
+        "accuracy": 76.2081029847692,
         "acpl": 53.5,
         "blunders": 4.166666666666667,
         "mistakes": 4.166666666666667,
@@ -2865,7 +2865,7 @@
       "username": "beterdan",
       "rating": 1048,
       "features": {
-        "accuracy": 78.70045797138611,
+        "accuracy": 69.95921831667211,
         "acpl": 70.58,
         "blunders": 4.166666666666667,
         "mistakes": 14.583333333333334,
@@ -2879,7 +2879,7 @@
       "username": "dori1305",
       "rating": 935,
       "features": {
-        "accuracy": 76.84104779112651,
+        "accuracy": 74.93924865541887,
         "acpl": 79.79310344827586,
         "blunders": 3.8461538461538463,
         "mistakes": 11.538461538461538,
@@ -2893,10 +2893,10 @@
       "username": "magnuscarls-son",
       "rating": 1054,
       "features": {
-        "accuracy": 88.29766703915331,
+        "accuracy": 83.67101943689936,
         "acpl": 49.172413793103445,
-        "blunders": 3.7037037037037037,
-        "mistakes": 0.0,
+        "blunders": 0.0,
+        "mistakes": 3.7037037037037037,
         "inaccuracies": 3.7037037037037037
       }
     },
@@ -2907,10 +2907,10 @@
       "username": "dori1305",
       "rating": 1054,
       "features": {
-        "accuracy": 45.90073310915731,
+        "accuracy": 50.290104078616714,
         "acpl": 140.6,
-        "blunders": 15.384615384615385,
-        "mistakes": 23.076923076923077,
+        "blunders": 23.076923076923077,
+        "mistakes": 15.384615384615385,
         "inaccuracies": 7.6923076923076925
       }
     },
@@ -2921,10 +2921,10 @@
       "username": "p-iron-dawg",
       "rating": 1228,
       "features": {
-        "accuracy": 52.07489022390479,
+        "accuracy": 50.31169735459044,
         "acpl": 131.33333333333334,
-        "blunders": 14.285714285714286,
-        "mistakes": 14.285714285714286,
+        "blunders": 21.428571428571427,
+        "mistakes": 7.142857142857143,
         "inaccuracies": 21.428571428571427
       }
     },
@@ -2935,7 +2935,7 @@
       "username": "ramesh726252",
       "rating": 600,
       "features": {
-        "accuracy": 82.76194837295239,
+        "accuracy": 84.62731591373925,
         "acpl": 39.214285714285715,
         "blunders": 0.0,
         "mistakes": 8.333333333333334,
@@ -2949,7 +2949,7 @@
       "username": "eagl1997",
       "rating": 599,
       "features": {
-        "accuracy": 51.69587262216098,
+        "accuracy": 67.98702127197616,
         "acpl": 106.84615384615384,
         "blunders": 8.333333333333334,
         "mistakes": 8.333333333333334,
@@ -2963,7 +2963,7 @@
       "username": "eagl1997",
       "rating": 608,
       "features": {
-        "accuracy": 47.672597527693064,
+        "accuracy": 76.54005818062787,
         "acpl": 98.42307692307692,
         "blunders": 8.695652173913043,
         "mistakes": 0.0,
@@ -2977,7 +2977,7 @@
       "username": "juanelpai",
       "rating": 570,
       "features": {
-        "accuracy": 40.37521866308081,
+        "accuracy": 66.79071862410433,
         "acpl": 138.24,
         "blunders": 13.043478260869565,
         "mistakes": 0.0,
@@ -2991,7 +2991,7 @@
       "username": "eagl1997",
       "rating": 600,
       "features": {
-        "accuracy": 43.52082738961661,
+        "accuracy": 62.4181824427457,
         "acpl": 152.56521739130434,
         "blunders": 19.047619047619047,
         "mistakes": 4.761904761904762,
@@ -3005,7 +3005,7 @@
       "username": "b_ma93z",
       "rating": 596,
       "features": {
-        "accuracy": 50.20386736971551,
+        "accuracy": 49.784091101524666,
         "acpl": 191.3181818181818,
         "blunders": 25.0,
         "mistakes": 5.0,
@@ -3019,7 +3019,7 @@
       "username": "rostyk2r",
       "rating": 599,
       "features": {
-        "accuracy": 84.9726142937702,
+        "accuracy": 75.53928006547835,
         "acpl": 54.71052631578947,
         "blunders": 0.0,
         "mistakes": 11.428571428571429,
@@ -3033,10 +3033,10 @@
       "username": "eagl1997",
       "rating": 591,
       "features": {
-        "accuracy": 77.78965607410372,
+        "accuracy": 69.73182130352617,
         "acpl": 73.37837837837837,
-        "blunders": 8.571428571428571,
-        "mistakes": 2.857142857142857,
+        "blunders": 5.714285714285714,
+        "mistakes": 5.714285714285714,
         "inaccuracies": 25.714285714285715
       }
     },
@@ -3047,10 +3047,10 @@
       "username": "tomasingii",
       "rating": 628,
       "features": {
-        "accuracy": 56.960550311052245,
+        "accuracy": 54.381110150232466,
         "acpl": 143.6,
-        "blunders": 21.73913043478261,
-        "mistakes": 8.695652173913043,
+        "blunders": 17.391304347826086,
+        "mistakes": 13.043478260869565,
         "inaccuracies": 8.695652173913043
       }
     },
@@ -3061,10 +3061,10 @@
       "username": "neerkhat",
       "rating": 656,
       "features": {
-        "accuracy": 64.68290326031195,
+        "accuracy": 65.29243201829081,
         "acpl": 99.4,
-        "blunders": 13.043478260869565,
-        "mistakes": 13.043478260869565,
+        "blunders": 17.391304347826086,
+        "mistakes": 8.695652173913043,
         "inaccuracies": 4.3478260869565215
       }
     },
@@ -3075,7 +3075,7 @@
       "username": "serafimardintsev",
       "rating": 632,
       "features": {
-        "accuracy": 73.74402894500747,
+        "accuracy": 76.84998620666413,
         "acpl": 87.85714285714286,
         "blunders": 4.444444444444445,
         "mistakes": 0.0,
@@ -3089,7 +3089,7 @@
       "username": "tomasingii",
       "rating": 636,
       "features": {
-        "accuracy": 82.66359205614746,
+        "accuracy": 81.63565553238085,
         "acpl": 71.85416666666667,
         "blunders": 2.2222222222222223,
         "mistakes": 0.0,
@@ -3103,7 +3103,7 @@
       "username": "tomasingii",
       "rating": 644,
       "features": {
-        "accuracy": 79.15149761069102,
+        "accuracy": 79.61663995482589,
         "acpl": 46.833333333333336,
         "blunders": 6.25,
         "mistakes": 0.0,
@@ -3117,7 +3117,7 @@
       "username": "chambaldaku_0",
       "rating": 645,
       "features": {
-        "accuracy": 60.7676162525821,
+        "accuracy": 67.3673047700505,
         "acpl": 83.11764705882354,
         "blunders": 12.5,
         "mistakes": 0.0,
@@ -3131,7 +3131,7 @@
       "username": "tomasingii",
       "rating": 636,
       "features": {
-        "accuracy": 66.93844267527726,
+        "accuracy": 65.57073211803758,
         "acpl": 83.94029850746269,
         "blunders": 12.121212121212121,
         "mistakes": 6.0606060606060606,
@@ -3145,10 +3145,10 @@
       "username": "hurakamy",
       "rating": 658,
       "features": {
-        "accuracy": 71.07232419796664,
+        "accuracy": 64.97082274416385,
         "acpl": 83.1969696969697,
-        "blunders": 15.384615384615385,
-        "mistakes": 3.076923076923077,
+        "blunders": 13.846153846153847,
+        "mistakes": 4.615384615384615,
         "inaccuracies": 6.153846153846154
       }
     },
@@ -3159,7 +3159,7 @@
       "username": "thorsteinnhk",
       "rating": 427,
       "features": {
-        "accuracy": 95.40736603345357,
+        "accuracy": 90.5959781245507,
         "acpl": 34.833333333333336,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -3173,7 +3173,7 @@
       "username": "max6nc6",
       "rating": 422,
       "features": {
-        "accuracy": 44.344778157389705,
+        "accuracy": 67.72822335470346,
         "acpl": 147.125,
         "blunders": 9.67741935483871,
         "mistakes": 3.225806451612903,
@@ -3187,10 +3187,10 @@
       "username": "teamlouis",
       "rating": 541,
       "features": {
-        "accuracy": 76.44425862516977,
+        "accuracy": 81.38407557389189,
         "acpl": 70.5,
-        "blunders": 5.882352941176471,
-        "mistakes": 2.9411764705882355,
+        "blunders": 2.9411764705882355,
+        "mistakes": 5.882352941176471,
         "inaccuracies": 8.823529411764707
       }
     },
@@ -3201,7 +3201,7 @@
       "username": "thorsteinnhk",
       "rating": 431,
       "features": {
-        "accuracy": 83.40981056697817,
+        "accuracy": 79.98516355652318,
         "acpl": 73.94285714285714,
         "blunders": 0.0,
         "mistakes": 11.764705882352942,
@@ -3215,7 +3215,7 @@
       "username": "thorsteinndg",
       "rating": 508,
       "features": {
-        "accuracy": 69.05236095706974,
+        "accuracy": 67.47033732265929,
         "acpl": 93.31914893617021,
         "blunders": 13.636363636363637,
         "mistakes": 6.818181818181818,
@@ -3229,7 +3229,7 @@
       "username": "spunkyfanny",
       "rating": 509,
       "features": {
-        "accuracy": 51.39637977037157,
+        "accuracy": 68.11445711061626,
         "acpl": 107.68085106382979,
         "blunders": 13.636363636363637,
         "mistakes": 0.0,
@@ -3243,10 +3243,10 @@
       "username": "slayzer1005p",
       "rating": 515,
       "features": {
-        "accuracy": 45.926912749926075,
+        "accuracy": 42.92023717131521,
         "acpl": 194.75862068965517,
-        "blunders": 25.925925925925927,
-        "mistakes": 11.11111111111111,
+        "blunders": 29.62962962962963,
+        "mistakes": 7.407407407407407,
         "inaccuracies": 7.407407407407407
       }
     },
@@ -3257,10 +3257,10 @@
       "username": "thorsteinndg",
       "rating": 508,
       "features": {
-        "accuracy": 46.495626020585064,
+        "accuracy": 40.138843428250645,
         "acpl": 204.07142857142858,
-        "blunders": 33.333333333333336,
-        "mistakes": 0.0,
+        "blunders": 29.62962962962963,
+        "mistakes": 3.7037037037037037,
         "inaccuracies": 7.407407407407407
       }
     },
@@ -3271,7 +3271,7 @@
       "username": "vishnubontha",
       "rating": 863,
       "features": {
-        "accuracy": 78.6697368036614,
+        "accuracy": 74.03318645106631,
         "acpl": 51.44,
         "blunders": 4.545454545454546,
         "mistakes": 13.636363636363637,
@@ -3285,7 +3285,7 @@
       "username": "k100073",
       "rating": 1114,
       "features": {
-        "accuracy": 69.53432405514752,
+        "accuracy": 66.54235938038384,
         "acpl": 85.375,
         "blunders": 14.285714285714286,
         "mistakes": 14.285714285714286,
@@ -3299,7 +3299,7 @@
       "username": "k100073",
       "rating": 1127,
       "features": {
-        "accuracy": 58.90108034373905,
+        "accuracy": 71.22247203042362,
         "acpl": 85.28571428571429,
         "blunders": 9.25925925925926,
         "mistakes": 1.8518518518518519,
@@ -3313,7 +3313,7 @@
       "username": "vishnubontha",
       "rating": 864,
       "features": {
-        "accuracy": 51.13998606217469,
+        "accuracy": 69.98440217318077,
         "acpl": 102.12727272727273,
         "blunders": 11.11111111111111,
         "mistakes": 1.8518518518518519,
@@ -3327,7 +3327,7 @@
       "username": "k100073",
       "rating": 1124,
       "features": {
-        "accuracy": 72.96629451433027,
+        "accuracy": 77.13614432145458,
         "acpl": 53.5625,
         "blunders": 4.3478260869565215,
         "mistakes": 4.3478260869565215,
@@ -3341,10 +3341,10 @@
       "username": "vishnubontha",
       "rating": 927,
       "features": {
-        "accuracy": 79.9119259700549,
+        "accuracy": 85.52440647024936,
         "acpl": 31.104166666666668,
-        "blunders": 2.127659574468085,
-        "mistakes": 4.25531914893617,
+        "blunders": 4.25531914893617,
+        "mistakes": 2.127659574468085,
         "inaccuracies": 2.127659574468085
       }
     },
@@ -3355,7 +3355,7 @@
       "username": "vishnubontha",
       "rating": 901,
       "features": {
-        "accuracy": 65.7649878824121,
+        "accuracy": 63.35150356010852,
         "acpl": 100.83870967741936,
         "blunders": 14.814814814814815,
         "mistakes": 3.7037037037037037,
@@ -3369,7 +3369,7 @@
       "username": "k100073",
       "rating": 1137,
       "features": {
-        "accuracy": 73.83623517266004,
+        "accuracy": 72.98691943113307,
         "acpl": 65.7741935483871,
         "blunders": 7.407407407407407,
         "mistakes": 7.407407407407407,
@@ -3383,10 +3383,10 @@
       "username": "mnchld777",
       "rating": 834,
       "features": {
-        "accuracy": 89.99431560326471,
+        "accuracy": 86.86194698915247,
         "acpl": 34.53846153846154,
-        "blunders": 4.3478260869565215,
-        "mistakes": 4.3478260869565215,
+        "blunders": 0.0,
+        "mistakes": 8.695652173913043,
         "inaccuracies": 4.3478260869565215
       }
     },
@@ -3397,7 +3397,7 @@
       "username": "sojed",
       "rating": 782,
       "features": {
-        "accuracy": 77.29551319154982,
+        "accuracy": 75.05411863534887,
         "acpl": 74.92,
         "blunders": 0.0,
         "mistakes": 17.391304347826086,
@@ -3411,7 +3411,7 @@
       "username": "night2026",
       "rating": 843,
       "features": {
-        "accuracy": 96.02712998454038,
+        "accuracy": 91.83916151337941,
         "acpl": 44.95,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -3425,7 +3425,7 @@
       "username": "sojed",
       "rating": 805,
       "features": {
-        "accuracy": 74.57093935695463,
+        "accuracy": 78.14972595217435,
         "acpl": 84.6842105263158,
         "blunders": 5.882352941176471,
         "mistakes": 11.764705882352942,
@@ -3439,7 +3439,7 @@
       "username": "gt_btw",
       "rating": 814,
       "features": {
-        "accuracy": 73.06397120227055,
+        "accuracy": 75.93513820604308,
         "acpl": 76.06666666666666,
         "blunders": 7.142857142857143,
         "mistakes": 0.0,
@@ -3453,7 +3453,7 @@
       "username": "sojed",
       "rating": 831,
       "features": {
-        "accuracy": 83.49511628221279,
+        "accuracy": 83.03626921118818,
         "acpl": 62.166666666666664,
         "blunders": 3.4482758620689653,
         "mistakes": 0.0,
@@ -3467,7 +3467,7 @@
       "username": "sojed",
       "rating": 801,
       "features": {
-        "accuracy": 43.40679105120878,
+        "accuracy": 51.575822588681184,
         "acpl": 156.02702702702703,
         "blunders": 14.285714285714286,
         "mistakes": 17.142857142857142,
@@ -3481,10 +3481,10 @@
       "username": "jkor94",
       "rating": 854,
       "features": {
-        "accuracy": 51.45234448754189,
+        "accuracy": 55.68553604659154,
         "acpl": 131.51351351351352,
-        "blunders": 22.857142857142858,
-        "mistakes": 0.0,
+        "blunders": 17.142857142857142,
+        "mistakes": 5.714285714285714,
         "inaccuracies": 11.428571428571429
       }
     },
@@ -3495,10 +3495,10 @@
       "username": "julesss2",
       "rating": 712,
       "features": {
-        "accuracy": 55.33494971114658,
+        "accuracy": 63.17921356242026,
         "acpl": 110.16666666666667,
-        "blunders": 13.043478260869565,
-        "mistakes": 4.3478260869565215,
+        "blunders": 8.695652173913043,
+        "mistakes": 8.695652173913043,
         "inaccuracies": 8.695652173913043
       }
     },
@@ -3509,7 +3509,7 @@
       "username": "beterdan",
       "rating": 1127,
       "features": {
-        "accuracy": 86.03383249971262,
+        "accuracy": 78.12779828548163,
         "acpl": 36.857142857142854,
         "blunders": 2.127659574468085,
         "mistakes": 4.25531914893617,
@@ -3523,7 +3523,7 @@
       "username": "kalata69",
       "rating": 1107,
       "features": {
-        "accuracy": 86.66059068935928,
+        "accuracy": 77.9480200279894,
         "acpl": 37.041666666666664,
         "blunders": 0.0,
         "mistakes": 8.695652173913043,
@@ -3537,7 +3537,7 @@
       "username": "beterdan",
       "rating": 1127,
       "features": {
-        "accuracy": 62.427947582840126,
+        "accuracy": 73.82553009328879,
         "acpl": 62.4,
         "blunders": 7.6923076923076925,
         "mistakes": 0.0,
@@ -3551,7 +3551,7 @@
       "username": "azamat139",
       "rating": 1128,
       "features": {
-        "accuracy": 92.35716519908188,
+        "accuracy": 88.85982557051409,
         "acpl": 16.866666666666667,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -3565,10 +3565,10 @@
       "username": "beterdan",
       "rating": 1135,
       "features": {
-        "accuracy": 88.51488255383009,
+        "accuracy": 84.75366028506865,
         "acpl": 49.75675675675676,
-        "blunders": 2.9411764705882355,
-        "mistakes": 0.0,
+        "blunders": 0.0,
+        "mistakes": 2.9411764705882355,
         "inaccuracies": 11.764705882352942
       }
     },
@@ -3579,7 +3579,7 @@
       "username": "garaymarley85",
       "rating": 1135,
       "features": {
-        "accuracy": 81.90738028443144,
+        "accuracy": 77.66980917262703,
         "acpl": 71.86111111111111,
         "blunders": 2.9411764705882355,
         "mistakes": 8.823529411764707,
@@ -3593,7 +3593,7 @@
       "username": "ivanalex_117058087",
       "rating": 1142,
       "features": {
-        "accuracy": 81.93601494562435,
+        "accuracy": 78.08451727636377,
         "acpl": 40.9,
         "blunders": 5.555555555555555,
         "mistakes": 11.11111111111111,
@@ -3607,7 +3607,7 @@
       "username": "beterdan",
       "rating": 1127,
       "features": {
-        "accuracy": 72.18081469434517,
+        "accuracy": 64.7225696389138,
         "acpl": 87.57894736842105,
         "blunders": 5.555555555555555,
         "mistakes": 11.11111111111111,
@@ -3621,10 +3621,10 @@
       "username": "julesss2",
       "rating": 1035,
       "features": {
-        "accuracy": 54.98609230300887,
+        "accuracy": 42.80473820496783,
         "acpl": 169.03846153846155,
-        "blunders": 26.08695652173913,
-        "mistakes": 13.043478260869565,
+        "blunders": 30.434782608695652,
+        "mistakes": 8.695652173913043,
         "inaccuracies": 13.043478260869565
       }
     },
@@ -3635,7 +3635,7 @@
       "username": "smas11",
       "rating": 1081,
       "features": {
-        "accuracy": 62.49252712356784,
+        "accuracy": 48.949158183446755,
         "acpl": 129.34615384615384,
         "blunders": 25.0,
         "mistakes": 16.666666666666668,
@@ -3649,7 +3649,7 @@
       "username": "bastiencmt",
       "rating": 1207,
       "features": {
-        "accuracy": 82.83900830023057,
+        "accuracy": 77.30938024164628,
         "acpl": 67.65714285714286,
         "blunders": 6.25,
         "mistakes": 3.125,
@@ -3663,10 +3663,10 @@
       "username": "julesss2",
       "rating": 1030,
       "features": {
-        "accuracy": 76.77024612026185,
+        "accuracy": 72.1527458159053,
         "acpl": 87.76470588235294,
-        "blunders": 6.451612903225806,
-        "mistakes": 6.451612903225806,
+        "blunders": 9.67741935483871,
+        "mistakes": 3.225806451612903,
         "inaccuracies": 12.903225806451612
       }
     },
@@ -3677,7 +3677,7 @@
       "username": "gt_btw",
       "rating": 1002,
       "features": {
-        "accuracy": 97.4801394694067,
+        "accuracy": 94.37130652975569,
         "acpl": 32.75,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -3691,7 +3691,7 @@
       "username": "hunter10139",
       "rating": 1109,
       "features": {
-        "accuracy": 81.44404028713853,
+        "accuracy": 77.39862597981255,
         "acpl": 49.69444444444444,
         "blunders": 3.0303030303030303,
         "mistakes": 6.0606060606060606,
@@ -3705,7 +3705,7 @@
       "username": "gt_btw",
       "rating": 1000,
       "features": {
-        "accuracy": 70.61447640751261,
+        "accuracy": 70.84130156373737,
         "acpl": 71.05714285714286,
         "blunders": 9.375,
         "mistakes": 3.125,
@@ -3719,7 +3719,7 @@
       "username": "gt_btw",
       "rating": 1006,
       "features": {
-        "accuracy": 70.31227428005931,
+        "accuracy": 61.361988771979824,
         "acpl": 95.675,
         "blunders": 18.42105263157895,
         "mistakes": 2.6315789473684212,
@@ -3733,7 +3733,7 @@
       "username": "belizrodac",
       "rating": 1010,
       "features": {
-        "accuracy": 63.48617443439626,
+        "accuracy": 56.195131701122264,
         "acpl": 121.6923076923077,
         "blunders": 18.42105263157895,
         "mistakes": 2.6315789473684212,
@@ -3747,7 +3747,7 @@
       "username": "aziz0505050",
       "rating": 975,
       "features": {
-        "accuracy": 70.34887446808078,
+        "accuracy": 61.816713147189354,
         "acpl": 102.97560975609755,
         "blunders": 12.820512820512821,
         "mistakes": 12.820512820512821,
@@ -3761,7 +3761,7 @@
       "username": "gt_btw",
       "rating": 998,
       "features": {
-        "accuracy": 76.52330126480162,
+        "accuracy": 68.11431108417607,
         "acpl": 78.29268292682927,
         "blunders": 10.256410256410257,
         "mistakes": 5.128205128205129,
@@ -3775,7 +3775,7 @@
       "username": "hocuspocus2025",
       "rating": 818,
       "features": {
-        "accuracy": 71.057590187523,
+        "accuracy": 65.56953351509428,
         "acpl": 90.5,
         "blunders": 6.896551724137931,
         "mistakes": 3.4482758620689653,
@@ -3789,7 +3789,7 @@
       "username": "mnchld777",
       "rating": 842,
       "features": {
-        "accuracy": 82.22521585567043,
+        "accuracy": 73.4858927287909,
         "acpl": 55.5,
         "blunders": 3.4482758620689653,
         "mistakes": 10.344827586206897,
@@ -3803,7 +3803,7 @@
       "username": "jobumju",
       "rating": 806,
       "features": {
-        "accuracy": 23.739620446907708,
+        "accuracy": 45.241114983931496,
         "acpl": 208.42857142857142,
         "blunders": 16.666666666666668,
         "mistakes": 16.666666666666668,
@@ -3817,7 +3817,7 @@
       "username": "mnchld777",
       "rating": 834,
       "features": {
-        "accuracy": 25.278057646263857,
+        "accuracy": 55.98744695356004,
         "acpl": 152.78571428571428,
         "blunders": 15.384615384615385,
         "mistakes": 0.0,
@@ -3831,10 +3831,10 @@
       "username": "mnchld777",
       "rating": 826,
       "features": {
-        "accuracy": 68.51177911064991,
+        "accuracy": 58.539123709721814,
         "acpl": 111.62264150943396,
-        "blunders": 14.0,
-        "mistakes": 16.0,
+        "blunders": 18.0,
+        "mistakes": 12.0,
         "inaccuracies": 10.0
       }
     },
@@ -3845,10 +3845,10 @@
       "username": "zipher009",
       "rating": 862,
       "features": {
-        "accuracy": 58.64997039455362,
+        "accuracy": 60.268410716745365,
         "acpl": 120.05660377358491,
-        "blunders": 17.647058823529413,
-        "mistakes": 1.9607843137254901,
+        "blunders": 15.686274509803921,
+        "mistakes": 3.9215686274509802,
         "inaccuracies": 15.686274509803921
       }
     },
@@ -3859,7 +3859,7 @@
       "username": "mnchld777",
       "rating": 834,
       "features": {
-        "accuracy": 85.76903918645533,
+        "accuracy": 79.9664237161709,
         "acpl": 33.29032258064516,
         "blunders": 3.5714285714285716,
         "mistakes": 3.5714285714285716,
@@ -3873,7 +3873,7 @@
       "username": "zzzzzachess",
       "rating": 814,
       "features": {
-        "accuracy": 87.6214857570992,
+        "accuracy": 81.25705854464235,
         "acpl": 30.533333333333335,
         "blunders": 0.0,
         "mistakes": 7.407407407407407,
@@ -3887,10 +3887,10 @@
       "username": "apocalyptict",
       "rating": 1303,
       "features": {
-        "accuracy": 69.44641164874636,
+        "accuracy": 56.329360764380425,
         "acpl": 99.0,
-        "blunders": 18.75,
-        "mistakes": 12.5,
+        "blunders": 15.625,
+        "mistakes": 15.625,
         "inaccuracies": 15.625
       }
     },
@@ -3901,7 +3901,7 @@
       "username": "khazaria-313",
       "rating": 1356,
       "features": {
-        "accuracy": 76.54676697104836,
+        "accuracy": 67.20993238756262,
         "acpl": 84.03571428571429,
         "blunders": 0.0,
         "mistakes": 32.0,
@@ -3915,7 +3915,7 @@
       "username": "apocalyptict",
       "rating": 1311,
       "features": {
-        "accuracy": 50.271449755116755,
+        "accuracy": 63.79513050188226,
         "acpl": 120.25925925925925,
         "blunders": 8.0,
         "mistakes": 8.0,
@@ -3929,7 +3929,7 @@
       "username": "apocalyptict",
       "rating": 1318,
       "features": {
-        "accuracy": 70.27828107117791,
+        "accuracy": 66.86739660937887,
         "acpl": 101.3529411764706,
         "blunders": 6.25,
         "mistakes": 6.25,
@@ -3943,7 +3943,7 @@
       "username": "khazaria-313",
       "rating": 1349,
       "features": {
-        "accuracy": 88.94951842021058,
+        "accuracy": 85.31840910696344,
         "acpl": 39.588235294117645,
         "blunders": 0.0,
         "mistakes": 6.25,
@@ -3957,10 +3957,10 @@
       "username": "khazaria-313",
       "rating": 1341,
       "features": {
-        "accuracy": 77.82956933800777,
+        "accuracy": 64.25259493328643,
         "acpl": 69.72727272727273,
-        "blunders": 9.75609756097561,
-        "mistakes": 9.75609756097561,
+        "blunders": 4.878048780487805,
+        "mistakes": 14.634146341463415,
         "inaccuracies": 26.829268292682926
       }
     },
@@ -3971,7 +3971,7 @@
       "username": "apocalyptict",
       "rating": 1326,
       "features": {
-        "accuracy": 61.20540283706367,
+        "accuracy": 60.05134743496487,
         "acpl": 96.32558139534883,
         "blunders": 2.4390243902439024,
         "mistakes": 26.829268292682926,
@@ -3985,7 +3985,7 @@
       "username": "apocalyptict",
       "rating": 1334,
       "features": {
-        "accuracy": 91.91601930445393,
+        "accuracy": 84.50000267229821,
         "acpl": 26.46153846153846,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -3999,7 +3999,7 @@
       "username": "khazaria-313",
       "rating": 1333,
       "features": {
-        "accuracy": 78.81372102001433,
+        "accuracy": 73.97853559584027,
         "acpl": 69.4,
         "blunders": 4.166666666666667,
         "mistakes": 8.333333333333334,
@@ -4013,7 +4013,7 @@
       "username": "geirfugl",
       "rating": 1337,
       "features": {
-        "accuracy": 70.02113274682628,
+        "accuracy": 60.97349319632141,
         "acpl": 120.30555555555556,
         "blunders": 8.571428571428571,
         "mistakes": 14.285714285714286,
@@ -4027,10 +4027,10 @@
       "username": "khazaria-313",
       "rating": 1372,
       "features": {
-        "accuracy": 74.74513866516995,
+        "accuracy": 66.85000184233593,
         "acpl": 99.72222222222223,
-        "blunders": 11.428571428571429,
-        "mistakes": 8.571428571428571,
+        "blunders": 8.571428571428571,
+        "mistakes": 11.428571428571429,
         "inaccuracies": 8.571428571428571
       }
     },
@@ -4041,7 +4041,7 @@
       "username": "khazaria-313",
       "rating": 1364,
       "features": {
-        "accuracy": 72.89562386738864,
+        "accuracy": 69.23225491532212,
         "acpl": 71.68888888888888,
         "blunders": 4.651162790697675,
         "mistakes": 13.953488372093023,
@@ -4055,7 +4055,7 @@
       "username": "ranjachess81",
       "rating": 1375,
       "features": {
-        "accuracy": 74.30868385434597,
+        "accuracy": 63.47598183024223,
         "acpl": 81.57777777777778,
         "blunders": 6.976744186046512,
         "mistakes": 13.953488372093023,
@@ -4069,7 +4069,7 @@
       "username": "khazaria-313",
       "rating": 1372,
       "features": {
-        "accuracy": 69.63727758256427,
+        "accuracy": 68.22225543794842,
         "acpl": 80.78125,
         "blunders": 10.0,
         "mistakes": 3.3333333333333335,
@@ -4083,7 +4083,7 @@
       "username": "dcdian28",
       "rating": 1356,
       "features": {
-        "accuracy": 62.53349436417423,
+        "accuracy": 57.45613577218783,
         "acpl": 117.16129032258064,
         "blunders": 6.896551724137931,
         "mistakes": 10.344827586206897,
@@ -4097,7 +4097,7 @@
       "username": "ekadharma91",
       "rating": 1334,
       "features": {
-        "accuracy": 63.66546691654162,
+        "accuracy": 68.43590192902482,
         "acpl": 81.78260869565217,
         "blunders": 9.523809523809524,
         "mistakes": 9.523809523809524,
@@ -4111,7 +4111,7 @@
       "username": "khazaria-313",
       "rating": 1364,
       "features": {
-        "accuracy": 77.41990059368277,
+        "accuracy": 78.5987331752232,
         "acpl": 48.34782608695652,
         "blunders": 9.523809523809524,
         "mistakes": 4.761904761904762,
@@ -4125,10 +4125,10 @@
       "username": "diegojoacim",
       "rating": 1378,
       "features": {
-        "accuracy": 85.31206384151719,
+        "accuracy": 75.37211918698483,
         "acpl": 41.4375,
-        "blunders": 6.666666666666667,
-        "mistakes": 6.666666666666667,
+        "blunders": 0.0,
+        "mistakes": 13.333333333333334,
         "inaccuracies": 20.0
       }
     },
@@ -4139,7 +4139,7 @@
       "username": "ekadharma91",
       "rating": 1342,
       "features": {
-        "accuracy": 77.91919485628893,
+        "accuracy": 67.87608256071839,
         "acpl": 63.58064516129032,
         "blunders": 3.3333333333333335,
         "mistakes": 13.333333333333334,
@@ -4153,7 +4153,7 @@
       "username": "ekadharma91",
       "rating": 1350,
       "features": {
-        "accuracy": 81.22686722068087,
+        "accuracy": 79.72871332821659,
         "acpl": 45.275862068965516,
         "blunders": 3.6363636363636362,
         "mistakes": 5.454545454545454,
@@ -4167,7 +4167,7 @@
       "username": "xuppam",
       "rating": 1386,
       "features": {
-        "accuracy": 88.02134268789969,
+        "accuracy": 83.17353138159388,
         "acpl": 31.03448275862069,
         "blunders": 1.7857142857142858,
         "mistakes": 3.5714285714285716,
@@ -4181,7 +4181,7 @@
       "username": "ekadharma91",
       "rating": 1357,
       "features": {
-        "accuracy": 88.4960657438071,
+        "accuracy": 84.36697519284542,
         "acpl": 35.926829268292686,
         "blunders": 0.0,
         "mistakes": 4.938271604938271,
@@ -4195,7 +4195,7 @@
       "username": "f3zzen",
       "rating": 1377,
       "features": {
-        "accuracy": 84.68222497456502,
+        "accuracy": 84.76261328927032,
         "acpl": 41.06172839506173,
         "blunders": 2.4691358024691357,
         "mistakes": 1.2345679012345678,
@@ -4209,7 +4209,7 @@
       "username": "muhammed1114",
       "rating": 1325,
       "features": {
-        "accuracy": 64.14500709055521,
+        "accuracy": 58.30155355944403,
         "acpl": 105.73809523809524,
         "blunders": 15.0,
         "mistakes": 10.0,
@@ -4223,10 +4223,10 @@
       "username": "geirfugl",
       "rating": 1361,
       "features": {
-        "accuracy": 62.64319932750969,
+        "accuracy": 55.34900610926828,
         "acpl": 114.4047619047619,
-        "blunders": 14.634146341463415,
-        "mistakes": 7.317073170731708,
+        "blunders": 12.195121951219512,
+        "mistakes": 9.75609756097561,
         "inaccuracies": 24.390243902439025
       }
     },
@@ -4237,10 +4237,10 @@
       "username": "bako04",
       "rating": 1622,
       "features": {
-        "accuracy": 82.60660266146365,
+        "accuracy": 78.54452293278717,
         "acpl": 65.51724137931035,
-        "blunders": 3.5714285714285716,
-        "mistakes": 5.357142857142857,
+        "blunders": 5.357142857142857,
+        "mistakes": 3.5714285714285716,
         "inaccuracies": 10.714285714285714
       }
     },
@@ -4251,7 +4251,7 @@
       "username": "davidgota864",
       "rating": 1620,
       "features": {
-        "accuracy": 63.72112450570229,
+        "accuracy": 68.0170327228225,
         "acpl": 76.6,
         "blunders": 8.219178082191782,
         "mistakes": 4.109589041095891,
@@ -4265,7 +4265,7 @@
       "username": "bako04",
       "rating": 1614,
       "features": {
-        "accuracy": 58.10923989404555,
+        "accuracy": 68.58069849067067,
         "acpl": 77.70666666666666,
         "blunders": 8.108108108108109,
         "mistakes": 6.756756756756757,
@@ -4279,7 +4279,7 @@
       "username": "bako04",
       "rating": 1605,
       "features": {
-        "accuracy": 87.38262855254182,
+        "accuracy": 84.96407014455859,
         "acpl": 24.70212765957447,
         "blunders": 2.272727272727273,
         "mistakes": 2.272727272727273,
@@ -4293,7 +4293,7 @@
       "username": "smellslikeanarchy",
       "rating": 1682,
       "features": {
-        "accuracy": 82.88406144661845,
+        "accuracy": 79.93610069644485,
         "acpl": 36.26086956521739,
         "blunders": 4.651162790697675,
         "mistakes": 0.0,
@@ -4307,7 +4307,7 @@
       "username": "davidgota864",
       "rating": 1612,
       "features": {
-        "accuracy": 75.01699144214297,
+        "accuracy": 70.77523261026043,
         "acpl": 60.607142857142854,
         "blunders": 4.0,
         "mistakes": 8.0,
@@ -4321,7 +4321,7 @@
       "username": "muito-ruimkkkk",
       "rating": 1624,
       "features": {
-        "accuracy": 87.87667278363375,
+        "accuracy": 80.59593551200734,
         "acpl": 32.714285714285715,
         "blunders": 0.0,
         "mistakes": 7.6923076923076925,
@@ -4335,7 +4335,7 @@
       "username": "davidgota864",
       "rating": 1629,
       "features": {
-        "accuracy": 73.68541088703594,
+        "accuracy": 67.59398646263318,
         "acpl": 84.72413793103448,
         "blunders": 8.771929824561404,
         "mistakes": 10.526315789473685,
@@ -4349,10 +4349,10 @@
       "username": "maverickees",
       "rating": 1609,
       "features": {
-        "accuracy": 60.72010254391913,
+        "accuracy": 54.93617800074286,
         "acpl": 132.2972972972973,
-        "blunders": 17.142857142857142,
-        "mistakes": 11.428571428571429,
+        "blunders": 20.0,
+        "mistakes": 8.571428571428571,
         "inaccuracies": 8.571428571428571
       }
     },
@@ -4363,10 +4363,10 @@
       "username": "davidgota864",
       "rating": 1621,
       "features": {
-        "accuracy": 65.24695090355624,
+        "accuracy": 60.369795202418736,
         "acpl": 110.83783783783784,
-        "blunders": 13.88888888888889,
-        "mistakes": 8.333333333333334,
+        "blunders": 11.11111111111111,
+        "mistakes": 11.11111111111111,
         "inaccuracies": 2.7777777777777777
       }
     },
@@ -4377,7 +4377,7 @@
       "username": "muito-ruimkkkk",
       "rating": 1631,
       "features": {
-        "accuracy": 89.38099222631477,
+        "accuracy": 85.45494549685132,
         "acpl": 25.6,
         "blunders": 3.8461538461538463,
         "mistakes": 3.8461538461538463,
@@ -4391,7 +4391,7 @@
       "username": "muito-ruimkkkk",
       "rating": 1616,
       "features": {
-        "accuracy": 78.20269878513207,
+        "accuracy": 75.98311389942258,
         "acpl": 58.53703703703704,
         "blunders": 7.8431372549019605,
         "mistakes": 1.9607843137254901,
@@ -4405,7 +4405,7 @@
       "username": "neverbeennormall",
       "rating": 1657,
       "features": {
-        "accuracy": 87.56914120951076,
+        "accuracy": 80.80135709171273,
         "acpl": 40.18518518518518,
         "blunders": 1.9230769230769231,
         "mistakes": 7.6923076923076925,
@@ -4419,7 +4419,7 @@
       "username": "dschwede",
       "rating": 1696,
       "features": {
-        "accuracy": 76.1715008131861,
+        "accuracy": 75.75546812371608,
         "acpl": 62.68181818181818,
         "blunders": 0.0,
         "mistakes": 17.647058823529413,
@@ -4433,7 +4433,7 @@
       "username": "muito-ruimkkkk",
       "rating": 1623,
       "features": {
-        "accuracy": 93.2689429374176,
+        "accuracy": 89.6173682202974,
         "acpl": 20.09090909090909,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -4447,7 +4447,7 @@
       "username": "fabser7",
       "rating": 1655,
       "features": {
-        "accuracy": 63.26620853125834,
+        "accuracy": 68.47185631665806,
         "acpl": 80.0,
         "blunders": 6.451612903225806,
         "mistakes": 6.451612903225806,
@@ -4461,7 +4461,7 @@
       "username": "neverbeennormall",
       "rating": 1665,
       "features": {
-        "accuracy": 78.05945867550123,
+        "accuracy": 70.59077932630474,
         "acpl": 63.76470588235294,
         "blunders": 6.25,
         "mistakes": 12.5,
@@ -4475,7 +4475,7 @@
       "username": "knight_ugzy",
       "rating": 1659,
       "features": {
-        "accuracy": 75.87644076570066,
+        "accuracy": 68.17164190736833,
         "acpl": 89.125,
         "blunders": 13.793103448275861,
         "mistakes": 6.896551724137931,
@@ -4489,7 +4489,7 @@
       "username": "anomaly_karpov",
       "rating": 1652,
       "features": {
-        "accuracy": 85.62925490199544,
+        "accuracy": 76.35112635989307,
         "acpl": 58.8125,
         "blunders": 0.0,
         "mistakes": 6.666666666666667,
@@ -4503,10 +4503,10 @@
       "username": "yomenso",
       "rating": 1656,
       "features": {
-        "accuracy": 82.16786103716376,
+        "accuracy": 74.80590708067648,
         "acpl": 62.54545454545455,
-        "blunders": 4.878048780487805,
-        "mistakes": 4.878048780487805,
+        "blunders": 2.4390243902439024,
+        "mistakes": 7.317073170731708,
         "inaccuracies": 19.51219512195122
       }
     },
@@ -4517,7 +4517,7 @@
       "username": "anomaly_karpov",
       "rating": 1651,
       "features": {
-        "accuracy": 55.11370016503137,
+        "accuracy": 75.21553192762336,
         "acpl": 79.13953488372093,
         "blunders": 4.878048780487805,
         "mistakes": 7.317073170731708,
@@ -4531,7 +4531,7 @@
       "username": "ogo316",
       "rating": 1660,
       "features": {
-        "accuracy": 75.70473806779171,
+        "accuracy": 78.94370659121813,
         "acpl": 34.92857142857143,
         "blunders": 0.0,
         "mistakes": 8.333333333333334,
@@ -4545,10 +4545,10 @@
       "username": "anomaly_karpov",
       "rating": 1659,
       "features": {
-        "accuracy": 52.08150800534318,
+        "accuracy": 63.315021803939366,
         "acpl": 90.76923076923077,
-        "blunders": 18.181818181818183,
-        "mistakes": 9.090909090909092,
+        "blunders": 9.090909090909092,
+        "mistakes": 18.181818181818183,
         "inaccuracies": 9.090909090909092
       }
     },
@@ -4559,7 +4559,7 @@
       "username": "loicpra",
       "rating": 1646,
       "features": {
-        "accuracy": 79.44200740679177,
+        "accuracy": 72.53530491192438,
         "acpl": 73.62068965517241,
         "blunders": 3.5714285714285716,
         "mistakes": 12.5,
@@ -4573,10 +4573,10 @@
       "username": "fabser7",
       "rating": 1663,
       "features": {
-        "accuracy": 83.0799908973965,
+        "accuracy": 77.48761278868702,
         "acpl": 56.60344827586207,
-        "blunders": 5.357142857142857,
-        "mistakes": 5.357142857142857,
+        "blunders": 3.5714285714285716,
+        "mistakes": 7.142857142857143,
         "inaccuracies": 10.714285714285714
       }
     },
@@ -4587,10 +4587,10 @@
       "username": "yakawa7",
       "rating": 1914,
       "features": {
-        "accuracy": 85.26369836654914,
+        "accuracy": 78.07015927276287,
         "acpl": 51.638297872340424,
-        "blunders": 2.1739130434782608,
-        "mistakes": 8.695652173913043,
+        "blunders": 4.3478260869565215,
+        "mistakes": 6.521739130434782,
         "inaccuracies": 6.521739130434782
       }
     },
@@ -4601,7 +4601,7 @@
       "username": "yakawa7",
       "rating": 1914,
       "features": {
-        "accuracy": 78.8261014368901,
+        "accuracy": 70.04215225294571,
         "acpl": 65.0909090909091,
         "blunders": 5.2631578947368425,
         "mistakes": 15.789473684210526,
@@ -4615,7 +4615,7 @@
       "username": "davidjr98",
       "rating": 1901,
       "features": {
-        "accuracy": 67.54637314243766,
+        "accuracy": 59.11741886335574,
         "acpl": 96.95238095238095,
         "blunders": 21.05263157894737,
         "mistakes": 10.526315789473685,
@@ -4629,7 +4629,7 @@
       "username": "harholman",
       "rating": 1912,
       "features": {
-        "accuracy": 75.02430808628064,
+        "accuracy": 68.75826304721333,
         "acpl": 56.18518518518518,
         "blunders": 3.8461538461538463,
         "mistakes": 11.538461538461538,
@@ -4643,7 +4643,7 @@
       "username": "yakawa7",
       "rating": 1906,
       "features": {
-        "accuracy": 48.702530480079936,
+        "accuracy": 66.28713157358146,
         "acpl": 93.73076923076923,
         "blunders": 8.0,
         "mistakes": 8.0,
@@ -4657,7 +4657,7 @@
       "username": "yakawa7",
       "rating": 1906,
       "features": {
-        "accuracy": 68.13893581582646,
+        "accuracy": 78.68106897573841,
         "acpl": 77.7948717948718,
         "blunders": 5.2631578947368425,
         "mistakes": 0.0,
@@ -4671,7 +4671,7 @@
       "username": "qabaliste",
       "rating": 1956,
       "features": {
-        "accuracy": 70.88633715638437,
+        "accuracy": 67.53293432670917,
         "acpl": 65.89655172413794,
         "blunders": 14.285714285714286,
         "mistakes": 3.5714285714285716,
@@ -4685,10 +4685,10 @@
       "username": "davidjr98",
       "rating": 1951,
       "features": {
-        "accuracy": 63.71614997074288,
+        "accuracy": 62.06927161780714,
         "acpl": 93.53571428571429,
-        "blunders": 11.11111111111111,
-        "mistakes": 11.11111111111111,
+        "blunders": 14.814814814814815,
+        "mistakes": 7.407407407407407,
         "inaccuracies": 11.11111111111111
       }
     },
@@ -4699,7 +4699,7 @@
       "username": "davidjr98",
       "rating": 1959,
       "features": {
-        "accuracy": 79.09927985664393,
+        "accuracy": 75.87983141412612,
         "acpl": 46.90163934426229,
         "blunders": 5.660377358490566,
         "mistakes": 15.09433962264151,
@@ -4713,7 +4713,7 @@
       "username": "marceloruiz2027",
       "rating": 1963,
       "features": {
-        "accuracy": 85.1546592665811,
+        "accuracy": 82.73600549386498,
         "acpl": 31.854166666666668,
         "blunders": 4.25531914893617,
         "mistakes": 0.0,
@@ -4727,7 +4727,7 @@
       "username": "davidjr98",
       "rating": 1971,
       "features": {
-        "accuracy": 81.59547381527413,
+        "accuracy": 82.10328365111185,
         "acpl": 37.91489361702128,
         "blunders": 4.3478260869565215,
         "mistakes": 2.1739130434782608,
@@ -4741,7 +4741,7 @@
       "username": "davidjr98",
       "rating": 1980,
       "features": {
-        "accuracy": 78.29105254340391,
+        "accuracy": 77.47952884492497,
         "acpl": 39.1875,
         "blunders": 8.333333333333334,
         "mistakes": 8.333333333333334,
@@ -4755,7 +4755,7 @@
       "username": "harholman",
       "rating": 1927,
       "features": {
-        "accuracy": 59.46347603695554,
+        "accuracy": 56.10574485207198,
         "acpl": 121.16,
         "blunders": 17.391304347826086,
         "mistakes": 0.0,
@@ -4769,7 +4769,7 @@
       "username": "roshanbalijaa",
       "rating": 1932,
       "features": {
-        "accuracy": 66.63617450706212,
+        "accuracy": 64.50570104278381,
         "acpl": 84.88,
         "blunders": 13.043478260869565,
         "mistakes": 8.695652173913043,
@@ -4783,7 +4783,7 @@
       "username": "numb3rb0y",
       "rating": 1993,
       "features": {
-        "accuracy": 83.62225505792208,
+        "accuracy": 77.37932262673964,
         "acpl": 46.65217391304348,
         "blunders": 4.761904761904762,
         "mistakes": 2.380952380952381,
@@ -4797,7 +4797,7 @@
       "username": "harholman",
       "rating": 1935,
       "features": {
-        "accuracy": 89.65310280538377,
+        "accuracy": 82.33645986108681,
         "acpl": 27.52173913043478,
         "blunders": 0.0,
         "mistakes": 7.142857142857143,
@@ -4811,10 +4811,10 @@
       "username": "harholman",
       "rating": 1925,
       "features": {
-        "accuracy": 63.87258749396838,
+        "accuracy": 52.4845968876118,
         "acpl": 124.77777777777777,
-        "blunders": 18.181818181818183,
-        "mistakes": 11.363636363636363,
+        "blunders": 15.909090909090908,
+        "mistakes": 13.636363636363637,
         "inaccuracies": 11.363636363636363
       }
     },
@@ -4825,7 +4825,7 @@
       "username": "hesed2017",
       "rating": 1930,
       "features": {
-        "accuracy": 47.98611531542326,
+        "accuracy": 51.30023147986631,
         "acpl": 150.6818181818182,
         "blunders": 20.454545454545453,
         "mistakes": 9.090909090909092,
@@ -4839,7 +4839,7 @@
       "username": "harholman",
       "rating": 1916,
       "features": {
-        "accuracy": 75.66988003335499,
+        "accuracy": 77.6529468221759,
         "acpl": 76.67924528301887,
         "blunders": 3.8461538461538463,
         "mistakes": 0.0,
@@ -4853,7 +4853,7 @@
       "username": "charlyflores",
       "rating": 1991,
       "features": {
-        "accuracy": 88.0140235555485,
+        "accuracy": 82.00782265141505,
         "acpl": 56.716981132075475,
         "blunders": 0.0,
         "mistakes": 5.769230769230769,
@@ -4867,7 +4867,7 @@
       "username": "hesed2017",
       "rating": 1938,
       "features": {
-        "accuracy": 85.01643876229608,
+        "accuracy": 80.35248434319229,
         "acpl": 44.90196078431372,
         "blunders": 2.0,
         "mistakes": 6.0,
@@ -4881,7 +4881,7 @@
       "username": "williamshanespeare",
       "rating": 1960,
       "features": {
-        "accuracy": 78.85716583324296,
+        "accuracy": 76.32422188750499,
         "acpl": 59.03921568627451,
         "blunders": 5.882352941176471,
         "mistakes": 5.882352941176471,
@@ -4895,10 +4895,10 @@
       "username": "qajaq",
       "rating": 1933,
       "features": {
-        "accuracy": 67.54141932513525,
+        "accuracy": 63.417762399108426,
         "acpl": 104.25641025641026,
-        "blunders": 8.333333333333334,
-        "mistakes": 8.333333333333334,
+        "blunders": 5.555555555555555,
+        "mistakes": 11.11111111111111,
         "inaccuracies": 19.444444444444443
       }
     },
@@ -4909,7 +4909,7 @@
       "username": "hesed2017",
       "rating": 1946,
       "features": {
-        "accuracy": 75.39358835796332,
+        "accuracy": 68.65687288684063,
         "acpl": 79.25641025641026,
         "blunders": 5.405405405405405,
         "mistakes": 13.513513513513514,
@@ -4923,7 +4923,7 @@
       "username": "hesed2017",
       "rating": 1938,
       "features": {
-        "accuracy": 74.49603550687345,
+        "accuracy": 78.03509962662429,
         "acpl": 48.310344827586206,
         "blunders": 3.5714285714285716,
         "mistakes": 3.5714285714285716,
@@ -4937,10 +4937,10 @@
       "username": "gyana-1234",
       "rating": 2211,
       "features": {
-        "accuracy": 70.14330995991574,
+        "accuracy": 65.03719669067901,
         "acpl": 106.96666666666667,
-        "blunders": 10.714285714285714,
-        "mistakes": 7.142857142857143,
+        "blunders": 14.285714285714286,
+        "mistakes": 3.5714285714285716,
         "inaccuracies": 14.285714285714286
       }
     },
@@ -4951,7 +4951,7 @@
       "username": "gyana-1234",
       "rating": 2221,
       "features": {
-        "accuracy": 88.30196098550869,
+        "accuracy": 81.85442264533705,
         "acpl": 45.888888888888886,
         "blunders": 0.0,
         "mistakes": 14.285714285714286,
@@ -4965,7 +4965,7 @@
       "username": "gyana-1234",
       "rating": 2214,
       "features": {
-        "accuracy": 56.29769296016893,
+        "accuracy": 43.45572050137249,
         "acpl": 142.65116279069767,
         "blunders": 20.0,
         "mistakes": 20.0,
@@ -4979,7 +4979,7 @@
       "username": "bigbeard78",
       "rating": 2211,
       "features": {
-        "accuracy": 88.13663982112814,
+        "accuracy": 83.3080115868077,
         "acpl": 34.96610169491525,
         "blunders": 1.7857142857142858,
         "mistakes": 3.5714285714285716,
@@ -4993,7 +4993,7 @@
       "username": "gyana-1234",
       "rating": 2207,
       "features": {
-        "accuracy": 89.04231126084926,
+        "accuracy": 86.97879280035833,
         "acpl": 28.847457627118644,
         "blunders": 1.7857142857142858,
         "mistakes": 0.0,
@@ -5007,7 +5007,7 @@
       "username": "bigbeard78",
       "rating": 2252,
       "features": {
-        "accuracy": 86.13839995082469,
+        "accuracy": 81.50117972886635,
         "acpl": 50.142857142857146,
         "blunders": 3.225806451612903,
         "mistakes": 3.225806451612903,
@@ -5021,7 +5021,7 @@
       "username": "gugiprin",
       "rating": 2281,
       "features": {
-        "accuracy": 95.53778309172392,
+        "accuracy": 92.06773330546883,
         "acpl": 22.514285714285716,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -5035,7 +5035,7 @@
       "username": "the-gov",
       "rating": 2236,
       "features": {
-        "accuracy": 75.0722543316696,
+        "accuracy": 78.04184996293928,
         "acpl": 45.13636363636363,
         "blunders": 5.555555555555555,
         "mistakes": 5.555555555555555,
@@ -5049,7 +5049,7 @@
       "username": "bigbeard78",
       "rating": 2251,
       "features": {
-        "accuracy": 95.54171206470355,
+        "accuracy": 90.69164062615677,
         "acpl": 14.5,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -5063,7 +5063,7 @@
       "username": "bigbeard78",
       "rating": 2243,
       "features": {
-        "accuracy": 75.08075773593583,
+        "accuracy": 72.06554028571361,
         "acpl": 66.25,
         "blunders": 5.660377358490566,
         "mistakes": 9.433962264150944,
@@ -5077,7 +5077,7 @@
       "username": "freshorange10",
       "rating": 2318,
       "features": {
-        "accuracy": 76.7831069851225,
+        "accuracy": 71.43679031091753,
         "acpl": 65.28571428571429,
         "blunders": 5.555555555555555,
         "mistakes": 9.25925925925926,
@@ -5091,7 +5091,7 @@
       "username": "the-gov",
       "rating": 2236,
       "features": {
-        "accuracy": 84.0238401065929,
+        "accuracy": 76.96882203638913,
         "acpl": 37.857142857142854,
         "blunders": 0.0,
         "mistakes": 11.538461538461538,
@@ -5105,7 +5105,7 @@
       "username": "josemiguel645",
       "rating": 2222,
       "features": {
-        "accuracy": 75.51063763538511,
+        "accuracy": 68.0577792945705,
         "acpl": 73.55555555555556,
         "blunders": 7.6923076923076925,
         "mistakes": 7.6923076923076925,
@@ -5119,10 +5119,10 @@
       "username": "the-gov",
       "rating": 2228,
       "features": {
-        "accuracy": 65.79257825948898,
+        "accuracy": 57.55219061742018,
         "acpl": 97.625,
-        "blunders": 9.090909090909092,
-        "mistakes": 18.181818181818183,
+        "blunders": 13.636363636363637,
+        "mistakes": 13.636363636363637,
         "inaccuracies": 18.181818181818183
       }
     },
@@ -5133,7 +5133,7 @@
       "username": "hams334",
       "rating": 2279,
       "features": {
-        "accuracy": 75.09723083924747,
+        "accuracy": 68.77872743662034,
         "acpl": 53.75,
         "blunders": 4.545454545454546,
         "mistakes": 22.727272727272727,
@@ -5147,7 +5147,7 @@
       "username": "the-gov",
       "rating": 2235,
       "features": {
-        "accuracy": 51.39117372938746,
+        "accuracy": 67.51691773518041,
         "acpl": 96.48717948717949,
         "blunders": 10.81081081081081,
         "mistakes": 8.108108108108109,
@@ -5161,7 +5161,7 @@
       "username": "terek_terek",
       "rating": 2278,
       "features": {
-        "accuracy": 88.84012630855118,
+        "accuracy": 88.97053320786917,
         "acpl": 27.586206896551722,
         "blunders": 3.8461538461538463,
         "mistakes": 0.0,
@@ -5175,7 +5175,7 @@
       "username": "the-gov",
       "rating": 2229,
       "features": {
-        "accuracy": 74.13789991612,
+        "accuracy": 78.11114624321958,
         "acpl": 60.5,
         "blunders": 7.6923076923076925,
         "mistakes": 0.0,
@@ -5189,7 +5189,7 @@
       "username": "josemiguel645",
       "rating": 2230,
       "features": {
-        "accuracy": 96.85279105597499,
+        "accuracy": 93.26922075615573,
         "acpl": 16.807692307692307,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -5203,7 +5203,7 @@
       "username": "artin_dogshater960",
       "rating": 2341,
       "features": {
-        "accuracy": 80.56338445673993,
+        "accuracy": 80.72580300133804,
         "acpl": 50.84,
         "blunders": 4.761904761904762,
         "mistakes": 4.761904761904762,
@@ -5217,7 +5217,7 @@
       "username": "josemiguel645",
       "rating": 2219,
       "features": {
-        "accuracy": 80.30018556531721,
+        "accuracy": 78.56048924872691,
         "acpl": 54.146341463414636,
         "blunders": 5.2631578947368425,
         "mistakes": 5.2631578947368425,
@@ -5231,7 +5231,7 @@
       "username": "slowermouse",
       "rating": 2232,
       "features": {
-        "accuracy": 88.31128836628852,
+        "accuracy": 87.13547737238818,
         "acpl": 29.951219512195124,
         "blunders": 5.2631578947368425,
         "mistakes": 0.0,
@@ -5245,7 +5245,7 @@
       "username": "elmo-blaster",
       "rating": 2219,
       "features": {
-        "accuracy": 72.26276904204425,
+        "accuracy": 73.77467866245868,
         "acpl": 60.724137931034484,
         "blunders": 3.7037037037037037,
         "mistakes": 3.7037037037037037,
@@ -5259,7 +5259,7 @@
       "username": "josemiguel645",
       "rating": 2227,
       "features": {
-        "accuracy": 86.64605898278472,
+        "accuracy": 81.73633910608477,
         "acpl": 28.75862068965517,
         "blunders": 3.5714285714285716,
         "mistakes": 3.5714285714285716,
@@ -5273,10 +5273,10 @@
       "username": "elmo-blaster",
       "rating": 2217,
       "features": {
-        "accuracy": 80.70323875019979,
+        "accuracy": 77.386942005593,
         "acpl": 57.68115942028985,
-        "blunders": 4.411764705882353,
-        "mistakes": 4.411764705882353,
+        "blunders": 5.882352941176471,
+        "mistakes": 2.9411764705882355,
         "inaccuracies": 8.823529411764707
       }
     },
@@ -5287,7 +5287,7 @@
       "username": "littleangel99",
       "rating": 2507,
       "features": {
-        "accuracy": 90.97649622766036,
+        "accuracy": 85.77378575794361,
         "acpl": 29.142857142857142,
         "blunders": 2.4390243902439024,
         "mistakes": 0.0,
@@ -5301,7 +5301,7 @@
       "username": "littleangel99",
       "rating": 2506,
       "features": {
-        "accuracy": 82.28386131565583,
+        "accuracy": 81.07434734692978,
         "acpl": 33.31428571428572,
         "blunders": 2.9411764705882355,
         "mistakes": 5.882352941176471,
@@ -5315,7 +5315,7 @@
       "username": "littleangel99",
       "rating": 2515,
       "features": {
-        "accuracy": 80.31462728557685,
+        "accuracy": 78.11625731074308,
         "acpl": 56.301886792452834,
         "blunders": 5.882352941176471,
         "mistakes": 1.9607843137254901,
@@ -5329,7 +5329,7 @@
       "username": "premierchess64",
       "rating": 2543,
       "features": {
-        "accuracy": 89.36226504810031,
+        "accuracy": 82.95146360354876,
         "acpl": 47.51162790697674,
         "blunders": 2.5641025641025643,
         "mistakes": 2.5641025641025643,
@@ -5343,7 +5343,7 @@
       "username": "littleangel99",
       "rating": 2502,
       "features": {
-        "accuracy": 87.23665213220269,
+        "accuracy": 79.92497953054085,
         "acpl": 54.214285714285715,
         "blunders": 2.5641025641025643,
         "mistakes": 0.0,
@@ -5357,7 +5357,7 @@
       "username": "premierchess64",
       "rating": 2536,
       "features": {
-        "accuracy": 85.4095884417934,
+        "accuracy": 80.39018403840926,
         "acpl": 33.75757575757576,
         "blunders": 0.0,
         "mistakes": 6.451612903225806,
@@ -5371,7 +5371,7 @@
       "username": "premierchess64",
       "rating": 2546,
       "features": {
-        "accuracy": 84.68021110821961,
+        "accuracy": 87.20053717438138,
         "acpl": 25.96551724137931,
         "blunders": 0.0,
         "mistakes": 10.526315789473685,
@@ -5385,7 +5385,7 @@
       "username": "chessking2007",
       "rating": 2569,
       "features": {
-        "accuracy": 98.6127804465994,
+        "accuracy": 96.96839952304856,
         "acpl": 4.413793103448276,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -5399,7 +5399,7 @@
       "username": "premierchess64",
       "rating": 2554,
       "features": {
-        "accuracy": 91.97957539379149,
+        "accuracy": 90.17401628346403,
         "acpl": 15.318181818181818,
         "blunders": 0.0,
         "mistakes": 2.3255813953488373,
@@ -5413,7 +5413,7 @@
       "username": "chessking2007",
       "rating": 2533,
       "features": {
-        "accuracy": 95.95494140622606,
+        "accuracy": 92.828791985539,
         "acpl": 28.476190476190474,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -5427,7 +5427,7 @@
       "username": "ravithe17",
       "rating": 2524,
       "features": {
-        "accuracy": 90.07058484349565,
+        "accuracy": 89.30061616344096,
         "acpl": 37.82539682539682,
         "blunders": 1.6666666666666667,
         "mistakes": 0.0,
@@ -5441,10 +5441,10 @@
       "username": "pwbxy",
       "rating": 2505,
       "features": {
-        "accuracy": 80.45238178127944,
+        "accuracy": 71.99918889311664,
         "acpl": 65.14634146341463,
-        "blunders": 2.6315789473684212,
-        "mistakes": 13.157894736842104,
+        "blunders": 5.2631578947368425,
+        "mistakes": 10.526315789473685,
         "inaccuracies": 15.789473684210526
       }
     },
@@ -5455,7 +5455,7 @@
       "username": "chessking2007",
       "rating": 2533,
       "features": {
-        "accuracy": 83.1709080246409,
+        "accuracy": 76.05897653179696,
         "acpl": 55.975,
         "blunders": 5.2631578947368425,
         "mistakes": 5.2631578947368425,
@@ -5469,7 +5469,7 @@
       "username": "chessking2007",
       "rating": 2542,
       "features": {
-        "accuracy": 98.0878409711261,
+        "accuracy": 95.48608573264868,
         "acpl": 27.137254901960784,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -5483,7 +5483,7 @@
       "username": "argimiro",
       "rating": 2543,
       "features": {
-        "accuracy": 89.72833947905625,
+        "accuracy": 90.57354713684246,
         "acpl": 34.92,
         "blunders": 0.0,
         "mistakes": 4.25531914893617,
@@ -5497,7 +5497,7 @@
       "username": "chessking2007",
       "rating": 2534,
       "features": {
-        "accuracy": 62.956989695505314,
+        "accuracy": 60.04209760653102,
         "acpl": 84.53571428571429,
         "blunders": 16.0,
         "mistakes": 8.0,
@@ -5511,7 +5511,7 @@
       "username": "chaikmate",
       "rating": 2508,
       "features": {
-        "accuracy": 72.27002204464674,
+        "accuracy": 68.68062778323677,
         "acpl": 65.10714285714286,
         "blunders": 12.0,
         "mistakes": 4.0,
@@ -5525,7 +5525,7 @@
       "username": "chaikmate",
       "rating": 2552,
       "features": {
-        "accuracy": 90.10464444438,
+        "accuracy": 85.13041928108169,
         "acpl": 26.19047619047619,
         "blunders": 0.0,
         "mistakes": 11.11111111111111,
@@ -5539,7 +5539,7 @@
       "username": "simca1100",
       "rating": 2523,
       "features": {
-        "accuracy": 79.29424680299641,
+        "accuracy": 78.87131739811726,
         "acpl": 53.51219512195122,
         "blunders": 2.7777777777777777,
         "mistakes": 8.333333333333334,
@@ -5553,7 +5553,7 @@
       "username": "chaikmate",
       "rating": 2544,
       "features": {
-        "accuracy": 96.5866820140796,
+        "accuracy": 93.4008976110702,
         "acpl": 17.666666666666668,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -5567,7 +5567,7 @@
       "username": "chaikmate",
       "rating": 2537,
       "features": {
-        "accuracy": 78.26533269223643,
+        "accuracy": 79.31721789739595,
         "acpl": 35.75,
         "blunders": 12.5,
         "mistakes": 0.0,
@@ -5581,7 +5581,7 @@
       "username": "locky1996",
       "rating": 2548,
       "features": {
-        "accuracy": 59.95846875829966,
+        "accuracy": 64.64526602601609,
         "acpl": 73.3157894736842,
         "blunders": 18.75,
         "mistakes": 0.0,
@@ -5595,7 +5595,7 @@
       "username": "chaikmate",
       "rating": 2528,
       "features": {
-        "accuracy": 84.2083442672986,
+        "accuracy": 83.05854328462331,
         "acpl": 31.25,
         "blunders": 8.333333333333334,
         "mistakes": 8.333333333333334,
@@ -5609,7 +5609,7 @@
       "username": "simca1100",
       "rating": 2549,
       "features": {
-        "accuracy": 95.00080468851493,
+        "accuracy": 91.91256339683164,
         "acpl": 13.947368421052632,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -5623,7 +5623,7 @@
       "username": "mlsystem",
       "rating": 2554,
       "features": {
-        "accuracy": 80.2048695190349,
+        "accuracy": 79.22539360731778,
         "acpl": 54.72222222222222,
         "blunders": 0.0,
         "mistakes": 13.333333333333334,
@@ -5637,7 +5637,7 @@
       "username": "saemi17",
       "rating": 657,
       "features": {
-        "accuracy": 84.12723532227662,
+        "accuracy": 82.12142365326837,
         "acpl": 44.07692307692308,
         "blunders": 0.0,
         "mistakes": 8.333333333333334,
@@ -5651,7 +5651,7 @@
       "username": "tjaldur2317",
       "rating": 891,
       "features": {
-        "accuracy": 92.61360816054469,
+        "accuracy": 89.87909652548181,
         "acpl": 25.128205128205128,
         "blunders": 0.0,
         "mistakes": 2.7027027027027026,
@@ -5665,7 +5665,7 @@
       "username": "andrimar00",
       "rating": 402,
       "features": {
-        "accuracy": 44.93194907766674,
+        "accuracy": 71.13896781173013,
         "acpl": 164.73529411764707,
         "blunders": 9.090909090909092,
         "mistakes": 0.0,
@@ -5679,10 +5679,10 @@
       "username": "dori1305",
       "rating": 1164,
       "features": {
-        "accuracy": 78.64159748174669,
+        "accuracy": 73.92436569684395,
         "acpl": 58.4,
-        "blunders": 9.375,
-        "mistakes": 15.625,
+        "blunders": 3.125,
+        "mistakes": 21.875,
         "inaccuracies": 3.125
       }
     },
@@ -5693,7 +5693,7 @@
       "username": "frigotz",
       "rating": 1130,
       "features": {
-        "accuracy": 70.97731858043178,
+        "accuracy": 67.39691879113522,
         "acpl": 83.82352941176471,
         "blunders": 9.375,
         "mistakes": 9.375,
@@ -5707,7 +5707,7 @@
       "username": "janghanju123123",
       "rating": 1147,
       "features": {
-        "accuracy": 84.29896362941881,
+        "accuracy": 80.12757370854044,
         "acpl": 46.39393939393939,
         "blunders": 6.896551724137931,
         "mistakes": 3.4482758620689653,
@@ -5721,7 +5721,7 @@
       "username": "dori1305",
       "rating": 1156,
       "features": {
-        "accuracy": 82.09576036959186,
+        "accuracy": 79.20964218352202,
         "acpl": 52.93939393939394,
         "blunders": 6.666666666666667,
         "mistakes": 0.0,
@@ -5735,7 +5735,7 @@
       "username": "dori1305",
       "rating": 1156,
       "features": {
-        "accuracy": 93.11697931536031,
+        "accuracy": 87.75386564434598,
         "acpl": 38.03333333333333,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -5749,7 +5749,7 @@
       "username": "dayalmerchan",
       "rating": 1161,
       "features": {
-        "accuracy": 76.56487324999958,
+        "accuracy": 77.60968202061468,
         "acpl": 68.13793103448276,
         "blunders": 3.8461538461538463,
         "mistakes": 11.538461538461538,
@@ -5763,7 +5763,7 @@
       "username": "kako2021",
       "rating": 866,
       "features": {
-        "accuracy": 66.93241266713636,
+        "accuracy": 66.18218331456895,
         "acpl": 101.61290322580645,
         "blunders": 3.4482758620689653,
         "mistakes": 10.344827586206897,
@@ -5777,7 +5777,7 @@
       "username": "eagl1997",
       "rating": 903,
       "features": {
-        "accuracy": 80.36133013447284,
+        "accuracy": 73.67273676289446,
         "acpl": 66.45161290322581,
         "blunders": 6.896551724137931,
         "mistakes": 10.344827586206897,
@@ -5791,7 +5791,7 @@
       "username": "eagl1997",
       "rating": 896,
       "features": {
-        "accuracy": 46.85010619578898,
+        "accuracy": 42.24067096995869,
         "acpl": 176.64705882352942,
         "blunders": 40.0,
         "mistakes": 6.666666666666667,
@@ -5805,7 +5805,7 @@
       "username": "arist133",
       "rating": 904,
       "features": {
-        "accuracy": 61.1024359028146,
+        "accuracy": 54.61991033387135,
         "acpl": 123.47058823529412,
         "blunders": 20.0,
         "mistakes": 13.333333333333334,
@@ -5819,7 +5819,7 @@
       "username": "eagl1997",
       "rating": 904,
       "features": {
-        "accuracy": 63.54112346747902,
+        "accuracy": 67.06237662815379,
         "acpl": 87.23529411764706,
         "blunders": 6.666666666666667,
         "mistakes": 13.333333333333334,
@@ -5833,7 +5833,7 @@
       "username": "aldrich_corros",
       "rating": 906,
       "features": {
-        "accuracy": 85.96356003626431,
+        "accuracy": 81.8402409618288,
         "acpl": 43.470588235294116,
         "blunders": 0.0,
         "mistakes": 6.25,
@@ -5847,7 +5847,7 @@
       "username": "elocent",
       "rating": 950,
       "features": {
-        "accuracy": 88.77290801631165,
+        "accuracy": 82.85977538837916,
         "acpl": 63.41509433962264,
         "blunders": 1.9607843137254901,
         "mistakes": 1.9607843137254901,
@@ -5861,10 +5861,10 @@
       "username": "eagl1997",
       "rating": 912,
       "features": {
-        "accuracy": 84.60606509483682,
+        "accuracy": 79.21185809528909,
         "acpl": 76.98076923076923,
-        "blunders": 3.9215686274509802,
-        "mistakes": 3.9215686274509802,
+        "blunders": 5.882352941176471,
+        "mistakes": 1.9607843137254901,
         "inaccuracies": 13.72549019607843
       }
     },
@@ -5875,7 +5875,7 @@
       "username": "tomasingii",
       "rating": 920,
       "features": {
-        "accuracy": 88.37820200356722,
+        "accuracy": 89.34414907501639,
         "acpl": 47.37931034482759,
         "blunders": 1.8181818181818181,
         "mistakes": 0.0,
@@ -5889,7 +5889,7 @@
       "username": "gen1us_16",
       "rating": 940,
       "features": {
-        "accuracy": 97.35032387629218,
+        "accuracy": 94.97366491266718,
         "acpl": 31.551724137931036,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -5903,7 +5903,7 @@
       "username": "tomasingii",
       "rating": 928,
       "features": {
-        "accuracy": 78.84627604067137,
+        "accuracy": 80.05130493489874,
         "acpl": 67.3529411764706,
         "blunders": 3.125,
         "mistakes": 3.125,
@@ -5917,7 +5917,7 @@
       "username": "being_weird_02",
       "rating": 938,
       "features": {
-        "accuracy": 92.34447602010349,
+        "accuracy": 89.58633651176757,
         "acpl": 32.8235294117647,
         "blunders": 0.0,
         "mistakes": 6.25,
@@ -5931,7 +5931,7 @@
       "username": "zull_not",
       "rating": 920,
       "features": {
-        "accuracy": 52.73166839320067,
+        "accuracy": 68.78740061482655,
         "acpl": 105.06382978723404,
         "blunders": 7.142857142857143,
         "mistakes": 11.904761904761905,
@@ -5945,7 +5945,7 @@
       "username": "tomasingii",
       "rating": 937,
       "features": {
-        "accuracy": 76.25947151685297,
+        "accuracy": 69.72183979884892,
         "acpl": 88.0,
         "blunders": 11.904761904761905,
         "mistakes": 2.380952380952381,
@@ -5959,7 +5959,7 @@
       "username": "huiribye",
       "rating": 638,
       "features": {
-        "accuracy": 75.22742552548034,
+        "accuracy": 67.09756107174965,
         "acpl": 79.6875,
         "blunders": 6.666666666666667,
         "mistakes": 13.333333333333334,
@@ -5973,7 +5973,7 @@
       "username": "thorsteinnhk",
       "rating": 647,
       "features": {
-        "accuracy": 83.62895739598387,
+        "accuracy": 78.14988212214159,
         "acpl": 41.25,
         "blunders": 3.3333333333333335,
         "mistakes": 10.0,
@@ -5987,10 +5987,10 @@
       "username": "renatinhochaves",
       "rating": 674,
       "features": {
-        "accuracy": 86.72072748631183,
+        "accuracy": 84.71962340835404,
         "acpl": 44.121212121212125,
-        "blunders": 1.5873015873015872,
-        "mistakes": 6.349206349206349,
+        "blunders": 0.0,
+        "mistakes": 7.936507936507937,
         "inaccuracies": 6.349206349206349
       }
     },
@@ -6001,7 +6001,7 @@
       "username": "thorsteinnhk",
       "rating": 639,
       "features": {
-        "accuracy": 82.71968534721455,
+        "accuracy": 80.85992976619106,
         "acpl": 51.723076923076924,
         "blunders": 1.5873015873015872,
         "mistakes": 9.523809523809524,
@@ -6015,7 +6015,7 @@
       "username": "thorsteinnhk",
       "rating": 647,
       "features": {
-        "accuracy": 46.18734305441689,
+        "accuracy": 69.64194900216128,
         "acpl": 109.47826086956522,
         "blunders": 4.545454545454546,
         "mistakes": 4.545454545454546,
@@ -6029,7 +6029,7 @@
       "username": "sebasxss",
       "rating": 632,
       "features": {
-        "accuracy": 37.19005485056067,
+        "accuracy": 60.72857701169716,
         "acpl": 157.13636363636363,
         "blunders": 9.523809523809524,
         "mistakes": 0.0,
@@ -6043,7 +6043,7 @@
       "username": "binnithor",
       "rating": 522,
       "features": {
-        "accuracy": 65.8031361140257,
+        "accuracy": 80.96308533045202,
         "acpl": 78.25,
         "blunders": 4.545454545454546,
         "mistakes": 4.545454545454546,
@@ -6057,7 +6057,7 @@
       "username": "ban-mimi",
       "rating": 545,
       "features": {
-        "accuracy": 94.69056552920674,
+        "accuracy": 91.51844499794908,
         "acpl": 34.375,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -6071,10 +6071,10 @@
       "username": "freddie1904",
       "rating": 503,
       "features": {
-        "accuracy": 28.37877926077629,
+        "accuracy": 38.96691960618382,
         "acpl": 224.05882352941177,
-        "blunders": 42.857142857142854,
-        "mistakes": 14.285714285714286,
+        "blunders": 35.714285714285715,
+        "mistakes": 21.428571428571427,
         "inaccuracies": 7.142857142857143
       }
     },
@@ -6085,10 +6085,10 @@
       "username": "binnithor",
       "rating": 521,
       "features": {
-        "accuracy": 49.78549886012492,
+        "accuracy": 34.03078498816713,
         "acpl": 172.2941176470588,
-        "blunders": 26.666666666666668,
-        "mistakes": 40.0,
+        "blunders": 33.333333333333336,
+        "mistakes": 33.333333333333336,
         "inaccuracies": 6.666666666666667
       }
     },
@@ -6099,10 +6099,10 @@
       "username": "binnithor",
       "rating": 508,
       "features": {
-        "accuracy": 66.81182265051348,
+        "accuracy": 71.4528563271215,
         "acpl": 104.03030303030303,
-        "blunders": 6.451612903225806,
-        "mistakes": 6.451612903225806,
+        "blunders": 9.67741935483871,
+        "mistakes": 3.225806451612903,
         "inaccuracies": 12.903225806451612
       }
     },
@@ -6113,7 +6113,7 @@
       "username": "gadod_cihuy",
       "rating": 466,
       "features": {
-        "accuracy": 75.25786962082762,
+        "accuracy": 78.0992895064017,
         "acpl": 86.25,
         "blunders": 6.451612903225806,
         "mistakes": 0.0,
@@ -6127,7 +6127,7 @@
       "username": "thorsteinndg",
       "rating": 821,
       "features": {
-        "accuracy": 52.64686757657828,
+        "accuracy": 74.12459442547562,
         "acpl": 95.6875,
         "blunders": 3.3333333333333335,
         "mistakes": 6.666666666666667,
@@ -6141,7 +6141,7 @@
       "username": "ciappoat",
       "rating": 863,
       "features": {
-        "accuracy": 74.40155503836041,
+        "accuracy": 76.89514644879107,
         "acpl": 66.8125,
         "blunders": 6.666666666666667,
         "mistakes": 0.0,
@@ -6155,10 +6155,10 @@
       "username": "aryan21332",
       "rating": 884,
       "features": {
-        "accuracy": 73.37097920142463,
+        "accuracy": 65.28373209564833,
         "acpl": 90.89473684210526,
-        "blunders": 5.555555555555555,
-        "mistakes": 13.88888888888889,
+        "blunders": 2.7777777777777777,
+        "mistakes": 16.666666666666668,
         "inaccuracies": 19.444444444444443
       }
     },
@@ -6169,7 +6169,7 @@
       "username": "thorsteinndg",
       "rating": 842,
       "features": {
-        "accuracy": 54.15842489779364,
+        "accuracy": 64.43304593595835,
         "acpl": 113.70270270270271,
         "blunders": 5.555555555555555,
         "mistakes": 16.666666666666668,
@@ -6183,7 +6183,7 @@
       "username": "blaccy46",
       "rating": 851,
       "features": {
-        "accuracy": 63.725518083837215,
+        "accuracy": 72.58664312287445,
         "acpl": 72.12121212121212,
         "blunders": 6.451612903225806,
         "mistakes": 3.225806451612903,
@@ -6197,7 +6197,7 @@
       "username": "thorsteinndg",
       "rating": 863,
       "features": {
-        "accuracy": 82.81033733205408,
+        "accuracy": 75.47092841780945,
         "acpl": 52.84848484848485,
         "blunders": 3.125,
         "mistakes": 12.5,
@@ -6211,10 +6211,10 @@
       "username": "critter420",
       "rating": 852,
       "features": {
-        "accuracy": 75.66116801272356,
+        "accuracy": 70.333066602801,
         "acpl": 86.18367346938776,
-        "blunders": 14.893617021276595,
-        "mistakes": 4.25531914893617,
+        "blunders": 12.76595744680851,
+        "mistakes": 6.382978723404255,
         "inaccuracies": 4.25531914893617
       }
     },
@@ -6225,7 +6225,7 @@
       "username": "thorsteinndg",
       "rating": 839,
       "features": {
-        "accuracy": 59.90940003808006,
+        "accuracy": 68.59634196551963,
         "acpl": 99.08333333333333,
         "blunders": 8.695652173913043,
         "mistakes": 13.043478260869565,
@@ -6239,10 +6239,10 @@
       "username": "joe-mama-jr",
       "rating": 926,
       "features": {
-        "accuracy": 46.18802026146667,
+        "accuracy": 36.09854040077065,
         "acpl": 191.27272727272728,
-        "blunders": 33.333333333333336,
-        "mistakes": 9.523809523809524,
+        "blunders": 28.571428571428573,
+        "mistakes": 14.285714285714286,
         "inaccuracies": 23.80952380952381
       }
     },
@@ -6253,7 +6253,7 @@
       "username": "pelapa76",
       "rating": 939,
       "features": {
-        "accuracy": 57.00341046506034,
+        "accuracy": 44.074005715138746,
         "acpl": 139.86363636363637,
         "blunders": 19.047619047619047,
         "mistakes": 19.047619047619047,
@@ -6267,10 +6267,10 @@
       "username": "k100073",
       "rating": 1467,
       "features": {
-        "accuracy": 78.37219525799448,
+        "accuracy": 84.24592814784044,
         "acpl": 38.806451612903224,
-        "blunders": 3.4482758620689653,
-        "mistakes": 3.4482758620689653,
+        "blunders": 6.896551724137931,
+        "mistakes": 0.0,
         "inaccuracies": 0.0
       }
     },
@@ -6281,7 +6281,7 @@
       "username": "vishnubontha",
       "rating": 1234,
       "features": {
-        "accuracy": 57.186018267790075,
+        "accuracy": 76.9103076302258,
         "acpl": 77.73333333333333,
         "blunders": 6.896551724137931,
         "mistakes": 3.4482758620689653,
@@ -6295,7 +6295,7 @@
       "username": "vishnubontha",
       "rating": 1261,
       "features": {
-        "accuracy": 95.46569438418078,
+        "accuracy": 92.41254639844352,
         "acpl": 18.906976744186046,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -6309,7 +6309,7 @@
       "username": "k100073",
       "rating": 1463,
       "features": {
-        "accuracy": 87.61543276103724,
+        "accuracy": 85.52442214426465,
         "acpl": 41.142857142857146,
         "blunders": 0.0,
         "mistakes": 5.128205128205129,
@@ -6323,7 +6323,7 @@
       "username": "amichubbycat",
       "rating": 1463,
       "features": {
-        "accuracy": 79.2812112169724,
+        "accuracy": 71.10652910433197,
         "acpl": 62.15384615384615,
         "blunders": 2.7777777777777777,
         "mistakes": 16.666666666666668,
@@ -6337,10 +6337,10 @@
       "username": "k100073",
       "rating": 1476,
       "features": {
-        "accuracy": 88.05360189647672,
+        "accuracy": 81.57531426898873,
         "acpl": 34.82051282051282,
-        "blunders": 2.7777777777777777,
-        "mistakes": 5.555555555555555,
+        "blunders": 0.0,
+        "mistakes": 8.333333333333334,
         "inaccuracies": 11.11111111111111
       }
     },
@@ -6351,10 +6351,10 @@
       "username": "k100073",
       "rating": 1468,
       "features": {
-        "accuracy": 79.28305498923552,
+        "accuracy": 79.35242225710992,
         "acpl": 41.0,
-        "blunders": 4.285714285714286,
-        "mistakes": 7.142857142857143,
+        "blunders": 5.714285714285714,
+        "mistakes": 5.714285714285714,
         "inaccuracies": 2.857142857142857
       }
     },
@@ -6365,7 +6365,7 @@
       "username": "rajput13",
       "rating": 1454,
       "features": {
-        "accuracy": 75.41966935984743,
+        "accuracy": 75.06094814615821,
         "acpl": 52.785714285714285,
         "blunders": 5.797101449275362,
         "mistakes": 8.695652173913043,
@@ -6379,7 +6379,7 @@
       "username": "ryuuji09",
       "rating": 570,
       "features": {
-        "accuracy": 76.44679206504007,
+        "accuracy": 74.03156839268802,
         "acpl": 71.31818181818181,
         "blunders": 0.0,
         "mistakes": 19.047619047619047,
@@ -6393,10 +6393,10 @@
       "username": "ryuuji09",
       "rating": 545,
       "features": {
-        "accuracy": 64.51969406364739,
+        "accuracy": 60.36955316720227,
         "acpl": 93.5111111111111,
-        "blunders": 11.363636363636363,
-        "mistakes": 6.818181818181818,
+        "blunders": 13.636363636363637,
+        "mistakes": 4.545454545454546,
         "inaccuracies": 13.636363636363637
       }
     },
@@ -6407,7 +6407,7 @@
       "username": "ryuuji09",
       "rating": 555,
       "features": {
-        "accuracy": 68.72393899496267,
+        "accuracy": 61.266307071005734,
         "acpl": 114.02380952380952,
         "blunders": 7.317073170731708,
         "mistakes": 12.195121951219512,
@@ -6421,7 +6421,7 @@
       "username": "nepo20252026",
       "rating": 518,
       "features": {
-        "accuracy": 79.08902010574494,
+        "accuracy": 78.65114664017577,
         "acpl": 77.80952380952381,
         "blunders": 5.2631578947368425,
         "mistakes": 0.0,
@@ -6435,7 +6435,7 @@
       "username": "jlvntr",
       "rating": 545,
       "features": {
-        "accuracy": 96.00513701308246,
+        "accuracy": 93.08264726381638,
         "acpl": 40.65,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -6449,7 +6449,7 @@
       "username": "nepo20252026",
       "rating": 556,
       "features": {
-        "accuracy": 52.61065027963621,
+        "accuracy": 73.63541652165537,
         "acpl": 94.26470588235294,
         "blunders": 6.25,
         "mistakes": 6.25,
@@ -6463,7 +6463,7 @@
       "username": "lg_gunner",
       "rating": 520,
       "features": {
-        "accuracy": 47.82387530683026,
+        "accuracy": 65.68282317365524,
         "acpl": 128.4848484848485,
         "blunders": 9.67741935483871,
         "mistakes": 6.451612903225806,
@@ -6477,7 +6477,7 @@
       "username": "hannez-k",
       "rating": 559,
       "features": {
-        "accuracy": 81.82685092331468,
+        "accuracy": 76.70434220335011,
         "acpl": 67.8,
         "blunders": 4.651162790697675,
         "mistakes": 9.30232558139535,
@@ -6491,10 +6491,10 @@
       "username": "nepo20252026",
       "rating": 515,
       "features": {
-        "accuracy": 74.0211987461128,
+        "accuracy": 70.55093320316169,
         "acpl": 93.28888888888889,
-        "blunders": 11.363636363636363,
-        "mistakes": 4.545454545454546,
+        "blunders": 9.090909090909092,
+        "mistakes": 6.818181818181818,
         "inaccuracies": 6.818181818181818
       }
     },
@@ -6505,7 +6505,7 @@
       "username": "fle_xing",
       "rating": 541,
       "features": {
-        "accuracy": 88.29799807552052,
+        "accuracy": 83.8722277561819,
         "acpl": 45.026315789473685,
         "blunders": 2.7027027027027026,
         "mistakes": 0.0,
@@ -6519,10 +6519,10 @@
       "username": "dragonyaalee",
       "rating": 501,
       "features": {
-        "accuracy": 80.8380629510622,
+        "accuracy": 74.76011607259917,
         "acpl": 70.29729729729729,
-        "blunders": 0.0,
-        "mistakes": 11.11111111111111,
+        "blunders": 2.7777777777777777,
+        "mistakes": 8.333333333333334,
         "inaccuracies": 13.88888888888889
       }
     },
@@ -6533,10 +6533,10 @@
       "username": "rajput13",
       "rating": 1417,
       "features": {
-        "accuracy": 63.687968097619375,
+        "accuracy": 63.85450415890524,
         "acpl": 93.8125,
-        "blunders": 10.344827586206897,
-        "mistakes": 10.344827586206897,
+        "blunders": 6.896551724137931,
+        "mistakes": 13.793103448275861,
         "inaccuracies": 10.344827586206897
       }
     },
@@ -6547,10 +6547,10 @@
       "username": "snipeden_007",
       "rating": 1426,
       "features": {
-        "accuracy": 73.72472701439429,
+        "accuracy": 69.0173679574698,
         "acpl": 65.38709677419355,
-        "blunders": 6.896551724137931,
-        "mistakes": 10.344827586206897,
+        "blunders": 10.344827586206897,
+        "mistakes": 6.896551724137931,
         "inaccuracies": 10.344827586206897
       }
     },
@@ -6561,7 +6561,7 @@
       "username": "myolwin99",
       "rating": 1400,
       "features": {
-        "accuracy": 52.46017498680189,
+        "accuracy": 43.85002879389251,
         "acpl": 167.75,
         "blunders": 27.272727272727273,
         "mistakes": 4.545454545454546,
@@ -6575,7 +6575,7 @@
       "username": "rajput13",
       "rating": 1425,
       "features": {
-        "accuracy": 60.46418781257197,
+        "accuracy": 54.49143401070575,
         "acpl": 110.08333333333333,
         "blunders": 21.73913043478261,
         "mistakes": 4.3478260869565215,
@@ -6589,7 +6589,7 @@
       "username": "o_lsr",
       "rating": 1412,
       "features": {
-        "accuracy": 77.49522017887304,
+        "accuracy": 74.25200901150274,
         "acpl": 69.53703703703704,
         "blunders": 3.8461538461538463,
         "mistakes": 9.615384615384615,
@@ -6603,7 +6603,7 @@
       "username": "rajput13",
       "rating": 1417,
       "features": {
-        "accuracy": 81.80289205767278,
+        "accuracy": 74.72906604068875,
         "acpl": 62.72222222222222,
         "blunders": 3.8461538461538463,
         "mistakes": 7.6923076923076925,
@@ -6617,10 +6617,10 @@
       "username": "rajput13",
       "rating": 1417,
       "features": {
-        "accuracy": 78.71515729214886,
+        "accuracy": 71.74943030867607,
         "acpl": 69.23456790123457,
-        "blunders": 3.75,
-        "mistakes": 15.0,
+        "blunders": 5.0,
+        "mistakes": 13.75,
         "inaccuracies": 15.0
       }
     },
@@ -6631,10 +6631,10 @@
       "username": "ruslanswe",
       "rating": 1432,
       "features": {
-        "accuracy": 80.96230502553152,
+        "accuracy": 75.46484822130377,
         "acpl": 58.30864197530864,
-        "blunders": 10.0,
-        "mistakes": 5.0,
+        "blunders": 7.5,
+        "mistakes": 7.5,
         "inaccuracies": 8.75
       }
     },
@@ -6645,10 +6645,10 @@
       "username": "shadow_dofi",
       "rating": 1132,
       "features": {
-        "accuracy": 64.7334678626396,
+        "accuracy": 61.78424534859543,
         "acpl": 89.96666666666667,
-        "blunders": 14.285714285714286,
-        "mistakes": 10.714285714285714,
+        "blunders": 17.857142857142858,
+        "mistakes": 7.142857142857143,
         "inaccuracies": 0.0
       }
     },
@@ -6659,7 +6659,7 @@
       "username": "frigotz",
       "rating": 1114,
       "features": {
-        "accuracy": 59.476598270528925,
+        "accuracy": 52.577876606187736,
         "acpl": 125.86206896551724,
         "blunders": 25.0,
         "mistakes": 0.0,
@@ -6673,7 +6673,7 @@
       "username": "frigotz",
       "rating": 1122,
       "features": {
-        "accuracy": 54.441212515694524,
+        "accuracy": 86.02366060630044,
         "acpl": 70.53333333333333,
         "blunders": 3.7037037037037037,
         "mistakes": 0.0,
@@ -6687,7 +6687,7 @@
       "username": "exorcist616",
       "rating": 1151,
       "features": {
-        "accuracy": 92.31320616927532,
+        "accuracy": 89.41339715886704,
         "acpl": 36.3,
         "blunders": 0.0,
         "mistakes": 3.7037037037037037,
@@ -6701,7 +6701,7 @@
       "username": "yossarian28",
       "rating": 1106,
       "features": {
-        "accuracy": 80.54607844081553,
+        "accuracy": 72.31448874849009,
         "acpl": 73.61290322580645,
         "blunders": 0.0,
         "mistakes": 10.0,
@@ -6715,10 +6715,10 @@
       "username": "frigotz",
       "rating": 1138,
       "features": {
-        "accuracy": 88.34913431901353,
+        "accuracy": 83.69194846426363,
         "acpl": 38.03225806451613,
-        "blunders": 3.3333333333333335,
-        "mistakes": 6.666666666666667,
+        "blunders": 0.0,
+        "mistakes": 10.0,
         "inaccuracies": 6.666666666666667
       }
     },
@@ -6729,7 +6729,7 @@
       "username": "yossarian28",
       "rating": 1108,
       "features": {
-        "accuracy": 74.35134054950089,
+        "accuracy": 74.38312738648827,
         "acpl": 62.17391304347826,
         "blunders": 4.545454545454546,
         "mistakes": 9.090909090909092,
@@ -6743,7 +6743,7 @@
       "username": "joeyromano22",
       "rating": 1115,
       "features": {
-        "accuracy": 90.06657100837445,
+        "accuracy": 86.8559337963237,
         "acpl": 22.565217391304348,
         "blunders": 0.0,
         "mistakes": 4.545454545454546,
@@ -6757,7 +6757,7 @@
       "username": "yossarian28",
       "rating": 1116,
       "features": {
-        "accuracy": 44.863497046300914,
+        "accuracy": 62.41264830770392,
         "acpl": 152.5151515151515,
         "blunders": 9.67741935483871,
         "mistakes": 6.451612903225806,
@@ -6771,10 +6771,10 @@
       "username": "shekar1967",
       "rating": 1057,
       "features": {
-        "accuracy": 49.36563828519303,
+        "accuracy": 66.12673589759575,
         "acpl": 119.03030303030303,
-        "blunders": 12.5,
-        "mistakes": 9.375,
+        "blunders": 9.375,
+        "mistakes": 12.5,
         "inaccuracies": 3.125
       }
     },
@@ -6785,7 +6785,7 @@
       "username": "shekar1967",
       "rating": 1047,
       "features": {
-        "accuracy": 76.86864522067677,
+        "accuracy": 69.73002202374418,
         "acpl": 67.41379310344827,
         "blunders": 8.928571428571429,
         "mistakes": 10.714285714285714,
@@ -6799,7 +6799,7 @@
       "username": "yossarian28",
       "rating": 1126,
       "features": {
-        "accuracy": 77.51908216643581,
+        "accuracy": 70.66681565142721,
         "acpl": 64.15517241379311,
         "blunders": 5.357142857142857,
         "mistakes": 12.5,
@@ -6813,7 +6813,7 @@
       "username": "yossarian28",
       "rating": 1119,
       "features": {
-        "accuracy": 73.19953299808503,
+        "accuracy": 69.7880744293553,
         "acpl": 70.58333333333333,
         "blunders": 8.823529411764707,
         "mistakes": 2.9411764705882355,
@@ -6827,7 +6827,7 @@
       "username": "shekar1967",
       "rating": 1054,
       "features": {
-        "accuracy": 48.38056198637445,
+        "accuracy": 68.70202950409966,
         "acpl": 100.34285714285714,
         "blunders": 8.823529411764707,
         "mistakes": 5.882352941176471,
@@ -6841,7 +6841,7 @@
       "username": "myolwin99",
       "rating": 1384,
       "features": {
-        "accuracy": 75.47326545283387,
+        "accuracy": 72.84650920997866,
         "acpl": 57.5,
         "blunders": 8.108108108108109,
         "mistakes": 0.0,
@@ -6855,7 +6855,7 @@
       "username": "x-2675591972",
       "rating": 1399,
       "features": {
-        "accuracy": 81.65716271961662,
+        "accuracy": 76.60313252117741,
         "acpl": 44.65,
         "blunders": 5.2631578947368425,
         "mistakes": 5.2631578947368425,
@@ -6869,7 +6869,7 @@
       "username": "myolwin99",
       "rating": 1392,
       "features": {
-        "accuracy": 58.764750369767484,
+        "accuracy": 63.96168490204508,
         "acpl": 107.38461538461539,
         "blunders": 13.636363636363637,
         "mistakes": 4.545454545454546,
@@ -6883,7 +6883,7 @@
       "username": "sthenerd",
       "rating": 1409,
       "features": {
-        "accuracy": 70.13494388299205,
+        "accuracy": 72.74600699188787,
         "acpl": 71.46153846153847,
         "blunders": 9.090909090909092,
         "mistakes": 4.545454545454546,
@@ -6897,7 +6897,7 @@
       "username": "nigaru_61",
       "rating": 1417,
       "features": {
-        "accuracy": 89.36643526184119,
+        "accuracy": 81.25539303819565,
         "acpl": 28.11764705882353,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -6911,7 +6911,7 @@
       "username": "myolwin99",
       "rating": 1400,
       "features": {
-        "accuracy": 76.42923659278793,
+        "accuracy": 73.46379590758323,
         "acpl": 57.63636363636363,
         "blunders": 3.225806451612903,
         "mistakes": 6.451612903225806,
@@ -6925,7 +6925,7 @@
       "username": "chrijoke",
       "rating": 1380,
       "features": {
-        "accuracy": 75.91835122370588,
+        "accuracy": 68.75698460002855,
         "acpl": 62.0,
         "blunders": 4.0,
         "mistakes": 12.0,
@@ -6939,7 +6939,7 @@
       "username": "myolwin99",
       "rating": 1408,
       "features": {
-        "accuracy": 82.93183434211427,
+        "accuracy": 76.6060029221403,
         "acpl": 41.4,
         "blunders": 3.8461538461538463,
         "mistakes": 7.6923076923076925,
@@ -6953,7 +6953,7 @@
       "username": "shekar1967",
       "rating": 1034,
       "features": {
-        "accuracy": 78.65043881608156,
+        "accuracy": 75.76712312178334,
         "acpl": 40.526315789473685,
         "blunders": 5.555555555555555,
         "mistakes": 0.0,
@@ -6967,7 +6967,7 @@
       "username": "meetjoshi619",
       "rating": 1038,
       "features": {
-        "accuracy": 58.715267298608076,
+        "accuracy": 67.00722916426639,
         "acpl": 72.55555555555556,
         "blunders": 11.764705882352942,
         "mistakes": 0.0,
@@ -6981,7 +6981,7 @@
       "username": "chienvolant",
       "rating": 1037,
       "features": {
-        "accuracy": 95.10607425869179,
+        "accuracy": 92.51712507171133,
         "acpl": 32.44736842105263,
         "blunders": 0.0,
         "mistakes": 2.9411764705882355,
@@ -6995,7 +6995,7 @@
       "username": "zorro007m",
       "rating": 1396,
       "features": {
-        "accuracy": 72.04031861546983,
+        "accuracy": 64.7240422792205,
         "acpl": 90.29032258064517,
         "blunders": 5.172413793103448,
         "mistakes": 15.517241379310345,
@@ -7009,10 +7009,10 @@
       "username": "chrijoke",
       "rating": 1412,
       "features": {
-        "accuracy": 76.79567194743719,
+        "accuracy": 70.44603012030292,
         "acpl": 71.75806451612904,
-        "blunders": 10.344827586206897,
-        "mistakes": 12.068965517241379,
+        "blunders": 5.172413793103448,
+        "mistakes": 17.24137931034483,
         "inaccuracies": 12.068965517241379
       }
     },
@@ -7023,10 +7023,10 @@
       "username": "chrijoke",
       "rating": 1412,
       "features": {
-        "accuracy": 65.00532272753065,
+        "accuracy": 63.97549665041171,
         "acpl": 91.52173913043478,
-        "blunders": 14.285714285714286,
-        "mistakes": 4.761904761904762,
+        "blunders": 9.523809523809524,
+        "mistakes": 9.523809523809524,
         "inaccuracies": 14.285714285714286
       }
     },
@@ -7037,7 +7037,7 @@
       "username": "ico2020",
       "rating": 1634,
       "features": {
-        "accuracy": 68.80459500820459,
+        "accuracy": 65.07664189489911,
         "acpl": 74.25,
         "blunders": 12.5,
         "mistakes": 3.125,
@@ -7051,7 +7051,7 @@
       "username": "michaelcout",
       "rating": 1637,
       "features": {
-        "accuracy": 79.92390799760625,
+        "accuracy": 75.43762895832263,
         "acpl": 57.25806451612903,
         "blunders": 3.5714285714285716,
         "mistakes": 7.142857142857143,
@@ -7065,7 +7065,7 @@
       "username": "ico2020",
       "rating": 1674,
       "features": {
-        "accuracy": 90.27364921148185,
+        "accuracy": 84.91083088425103,
         "acpl": 30.741935483870968,
         "blunders": 0.0,
         "mistakes": 3.4482758620689653,
@@ -7079,7 +7079,7 @@
       "username": "ico2020",
       "rating": 1667,
       "features": {
-        "accuracy": 92.77694049540894,
+        "accuracy": 88.0985538468376,
         "acpl": 32.38095238095238,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -7093,7 +7093,7 @@
       "username": "michaelcout",
       "rating": 1644,
       "features": {
-        "accuracy": 77.42519673890732,
+        "accuracy": 75.713533050256,
         "acpl": 65.5,
         "blunders": 5.882352941176471,
         "mistakes": 5.882352941176471,
@@ -7107,7 +7107,7 @@
       "username": "ahmedabdullah20",
       "rating": 1669,
       "features": {
-        "accuracy": 91.6552477876153,
+        "accuracy": 87.07536831747582,
         "acpl": 21.047619047619047,
         "blunders": 0.0,
         "mistakes": 5.882352941176471,
@@ -7121,7 +7121,7 @@
       "username": "ico2020",
       "rating": 1659,
       "features": {
-        "accuracy": 70.89030239721276,
+        "accuracy": 74.3308868478564,
         "acpl": 61.3,
         "blunders": 6.25,
         "mistakes": 6.25,
@@ -7135,10 +7135,10 @@
       "username": "ellie_mrow",
       "rating": 1705,
       "features": {
-        "accuracy": 80.70172003239554,
+        "accuracy": 77.63927346922121,
         "acpl": 47.41509433962264,
-        "blunders": 4.25531914893617,
-        "mistakes": 8.51063829787234,
+        "blunders": 2.127659574468085,
+        "mistakes": 10.638297872340425,
         "inaccuracies": 14.893617021276595
       }
     },
@@ -7149,7 +7149,7 @@
       "username": "ico2020",
       "rating": 1667,
       "features": {
-        "accuracy": 80.26685264615166,
+        "accuracy": 77.36779877077464,
         "acpl": 49.09615384615385,
         "blunders": 4.25531914893617,
         "mistakes": 10.638297872340425,
@@ -7163,7 +7163,7 @@
       "username": "michaelcout",
       "rating": 1652,
       "features": {
-        "accuracy": 79.99474285100612,
+        "accuracy": 79.46073274288321,
         "acpl": 43.73770491803279,
         "blunders": 5.2631578947368425,
         "mistakes": 1.7543859649122806,
@@ -7177,7 +7177,7 @@
       "username": "sutrisno001",
       "rating": 1650,
       "features": {
-        "accuracy": 74.50051823888825,
+        "accuracy": 76.14596177901363,
         "acpl": 55.333333333333336,
         "blunders": 7.017543859649122,
         "mistakes": 0.0,
@@ -7191,7 +7191,7 @@
       "username": "geojohn00",
       "rating": 1638,
       "features": {
-        "accuracy": 78.19533400199441,
+        "accuracy": 74.89245598097224,
         "acpl": 64.44444444444444,
         "blunders": 3.8461538461538463,
         "mistakes": 3.8461538461538463,
@@ -7205,7 +7205,7 @@
       "username": "michaelcout",
       "rating": 1644,
       "features": {
-        "accuracy": 91.5219721925886,
+        "accuracy": 86.54562692656333,
         "acpl": 26.88888888888889,
         "blunders": 0.0,
         "mistakes": 3.8461538461538463,
@@ -7219,7 +7219,7 @@
       "username": "geojohn00",
       "rating": 1630,
       "features": {
-        "accuracy": 94.17080493502745,
+        "accuracy": 89.82979201513386,
         "acpl": 41.34615384615385,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -7233,7 +7233,7 @@
       "username": "jaydubs1979",
       "rating": 1609,
       "features": {
-        "accuracy": 83.25181446983913,
+        "accuracy": 84.44517177998155,
         "acpl": 60.745098039215684,
         "blunders": 2.0,
         "mistakes": 4.0,
@@ -7247,7 +7247,7 @@
       "username": "cebol94",
       "rating": 1604,
       "features": {
-        "accuracy": 39.579131492653666,
+        "accuracy": 63.04801861011821,
         "acpl": 124.0,
         "blunders": 17.647058823529413,
         "mistakes": 5.882352941176471,
@@ -7261,7 +7261,7 @@
       "username": "geojohn00",
       "rating": 1622,
       "features": {
-        "accuracy": 69.07011988926601,
+        "accuracy": 63.59879472823815,
         "acpl": 80.42105263157895,
         "blunders": 16.666666666666668,
         "mistakes": 5.555555555555555,
@@ -7275,10 +7275,10 @@
       "username": "sf154",
       "rating": 1631,
       "features": {
-        "accuracy": 83.55443573250221,
+        "accuracy": 76.77453667659097,
         "acpl": 57.354166666666664,
-        "blunders": 6.382978723404255,
-        "mistakes": 6.382978723404255,
+        "blunders": 4.25531914893617,
+        "mistakes": 8.51063829787234,
         "inaccuracies": 6.382978723404255
       }
     },
@@ -7289,10 +7289,10 @@
       "username": "geojohn00",
       "rating": 1614,
       "features": {
-        "accuracy": 82.48212259667577,
+        "accuracy": 76.79802462616685,
         "acpl": 59.340425531914896,
-        "blunders": 6.521739130434782,
-        "mistakes": 6.521739130434782,
+        "blunders": 4.3478260869565215,
+        "mistakes": 8.695652173913043,
         "inaccuracies": 4.3478260869565215
       }
     },
@@ -7303,7 +7303,7 @@
       "username": "samadsamadpoor",
       "rating": 1600,
       "features": {
-        "accuracy": 81.7890546185355,
+        "accuracy": 78.09670725288669,
         "acpl": 39.03448275862069,
         "blunders": 3.7037037037037037,
         "mistakes": 3.7037037037037037,
@@ -7317,7 +7317,7 @@
       "username": "samadsamadpoor",
       "rating": 1608,
       "features": {
-        "accuracy": 94.27646406045946,
+        "accuracy": 93.11427012398542,
         "acpl": 12.68,
         "blunders": 0.0,
         "mistakes": 4.3478260869565215,
@@ -7331,7 +7331,7 @@
       "username": "jaydubs1979",
       "rating": 1601,
       "features": {
-        "accuracy": 76.69137065388361,
+        "accuracy": 74.6122370167485,
         "acpl": 69.19402985074628,
         "blunders": 6.25,
         "mistakes": 4.6875,
@@ -7345,7 +7345,7 @@
       "username": "gleison079",
       "rating": 1625,
       "features": {
-        "accuracy": 81.43918283228662,
+        "accuracy": 78.76813581256539,
         "acpl": 57.8955223880597,
         "blunders": 4.615384615384615,
         "mistakes": 7.6923076923076925,
@@ -7359,7 +7359,7 @@
       "username": "gleison079",
       "rating": 1617,
       "features": {
-        "accuracy": 64.37824180200506,
+        "accuracy": 65.58474252463935,
         "acpl": 71.68181818181819,
         "blunders": 10.526315789473685,
         "mistakes": 5.2631578947368425,
@@ -7373,7 +7373,7 @@
       "username": "jaydubs1979",
       "rating": 1609,
       "features": {
-        "accuracy": 59.272440055750806,
+        "accuracy": 49.00340837482708,
         "acpl": 123.23809523809524,
         "blunders": 15.789473684210526,
         "mistakes": 26.31578947368421,
@@ -7387,10 +7387,10 @@
       "username": "thegerbil",
       "rating": 1934,
       "features": {
-        "accuracy": 85.03445811620963,
+        "accuracy": 78.70091768116544,
         "acpl": 38.214285714285715,
-        "blunders": 7.5,
-        "mistakes": 7.5,
+        "blunders": 5.0,
+        "mistakes": 10.0,
         "inaccuracies": 10.0
       }
     },
@@ -7401,7 +7401,7 @@
       "username": "chinnahitta",
       "rating": 1910,
       "features": {
-        "accuracy": 75.37979050515497,
+        "accuracy": 71.1850696631,
         "acpl": 64.0,
         "blunders": 8.571428571428571,
         "mistakes": 2.857142857142857,
@@ -7415,7 +7415,7 @@
       "username": "chinnahitta",
       "rating": 1917,
       "features": {
-        "accuracy": 85.17266926139496,
+        "accuracy": 77.50760306005387,
         "acpl": 60.583333333333336,
         "blunders": 0.0,
         "mistakes": 9.523809523809524,
@@ -7429,7 +7429,7 @@
       "username": "chinnahitta",
       "rating": 1909,
       "features": {
-        "accuracy": 77.31198471180875,
+        "accuracy": 71.71298204833722,
         "acpl": 61.625,
         "blunders": 3.5714285714285716,
         "mistakes": 14.285714285714286,
@@ -7443,10 +7443,10 @@
       "username": "ichthysgo",
       "rating": 1917,
       "features": {
-        "accuracy": 84.3044629129557,
+        "accuracy": 74.90819759502584,
         "acpl": 51.26086956521739,
-        "blunders": 4.545454545454546,
-        "mistakes": 9.090909090909092,
+        "blunders": 0.0,
+        "mistakes": 13.636363636363637,
         "inaccuracies": 18.181818181818183
       }
     },
@@ -7457,7 +7457,7 @@
       "username": "chinnahitta",
       "rating": 1901,
       "features": {
-        "accuracy": 73.54578136052086,
+        "accuracy": 65.00558564994388,
         "acpl": 79.68181818181819,
         "blunders": 4.761904761904762,
         "mistakes": 19.047619047619047,
@@ -7471,7 +7471,7 @@
       "username": "chinnahitta",
       "rating": 1909,
       "features": {
-        "accuracy": 81.97134519694434,
+        "accuracy": 81.10172556378815,
         "acpl": 52.275,
         "blunders": 2.5974025974025974,
         "mistakes": 6.4935064935064934,
@@ -7485,7 +7485,7 @@
       "username": "ichthysgo",
       "rating": 1910,
       "features": {
-        "accuracy": 84.49655684617599,
+        "accuracy": 80.80428024760973,
         "acpl": 47.867924528301884,
         "blunders": 4.0,
         "mistakes": 2.0,
@@ -7499,7 +7499,7 @@
       "username": "sysssehc",
       "rating": 1949,
       "features": {
-        "accuracy": 91.16681254575028,
+        "accuracy": 85.91956308208559,
         "acpl": 32.62264150943396,
         "blunders": 0.0,
         "mistakes": 4.0,
@@ -7513,7 +7513,7 @@
       "username": "ichthysgo",
       "rating": 1909,
       "features": {
-        "accuracy": 85.29209842607716,
+        "accuracy": 83.18323207190534,
         "acpl": 41.89655172413793,
         "blunders": 3.4482758620689653,
         "mistakes": 0.0,
@@ -7527,7 +7527,7 @@
       "username": "ichthysgo",
       "rating": 1902,
       "features": {
-        "accuracy": 53.37113533303284,
+        "accuracy": 75.06242657395762,
         "acpl": 100.671875,
         "blunders": 6.451612903225806,
         "mistakes": 0.0,
@@ -7541,7 +7541,7 @@
       "username": "quisp222",
       "rating": 1953,
       "features": {
-        "accuracy": 57.418343613677756,
+        "accuracy": 77.96094844993135,
         "acpl": 83.59375,
         "blunders": 4.761904761904762,
         "mistakes": 1.5873015873015872,
@@ -7555,7 +7555,7 @@
       "username": "whitestr30",
       "rating": 1933,
       "features": {
-        "accuracy": 87.67712778429947,
+        "accuracy": 81.46227671174287,
         "acpl": 47.515151515151516,
         "blunders": 3.3333333333333335,
         "mistakes": 3.3333333333333335,
@@ -7569,7 +7569,7 @@
       "username": "thegerbil",
       "rating": 1927,
       "features": {
-        "accuracy": 79.76943899836886,
+        "accuracy": 76.36718879574332,
         "acpl": 58.4375,
         "blunders": 6.666666666666667,
         "mistakes": 3.3333333333333335,
@@ -7583,7 +7583,7 @@
       "username": "thegerbil",
       "rating": 1935,
       "features": {
-        "accuracy": 78.76171784763412,
+        "accuracy": 78.40468530988709,
         "acpl": 42.80769230769231,
         "blunders": 6.0,
         "mistakes": 2.0,
@@ -7597,7 +7597,7 @@
       "username": "the_stc",
       "rating": 1939,
       "features": {
-        "accuracy": 74.9559175190738,
+        "accuracy": 74.61433015857162,
         "acpl": 55.31372549019608,
         "blunders": 6.122448979591836,
         "mistakes": 4.081632653061225,
@@ -7611,7 +7611,7 @@
       "username": "thegerbil",
       "rating": 1927,
       "features": {
-        "accuracy": 87.0564082141837,
+        "accuracy": 80.93184729594608,
         "acpl": 36.9375,
         "blunders": 0.0,
         "mistakes": 10.714285714285714,
@@ -7625,7 +7625,7 @@
       "username": "drasunhik",
       "rating": 1925,
       "features": {
-        "accuracy": 79.62062224091872,
+        "accuracy": 73.98551573175425,
         "acpl": 56.96774193548387,
         "blunders": 3.5714285714285716,
         "mistakes": 7.142857142857143,
@@ -7639,7 +7639,7 @@
       "username": "drasunhik",
       "rating": 1933,
       "features": {
-        "accuracy": 80.36043589680466,
+        "accuracy": 76.87233937419106,
         "acpl": 40.0,
         "blunders": 7.6923076923076925,
         "mistakes": 3.8461538461538463,
@@ -7653,7 +7653,7 @@
       "username": "drasunhik",
       "rating": 1926,
       "features": {
-        "accuracy": 76.74246074264585,
+        "accuracy": 66.5744467558898,
         "acpl": 62.225806451612904,
         "blunders": 5.0,
         "mistakes": 15.0,
@@ -7667,7 +7667,7 @@
       "username": "08-ra2",
       "rating": 1922,
       "features": {
-        "accuracy": 72.20036949113647,
+        "accuracy": 62.470263303325865,
         "acpl": 79.36065573770492,
         "blunders": 6.779661016949152,
         "mistakes": 20.338983050847457,
@@ -7681,7 +7681,7 @@
       "username": "drasunhik",
       "rating": 1918,
       "features": {
-        "accuracy": 85.02553771819734,
+        "accuracy": 86.69867552234948,
         "acpl": 40.85526315789474,
         "blunders": 2.73972602739726,
         "mistakes": 0.0,
@@ -7695,7 +7695,7 @@
       "username": "malakaalidarda",
       "rating": 1925,
       "features": {
-        "accuracy": 89.28184968327443,
+        "accuracy": 89.62467881280915,
         "acpl": 36.276315789473685,
         "blunders": 1.3513513513513513,
         "mistakes": 0.0,
@@ -7709,7 +7709,7 @@
       "username": "08-ra2",
       "rating": 1970,
       "features": {
-        "accuracy": 89.81540014516861,
+        "accuracy": 82.94702435231895,
         "acpl": 29.136363636363637,
         "blunders": 0.0,
         "mistakes": 5.2631578947368425,
@@ -7723,7 +7723,7 @@
       "username": "i_cer",
       "rating": 1939,
       "features": {
-        "accuracy": 75.16434598183791,
+        "accuracy": 72.25377757548172,
         "acpl": 61.61904761904762,
         "blunders": 10.526315789473685,
         "mistakes": 5.2631578947368425,
@@ -7737,7 +7737,7 @@
       "username": "mirek60",
       "rating": 2256,
       "features": {
-        "accuracy": 81.82273392551835,
+        "accuracy": 81.81258602940706,
         "acpl": 43.285714285714285,
         "blunders": 5.128205128205129,
         "mistakes": 5.128205128205129,
@@ -7751,7 +7751,7 @@
       "username": "mirek60",
       "rating": 2241,
       "features": {
-        "accuracy": 89.81654868900503,
+        "accuracy": 85.57629154412001,
         "acpl": 26.0,
         "blunders": 1.9607843137254901,
         "mistakes": 3.9215686274509802,
@@ -7765,10 +7765,10 @@
       "username": "mirek60",
       "rating": 2234,
       "features": {
-        "accuracy": 63.36242240301543,
+        "accuracy": 55.0181675729247,
         "acpl": 128.67857142857142,
-        "blunders": 12.0,
-        "mistakes": 16.0,
+        "blunders": 16.0,
+        "mistakes": 12.0,
         "inaccuracies": 16.0
       }
     },
@@ -7779,7 +7779,7 @@
       "username": "top-syria",
       "rating": 2217,
       "features": {
-        "accuracy": 70.59932242327417,
+        "accuracy": 72.16948656320434,
         "acpl": 67.55555555555556,
         "blunders": 6.25,
         "mistakes": 6.25,
@@ -7793,7 +7793,7 @@
       "username": "mirek60",
       "rating": 2243,
       "features": {
-        "accuracy": 93.84370881371179,
+        "accuracy": 88.20217139789554,
         "acpl": 21.666666666666668,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -7807,7 +7807,7 @@
       "username": "mirek60",
       "rating": 2235,
       "features": {
-        "accuracy": 79.2574715889174,
+        "accuracy": 79.43057493311349,
         "acpl": 34.81818181818182,
         "blunders": 5.2631578947368425,
         "mistakes": 5.2631578947368425,
@@ -7821,7 +7821,7 @@
       "username": "368948cr",
       "rating": 2253,
       "features": {
-        "accuracy": 87.90013417096532,
+        "accuracy": 87.51235429992296,
         "acpl": 19.136363636363637,
         "blunders": 0.0,
         "mistakes": 5.2631578947368425,
@@ -7835,7 +7835,7 @@
       "username": "top-syria",
       "rating": 2231,
       "features": {
-        "accuracy": 91.71041481528093,
+        "accuracy": 88.44556844240256,
         "acpl": 26.958333333333332,
         "blunders": 0.0,
         "mistakes": 4.545454545454546,
@@ -7849,7 +7849,7 @@
       "username": "eraclitoedemocrito",
       "rating": 2269,
       "features": {
-        "accuracy": 80.51632379252095,
+        "accuracy": 77.07234363453298,
         "acpl": 59.333333333333336,
         "blunders": 0.0,
         "mistakes": 9.090909090909092,
@@ -7863,7 +7863,7 @@
       "username": "top-syria",
       "rating": 2222,
       "features": {
-        "accuracy": 80.04146790556749,
+        "accuracy": 75.49659938062739,
         "acpl": 42.473684210526315,
         "blunders": 5.555555555555555,
         "mistakes": 5.555555555555555,
@@ -7877,7 +7877,7 @@
       "username": "top-syria",
       "rating": 2215,
       "features": {
-        "accuracy": 88.32946428254851,
+        "accuracy": 82.63380961634277,
         "acpl": 26.4375,
         "blunders": 0.0,
         "mistakes": 7.142857142857143,
@@ -7891,7 +7891,7 @@
       "username": "tmosko",
       "rating": 2225,
       "features": {
-        "accuracy": 81.53022656797032,
+        "accuracy": 81.82364110433024,
         "acpl": 38.59375,
         "blunders": 4.25531914893617,
         "mistakes": 3.1914893617021276,
@@ -7905,7 +7905,7 @@
       "username": "top-syria",
       "rating": 2208,
       "features": {
-        "accuracy": 78.08935776204999,
+        "accuracy": 83.40044423360352,
         "acpl": 38.37894736842105,
         "blunders": 3.225806451612903,
         "mistakes": 1.075268817204301,
@@ -7919,7 +7919,7 @@
       "username": "hine45",
       "rating": 2206,
       "features": {
-        "accuracy": 93.43557769620006,
+        "accuracy": 89.86540640800352,
         "acpl": 15.3125,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -7933,7 +7933,7 @@
       "username": "tmosko",
       "rating": 2217,
       "features": {
-        "accuracy": 65.37776538225823,
+        "accuracy": 72.80822386913835,
         "acpl": 84.2,
         "blunders": 7.6923076923076925,
         "mistakes": 0.0,
@@ -7947,10 +7947,10 @@
       "username": "tmosko",
       "rating": 2226,
       "features": {
-        "accuracy": 84.5304926922063,
+        "accuracy": 78.74975233957964,
         "acpl": 40.85294117647059,
-        "blunders": 9.375,
-        "mistakes": 6.25,
+        "blunders": 0.0,
+        "mistakes": 15.625,
         "inaccuracies": 6.25
       }
     },
@@ -7961,7 +7961,7 @@
       "username": "adammac26",
       "rating": 2231,
       "features": {
-        "accuracy": 77.21829517932497,
+        "accuracy": 72.78160122049027,
         "acpl": 66.39393939393939,
         "blunders": 3.125,
         "mistakes": 12.5,
@@ -7975,7 +7975,7 @@
       "username": "tmosko",
       "rating": 2217,
       "features": {
-        "accuracy": 82.34346931378919,
+        "accuracy": 76.28126214584505,
         "acpl": 66.08196721311475,
         "blunders": 3.389830508474576,
         "mistakes": 6.779661016949152,
@@ -7989,7 +7989,7 @@
       "username": "hine45",
       "rating": 2204,
       "features": {
-        "accuracy": 89.45970482829318,
+        "accuracy": 85.14560381570163,
         "acpl": 40.42307692307692,
         "blunders": 0.0,
         "mistakes": 4.761904761904762,
@@ -8003,7 +8003,7 @@
       "username": "tefolloto",
       "rating": 2245,
       "features": {
-        "accuracy": 92.3404389021792,
+        "accuracy": 88.851933217978,
         "acpl": 23.68421052631579,
         "blunders": 0.0,
         "mistakes": 2.9411764705882355,
@@ -8017,7 +8017,7 @@
       "username": "hine45",
       "rating": 2206,
       "features": {
-        "accuracy": 85.54764656523119,
+        "accuracy": 83.54111476083008,
         "acpl": 36.32432432432432,
         "blunders": 3.0303030303030303,
         "mistakes": 6.0606060606060606,
@@ -8031,7 +8031,7 @@
       "username": "hine45",
       "rating": 2213,
       "features": {
-        "accuracy": 91.86786032572269,
+        "accuracy": 87.71888403528102,
         "acpl": 18.25,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -8045,7 +8045,7 @@
       "username": "cottonhat",
       "rating": 2217,
       "features": {
-        "accuracy": 82.95561948683775,
+        "accuracy": 78.82569850251032,
         "acpl": 35.10526315789474,
         "blunders": 0.0,
         "mistakes": 13.333333333333334,
@@ -8059,7 +8059,7 @@
       "username": "isit",
       "rating": 2264,
       "features": {
-        "accuracy": 90.14372079043923,
+        "accuracy": 86.70912363086826,
         "acpl": 25.40740740740741,
         "blunders": 0.0,
         "mistakes": 4.0,
@@ -8073,7 +8073,7 @@
       "username": "cottonhat",
       "rating": 2234,
       "features": {
-        "accuracy": 80.68824110731781,
+        "accuracy": 74.37345263659962,
         "acpl": 61.23076923076923,
         "blunders": 0.0,
         "mistakes": 16.666666666666668,
@@ -8087,10 +8087,10 @@
       "username": "bianca_arizmendi",
       "rating": 2585,
       "features": {
-        "accuracy": 85.17723810119628,
+        "accuracy": 79.19524509144735,
         "acpl": 36.76315789473684,
-        "blunders": 2.7777777777777777,
-        "mistakes": 2.7777777777777777,
+        "blunders": 5.555555555555555,
+        "mistakes": 0.0,
         "inaccuracies": 13.88888888888889
       }
     },
@@ -8101,7 +8101,7 @@
       "username": "glasscow97",
       "rating": 2574,
       "features": {
-        "accuracy": 87.99681353278697,
+        "accuracy": 85.11403944994132,
         "acpl": 33.20289855072464,
         "blunders": 1.5151515151515151,
         "mistakes": 6.0606060606060606,
@@ -8115,7 +8115,7 @@
       "username": "bianca_arizmendi",
       "rating": 2581,
       "features": {
-        "accuracy": 91.46508949686014,
+        "accuracy": 89.1009628153626,
         "acpl": 24.115942028985508,
         "blunders": 1.492537313432836,
         "mistakes": 2.985074626865672,
@@ -8129,7 +8129,7 @@
       "username": "bianca_arizmendi",
       "rating": 2573,
       "features": {
-        "accuracy": 97.19962798972931,
+        "accuracy": 93.75560669229796,
         "acpl": 8.5,
         "blunders": 0.0,
         "mistakes": 0.0,
@@ -8143,7 +8143,7 @@
       "username": "bianca_arizmendi",
       "rating": 2570,
       "features": {
-        "accuracy": 81.79242831122268,
+        "accuracy": 76.68218787978203,
         "acpl": 46.48717948717949,
         "blunders": 8.108108108108109,
         "mistakes": 2.7027027027027026,

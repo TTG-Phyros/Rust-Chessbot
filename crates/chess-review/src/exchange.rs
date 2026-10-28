@@ -1,7 +1,7 @@
 //! Material at stake: static exchange evaluation, and how much material a
 //! move gives away (to recognise sacrifices).
 
-use chess_core::{Bitboard, Color, Move, MoveKind, PieceKind, Position, Square};
+use chess_core::{Bitboard, Move, MoveKind, PieceKind, Position, Square};
 
 /// Value of a piece, in centipawns (a king is worth more than anything).
 #[must_use]
@@ -56,18 +56,6 @@ pub fn exchange(position: &Position, from: Square, target: Square) -> i32 {
     gain[0]
 }
 
-/// Most material the side to move wins by one of its legal captures,
-/// exchanges included (0 when no capture wins anything).
-#[must_use]
-pub fn best_capture(position: &Position) -> i32 {
-    position
-        .legal_moves()
-        .iter()
-        .filter(|mv| mv.is_capture() && mv.kind() != MoveKind::EnPassant)
-        .map(|mv| exchange(position, mv.from(), mv.to()))
-        .fold(0, i32::max)
-}
-
 /// Material the owner of the piece on `square` would lose there if its
 /// opponent could capture now: the exchange started by the least valuable
 /// attacker (pins and checks ignored); 0 for a king or an empty square.
@@ -92,20 +80,14 @@ pub fn threat(position: &Position, square: Square) -> i32 {
     exchange(position, from, square).max(0)
 }
 
-/// Most material `color` would lose if its opponent could capture now: the
-/// worst [`threat`] on one of its pieces.
-#[must_use]
-pub fn hanging(position: &Position, color: Color) -> i32 {
-    position
-        .occupied_by(color)
-        .map(|square| threat(position, square))
-        .fold(0, i32::max)
-}
-
 /// Material, in centipawns, that `mv` gives away: what the opponent can
-/// then win by a capture, less what the move captures (or gains by
-/// promoting), less what was already hanging before it. Positive for a
-/// sacrifice.
+/// then win by capturing the piece moved or, if more, on another piece
+/// beyond what it could before (a piece the move uncovers), less what the
+/// move captures (or gains by promoting). Positive for a sacrifice.
+///
+/// The moved piece counts in full even when it was attacked already: an
+/// attacked rook taking a bishop where a pawn takes it back gives the
+/// exchange away all the same.
 #[must_use]
 pub fn sacrifice(position: &Position, mv: Move) -> i32 {
     let captured = match mv.kind() {
@@ -117,10 +99,14 @@ pub fn sacrifice(position: &Position, mv: Move) -> i32 {
     let promoted = mv
         .promotion()
         .map_or(0, |kind| value(kind) - value(PieceKind::Pawn));
-    let already = hanging(position, position.side_to_move());
     let mut after = position.without_history();
     after.make_move(mv);
-    best_capture(&after) - captured - promoted - already
+    let given = after
+        .occupied_by(position.side_to_move())
+        .without(mv.to())
+        .map(|square| threat(&after, square) - threat(position, square))
+        .fold(threat(&after, mv.to()), i32::max);
+    given - captured - promoted
 }
 
 /// Least valuable piece among `pieces`, with its square.
@@ -160,17 +146,17 @@ mod tests {
         assert_eq!(exchange(&pos, square("d2"), square("d5")), 100);
         // The king does not take a defended pawn.
         let pos = position("4k3/8/2p5/3p4/4K3/8/8/8 w - - 0 1");
-        assert_eq!(hanging(&pos, Color::Black), 0);
+        assert_eq!(threat(&pos, square("d5")), 0);
     }
 
     #[test]
-    fn hanging_material() {
+    fn threatened_material() {
         // The knight on d5 is attacked by the rook and defended by nothing.
         let pos = position("4k3/8/8/3n4/8/8/8/3RK3 b - - 0 1");
-        assert_eq!(hanging(&pos, Color::Black), 300);
-        assert_eq!(hanging(&pos, Color::White), 0);
+        assert_eq!(threat(&pos, square("d5")), 300);
+        assert_eq!(threat(&pos, square("d1")), 0);
         let pos = position("4k3/8/4p3/3n4/8/8/8/3RK3 b - - 0 1");
-        assert_eq!(hanging(&pos, Color::Black), 0);
+        assert_eq!(threat(&pos, square("d5")), 0);
     }
 
     #[test]
@@ -183,9 +169,25 @@ mod tests {
         let pos = position("6k1/5pp1/7p/7Q/8/8/5PP1/6K1 w - - 0 1");
         let qxh6 = pos.parse_uci_move("h5h6").unwrap();
         assert_eq!(sacrifice(&pos, qxh6), 800);
-        // A plain trade gives nothing away.
+        // Winning a knight for a pawn gives nothing away.
         let pos = position("4k3/8/4p3/3n4/4P3/8/8/4K3 w - - 0 1");
         let exd5 = pos.parse_uci_move("e4d5").unwrap();
         assert_eq!(sacrifice(&pos, exd5), -200);
+        // 15... Rxc4!! 16. bxc4 Bxe3: the rook on d4, attacked by the
+        // bishop, gives itself for the other bishop, uncovering the one on
+        // e3 to Bc5. The exchange given away, though the rook was attacked.
+        let pos = position("r1b3k1/5ppp/2p1p3/p1b5/2BrpP2/PP2B3/2P3PP/R3K2R b KQ - 1 15");
+        let rxc4 = pos.parse_uci_move("d4c4").unwrap();
+        assert_eq!(sacrifice(&pos, rxc4), 200);
+        // Legal's mate: 5. Nxe5 uncovers the queen to the pinning bishop
+        // (Bxd1 Kxd1), less the pawn it takes.
+        let pos =
+            position("rn1qkbnr/ppp2p1p/3p2p1/4p3/2B1P1b1/2N2N2/PPPP1PPP/R1BQK2R w KQkq - 0 5");
+        let nxe5 = pos.parse_uci_move("f3e5").unwrap();
+        assert_eq!(sacrifice(&pos, nxe5), 500);
+        // Taking the queen while uncovering a knight to a rook gives nothing.
+        let pos = position("2r1kb1r/p3qppp/n1N1bn2/8/4p2B/1PN5/P1P2PPP/R2Q1RK1 w k - 3 14");
+        let nxe7 = pos.parse_uci_move("c6e7").unwrap();
+        assert!(sacrifice(&pos, nxe7) < 0);
     }
 }

@@ -11,7 +11,7 @@ export type ReviewPlayerStats = {
  */
 moves: number, 
 /**
- * Accuracy over the game, from 0 to 100 (as on Lichess).
+ * Accuracy over the game, from 0 to 100 (fitted on Chess.com's).
  */
 accuracy?: number | null, 
 /**

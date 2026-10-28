@@ -32,7 +32,7 @@ serve:
 
 # Start UI + API in Docker on http://localhost:8080
 up:
-    docker compose up --build
+    docker compose up -d --build
 
 # Stop the Docker stack, training included (it checkpoints first)
 down:

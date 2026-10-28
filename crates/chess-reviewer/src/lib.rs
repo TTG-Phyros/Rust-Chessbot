@@ -17,7 +17,7 @@ pub mod sync;
 
 pub use config::{EngineKind, Preset, ReviewConfig};
 pub use error::Error;
-pub use jobs::{Estimate, Job, JobProgress, JobRequest, JobState, ReviewService};
+pub use jobs::{Estimate, GameJobRequest, Job, JobProgress, JobRequest, JobState, ReviewService};
 pub use store::{Store, analysis_key};
 pub use sync::{MonthSource, SyncEvent, sync_player};
 

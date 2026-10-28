@@ -5,6 +5,7 @@
 //! chess-reviewer estimate hikaru -n 10                   # how long, per preset
 //! chess-reviewer analyse hikaru -n 10 --preset fast       # analyse them too
 //! chess-reviewer calibrate collect --seed hikaru --country IS --until 2026-09-30
+//! chess-reviewer calibrate refresh                        # after a classification change
 //! chess-reviewer calibrate fit                            # config/elo-model.json
 //! ```
 //!
@@ -64,6 +65,14 @@ enum Calibrate {
     /// Downloads and analyses a sample of rated games, spread over the
     /// rating bands by following the opponents of seed players.
     Collect(Box<CollectArgs>),
+    /// Computes the sample's features again from the cached analyses, after
+    /// a change of the classification or of the accuracy (nothing is
+    /// downloaded or analysed).
+    Refresh {
+        /// The sample (`calibrate collect`), rewritten in place.
+        #[arg(long, default_value = "config/elo-samples.json")]
+        data: PathBuf,
+    },
     /// Fits the model (a ridge regression per time class) on a sample.
     Fit {
         /// The sample (`calibrate collect`).
@@ -229,6 +238,7 @@ async fn main() -> Result<()> {
         }
         Command::Estimate { selection, search } => estimate(config, &selection, &search).await,
         Command::Calibrate(Calibrate::Collect(args)) => collect(config, &args).await,
+        Command::Calibrate(Calibrate::Refresh { data }) => refresh(&config, &data),
         Command::Calibrate(Calibrate::Fit { data, out }) => fit(&data, &out),
     }
 }
@@ -306,11 +316,28 @@ fn write_json(path: &std::path::Path, value: &impl serde::Serialize) -> Result<(
     std::fs::write(path, text).with_context(|| format!("cannot write {}", path.display()))
 }
 
-fn fit(data: &std::path::Path, out: &std::path::Path) -> Result<()> {
+fn read_dataset(data: &std::path::Path) -> Result<Dataset> {
     let text =
         std::fs::read_to_string(data).with_context(|| format!("cannot read {}", data.display()))?;
-    let dataset: Dataset = serde_json::from_str(&text)
-        .with_context(|| format!("{} is not a calibration sample", data.display()))?;
+    serde_json::from_str(&text)
+        .with_context(|| format!("{} is not a calibration sample", data.display()))
+}
+
+fn refresh(config: &ReviewConfig, data: &std::path::Path) -> Result<()> {
+    let mut dataset = read_dataset(data)?;
+    let store = Store::open(&config.cache)?;
+    let dropped = calibration::refresh(&store, &config.classification, &mut dataset)?;
+    write_json(data, &dataset)?;
+    println!(
+        "{} samples refreshed in {} ({dropped} dropped: game or analysis not cached)",
+        dataset.samples.len(),
+        data.display()
+    );
+    Ok(())
+}
+
+fn fit(data: &std::path::Path, out: &std::path::Path) -> Result<()> {
+    let dataset = read_dataset(data)?;
     let model = calibration::fit(&dataset);
     if model.models.is_empty() {
         bail!("too few samples to fit any time class");

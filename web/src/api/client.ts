@@ -21,6 +21,7 @@ import type { PgnExportResponse } from './generated/PgnExportResponse';
 import type { PgnImportResponse } from './generated/PgnImportResponse';
 import type { PositionView } from './generated/PositionView';
 import type { ReviewEstimates } from './generated/ReviewEstimates';
+import type { ReviewGameRequest } from './generated/ReviewGameRequest';
 import type { ReviewGameSummary } from './generated/ReviewGameSummary';
 import type { ReviewGameView } from './generated/ReviewGameView';
 import type { ReviewJobView } from './generated/ReviewJobView';
@@ -183,7 +184,14 @@ export const api = {
       signal: signal ?? null,
     }),
 
-  /** A cached Chess.com game with its latest analysis, moves classified (404 if unknown). */
+  /**
+   * Reviews one cached game, deeper than a review of many games by default
+   * (404 if unknown); its progress is read as any job's.
+   */
+  analyseReviewGame: (id: string, body: ReviewGameRequest) =>
+    post<ReviewStarted>(`/review/games/${encodeURIComponent(id)}/analyse`, body),
+
+  /** A cached Chess.com game with its deepest analysis, moves classified (404 if unknown). */
   reviewGame: (id: string, signal?: AbortSignal) =>
     request<ReviewGameView>(`/review/games/${encodeURIComponent(id)}`, {
       signal: signal ?? null,

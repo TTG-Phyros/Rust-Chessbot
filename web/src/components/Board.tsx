@@ -1,4 +1,4 @@
-import { type CSSProperties, useState } from 'react';
+import { type CSSProperties, type ReactNode, useState } from 'react';
 import { type Arrow, Chessboard, type PieceRenderObject, defaultPieces } from 'react-chessboard';
 
 import type { MoveView } from '../api/generated/MoveView';
@@ -16,6 +16,8 @@ type BoardProps = {
   arrows?: Arrow[];
   /** Background of some squares (a heat map), under the move highlights. */
   squareTints?: Record<string, CSSProperties>;
+  /** Marks in the top right corner of some squares (the class of a move). */
+  squareBadges?: Record<string, ReactNode>;
   /**
    * Tilts the board in perspective, pieces standing up. Moves are then
    * played by clicks only: dragging does not follow a tilted board.
@@ -91,6 +93,7 @@ export function Board({
   onMove,
   arrows = [],
   squareTints = {},
+  squareBadges,
   tilted = false,
 }: BoardProps) {
   // react-chessboard v5 has no 'start' shorthand: always pass a real FEN.
@@ -140,6 +143,19 @@ export function Board({
         allowDragging: interactive && !tilted,
         arrows,
         squareStyles,
+        // The default square applies `squareStyles` itself: so must this one.
+        ...(squareBadges && {
+          squareRenderer: ({ square, children }) => (
+            <div className="relative size-full" style={squareStyles[square]}>
+              {children}
+              {squareBadges[square] && (
+                <div className="pointer-events-none absolute top-[3%] right-[3%] z-10 w-[38%]">
+                  {squareBadges[square]}
+                </div>
+              )}
+            </div>
+          ),
+        }),
         pieces: tilted ? TILTED_PIECES : FLAT_PIECES,
         animationDurationInMs: 150,
         // Tilted pieces rise above the top rank: let them overflow the board.

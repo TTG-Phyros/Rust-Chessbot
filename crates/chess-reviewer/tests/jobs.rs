@@ -11,7 +11,8 @@ use axum::{Json, Router};
 use chess_chesscom::{GameFilter, Month};
 use chess_review::{Budget, SearchSettings};
 use chess_reviewer::{
-    EngineKind, JobProgress, JobRequest, JobState, ReviewConfig, ReviewService, Store,
+    EngineKind, GameJobRequest, JobProgress, JobRequest, JobState, ReviewConfig, ReviewService,
+    Store,
 };
 use serde_json::{Value, json};
 
@@ -235,4 +236,61 @@ async fn jobs_can_be_cancelled() {
     assert_eq!(progress.state, JobState::Cancelled);
     assert!(progress.positions_done < progress.positions_total);
     assert!(service.job(id).is_some(), "finished jobs stay visible");
+}
+
+#[tokio::test]
+async fn reviews_a_single_game_deeper() {
+    let service = service().await;
+    // Brings the games into the cache, analysed shallowly.
+    let progress = wait(&service.start(request(SHALLOW)).unwrap()).await;
+    assert_eq!(progress.state, JobState::Done, "{:?}", progress.error);
+
+    let deeper = SearchSettings {
+        budget: Budget::Depth(5),
+        multipv: 3,
+    };
+    let game = |settings| GameJobRequest {
+        game_id: "game-1".into(),
+        engine: None,
+        settings: Some(settings),
+    };
+    let job = service.start_game(game(deeper)).unwrap();
+    assert!(job.username.is_empty());
+    let progress = wait(&job).await;
+    assert_eq!(progress.state, JobState::Done, "{:?}", progress.error);
+    assert_eq!(progress.games, ["game-1"]);
+    assert_eq!((progress.games_done, progress.games_cached), (1, 0));
+    assert_eq!((progress.positions_done, progress.positions_total), (9, 9));
+
+    // Its page shows the deeper analysis, even after a later shallow one.
+    let shown = service.deepest_analysis("game-1").unwrap().unwrap();
+    assert_eq!(shown.settings, deeper);
+    assert_eq!(shown.positions.len(), 9);
+    assert_eq!(shown.positions[0].lines.len(), 3);
+    let fast = SearchSettings {
+        budget: Budget::Depth(2),
+        ..SHALLOW
+    };
+    wait(&service.start(request(fast)).unwrap()).await;
+    assert_eq!(
+        service
+            .deepest_analysis("game-1")
+            .unwrap()
+            .unwrap()
+            .settings,
+        deeper
+    );
+
+    // Done already: nothing to analyse.
+    let again = wait(&service.start_game(game(deeper)).unwrap()).await;
+    assert_eq!((again.games_done, again.games_cached), (0, 1));
+
+    let mut unknown = game(deeper);
+    unknown.game_id = "nope".into();
+    assert!(service.start_game(unknown).is_err());
+    let no_lines = SearchSettings {
+        multipv: 0,
+        ..deeper
+    };
+    assert!(service.start_game(game(no_lines)).is_err());
 }

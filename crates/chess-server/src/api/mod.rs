@@ -32,7 +32,7 @@ pub(crate) use daemon::check_name;
         arena::arena, arena::list_bots, arena::save_bot, arena::delete_bot,
         arena::start_tournament, arena::stop_tournament, review::options, review::estimate,
         review::start, review::progress, review::events, review::cancel, review::player_games,
-        review::profile, review::game,
+        review::profile, review::game, review::analyse_game,
     ),
     tags(
         (name = "system", description = "Server status"),
@@ -93,6 +93,7 @@ pub fn router(state: AppState) -> Router {
             get(review::profile),
         )
         .route("/api/review/games/{id}", get(review::game))
+        .route("/api/review/games/{id}/analyse", post(review::analyse_game))
         .route("/ws", get(ws::upgrade))
         .layer(TraceLayer::new_for_http())
         .with_state(state)

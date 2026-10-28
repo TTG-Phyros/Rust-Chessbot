@@ -109,6 +109,10 @@ chesscom username *args:
 elo-collect *args:
     cargo run --release -p chess-reviewer -- calibrate collect {{ args }}
 
+# Recompute the sample's features from the cached analyses (after a classification change)
+elo-refresh:
+    cargo run --release -p chess-reviewer -- calibrate refresh
+
 # Fit the Elo model on the sample: config/elo-samples.json -> config/elo-model.json
 elo-fit:
     cargo run --release -p chess-reviewer -- calibrate fit

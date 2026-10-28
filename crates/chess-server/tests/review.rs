@@ -80,6 +80,7 @@ async fn review_state(user_agent: &str) -> AppState {
             ..preset.clone()
         };
     }
+    config.analysis.game.depth = Some(4);
     let service = ReviewService::with_store(config, Store::in_memory().unwrap()).unwrap();
     AppState::default().with_review(Arc::new(service))
 }
@@ -292,6 +293,57 @@ async fn presets_and_estimates() {
     let (status, body) = start(&state, json!({ "username": "alice", "preset": "turbo" })).await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
     assert!(body["error"].as_str().unwrap().contains("turbo"));
+}
+
+async fn analyse(state: &AppState, game: &str, body: Value) -> (StatusCode, Value) {
+    let request = Request::post(format!("/api/review/games/{game}/analyse"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body.to_string()))
+        .unwrap();
+    let (status, body) = call(state, request).await;
+    (status, serde_json::from_slice(&body).unwrap())
+}
+
+#[tokio::test]
+async fn reviews_one_game_deeper() {
+    let state = review_state("chess-bot tests").await;
+    let (_, options): (_, ReviewOptions) = get_json(&state, "/api/review/options").await;
+    assert_eq!(options.game_preset.name, "game");
+    assert_eq!(
+        (options.game_preset.depth, options.game_preset.multipv),
+        (Some(4), 3)
+    );
+
+    // Not in the cache yet.
+    let (status, _) = analyse(&state, "london", json!({})).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    let (_, started) = start(&state, json!({ "username": "alice", "preset": "fast" })).await;
+    let id = started["jobId"].as_u64().unwrap();
+    assert_eq!(
+        events(&state, id).await.pop().unwrap().state,
+        ReviewJobState::Done
+    );
+
+    let (status, started) = analyse(&state, "london", json!({})).await;
+    assert_eq!(status, StatusCode::ACCEPTED, "{started}");
+    let id = started["jobId"].as_u64().unwrap();
+    let last = events(&state, id).await.pop().unwrap();
+    assert_eq!(last.state, ReviewJobState::Done, "{:?}", last.error);
+    assert_eq!(last.games, ["london"]);
+    assert_eq!((last.games_done, last.positions_done), (1, 6));
+
+    // The game shows its deeper analysis.
+    let (_, view): (_, ReviewGameView) = get_json(&state, "/api/review/games/london").await;
+    let analysis = view.analysis.unwrap();
+    assert_eq!((analysis.budget.as_str(), analysis.multipv), ("depth 4", 3));
+    assert_eq!(analysis.moves.len(), 5);
+
+    let (status, body) = analyse(&state, "london", json!({ "preset": "turbo" })).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(body["error"].as_str().unwrap().contains("turbo"));
+    let (status, _) = analyse(&state, "london", json!({ "multipv": 9 })).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
 }
 
 #[tokio::test]

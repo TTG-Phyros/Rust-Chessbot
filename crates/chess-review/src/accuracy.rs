@@ -1,4 +1,4 @@
-//! Winning chances and accuracy, with the formulas of Lichess.
+//! Winning chances (Lichess's curve) and accuracy (fitted on Chess.com's).
 
 use chess_core::Color;
 
@@ -35,64 +35,43 @@ pub fn win_percent(score: Score) -> f64 {
 
 /// Accuracy, from 0 to 100, of a move that took the winning chances of the
 /// player from `before` to `after`:
-/// `103.1668 * exp(-0.04354 * (before - after)) - 3.1669`, 100 when it lost
-/// nothing.
+/// `103.1668 * exp(-0.0816 * (before - after)) - 3.1669`, 100 when it lost
+/// nothing. Lichess's curve, twice as steep (0.0816 instead of 0.04354):
+/// together with [`game_accuracy`], fitted on the accuracies Chess.com
+/// gives to games.
 #[must_use]
 pub fn move_accuracy(before: f64, after: f64) -> f64 {
     if after >= before {
         return 100.0;
     }
-    let raw = 103.166_810_071_164_9 * (-0.043_544_153_867_539_51 * (before - after)).exp()
-        - 3.166_924_740_191_411;
+    let raw = 103.166_810_071_164_9 * (-0.0816 * (before - after)).exp() - 3.166_924_740_191_411;
     raw.clamp(0.0, 100.0)
 }
 
-/// Accuracy of each player over a game (White first), as Lichess computes
-/// it: the mean of their moves' accuracies weighted by the volatility of
-/// the game around each move (standard deviation of the winning chances
-/// over a few moves), averaged with their harmonic mean, which weighs the
-/// worst moves most. `None` for a player who made no move.
+/// Exponent of the power mean of [`game_accuracy`].
+const POWER: f64 = 0.25;
+
+/// Accuracy of each player over a game (White first): the power mean, of
+/// exponent 1/4, of their moves' accuracies (1 at least, as in Lichess's
+/// harmonic mean), the first move played by `first`; `None` for a player
+/// who made no move.
 ///
-/// `white_wins` are White's winning chances in each position (one more
-/// than the moves), `accuracies` the accuracy of each move, the first one
-/// played by `first`.
+/// Chess.com does not publish its formula. This one and the curve of
+/// [`move_accuracy`] were fitted on 332 accuracies Chess.com gave (games
+/// of every level, analysed by Stockfish at depth 12 to 20): a mean error
+/// of 4 points, against 6 for Lichess's formula (volatility-weighted mean
+/// averaged with the harmonic mean). The harmonic mean let one blunder sink
+/// a short game: 36 instead of Chess.com's 62 on a 35-ply game with three.
 #[must_use]
-pub fn game_accuracy(white_wins: &[f64], accuracies: &[f64], first: Color) -> [Option<f64>; 2] {
-    let moves = accuracies.len();
-    if moves == 0 || white_wins.len() != moves + 1 {
-        return [None, None];
-    }
-    // One window per move: copies of the first window for the first moves,
-    // then a window sliding over the positions.
-    let size = (moves / 10).clamp(2, 8).min(white_wins.len());
-    let first_window = deviation(&white_wins[..size]);
-    let weights = std::iter::repeat_n(first_window, size - 2)
-        .chain(white_wins.windows(size).map(deviation))
-        .map(|weight| weight.clamp(0.5, 12.0));
-    let mut sums = [(0.0, 0.0, 0.0, 0_u32); 2];
-    for (ply, (&accuracy, weight)) in accuracies.iter().zip(weights).enumerate() {
+pub fn game_accuracy(accuracies: &[f64], first: Color) -> [Option<f64>; 2] {
+    let mut sums = [(0.0, 0_u32); 2];
+    for (ply, &accuracy) in accuracies.iter().enumerate() {
         let mover = if ply % 2 == 0 { first } else { !first };
         let sum = &mut sums[mover.index()];
-        sum.0 += accuracy * weight;
-        sum.1 += weight;
-        sum.2 += 1.0 / accuracy.max(1.0);
-        sum.3 += 1;
+        sum.0 += accuracy.clamp(1.0, 100.0).powf(POWER);
+        sum.1 += 1;
     }
-    sums.map(|(weighted, weights, inverses, count)| {
-        (count > 0).then(|| (weighted / weights + f64::from(count) / inverses) / 2.0)
-    })
-}
-
-/// Population standard deviation.
-fn deviation(values: &[f64]) -> f64 {
-    let count = values.len() as f64;
-    let mean = values.iter().sum::<f64>() / count;
-    (values
-        .iter()
-        .map(|value| (value - mean).powi(2))
-        .sum::<f64>()
-        / count)
-        .sqrt()
+    sums.map(|(sum, count)| (count > 0).then(|| (sum / f64::from(count)).powf(1.0 / POWER)))
 }
 
 #[cfg(test)]
@@ -130,43 +109,37 @@ mod tests {
     }
 
     #[test]
-    fn move_accuracy_follows_the_lichess_curve() {
+    fn move_accuracy_falls_with_the_chances_lost() {
         close(move_accuracy(50.0, 50.0), 100.0);
         close(move_accuracy(40.0, 60.0), 100.0);
-        close(move_accuracy(60.0, 40.0), 40.0168);
-        close(move_accuracy(50.0, 45.0), 79.8153);
+        close(move_accuracy(60.0, 40.0), 17.0061);
+        close(move_accuracy(50.0, 45.0), 65.4368);
         // Throwing away a won game.
         close(move_accuracy(100.0, 0.0), 0.0);
     }
 
     #[test]
     fn game_accuracy_weighs_the_worst_moves() {
-        // A quiet game: both players perfect.
-        let wins = [50.0; 7];
-        let perfect = [100.0; 6];
-        let [white, black] = game_accuracy(&wins, &perfect, Color::White);
+        // Both players perfect.
+        let [white, black] = game_accuracy(&[100.0; 6], Color::White);
         close(white.unwrap(), 100.0);
         close(black.unwrap(), 100.0);
 
         // Black blunders once, at move 4 (its 2nd move).
-        let wins = [50.0, 50.0, 50.0, 50.0, 90.0, 90.0, 90.0];
-        let accuracies = [100.0, 100.0, 100.0, move_accuracy(50.0, 10.0), 100.0, 100.0];
-        let [white, black] = game_accuracy(&wins, &accuracies, Color::White);
+        let blunder = move_accuracy(50.0, 10.0);
+        let accuracies = [100.0, 100.0, 100.0, blunder, 100.0, 100.0];
+        let [white, black] = game_accuracy(&accuracies, Color::White);
         close(white.unwrap(), 100.0);
-        let black = black.unwrap();
-        let mean = (100.0 + accuracies[3] + 100.0) / 3.0;
-        // Below the plain mean: the blunder weighs more.
-        assert!(black < mean, "{black} >= {mean}");
-        assert!(black > accuracies[3]);
+        // Below the plain mean (67): the blunder weighs more, but less than
+        // in a harmonic mean (2.9).
+        close(black.unwrap(), 35.5337);
     }
 
     #[test]
     fn game_accuracy_of_short_games() {
-        assert_eq!(game_accuracy(&[50.0], &[], Color::White), [None, None]);
-        let [white, black] = game_accuracy(&[50.0, 45.0], &[80.0], Color::Black);
+        assert_eq!(game_accuracy(&[], Color::White), [None, None]);
+        let [white, black] = game_accuracy(&[80.0], Color::Black);
         assert_eq!(white, None);
         close(black.unwrap(), 80.0);
-        // Inconsistent lengths.
-        assert_eq!(game_accuracy(&[50.0], &[80.0], Color::White), [None, None]);
     }
 }

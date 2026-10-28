@@ -1,5 +1,7 @@
 //! Evaluation of every position of a game.
 
+use std::ops::Range;
+
 use chess_core::{Move, Position};
 use serde::{Deserialize, Serialize};
 
@@ -62,13 +64,47 @@ pub fn analyse_game(
     settings: &SearchSettings,
     mut progress: impl FnMut(usize, usize) -> bool,
 ) -> anyhow::Result<Option<GameAnalysis>> {
-    let start = start.without_history();
     let total = moves.len() + 1;
+    let positions = analyse_positions(engine, start, moves, 0..total, settings, |done| {
+        progress(done, total)
+    })?;
+    Ok(positions.map(|positions| GameAnalysis {
+        engine: engine.id().to_owned(),
+        settings: *settings,
+        positions,
+    }))
+}
+
+/// Analyses the positions of plies `plies` of a game (0: the start, `n`:
+/// after its `n`-th move), so that several engines can share one game.
+/// `progress` is called with the number of positions done after each one;
+/// returning `false` cancels the analysis (then `Ok(None)`).
+///
+/// # Errors
+///
+/// When the engine fails, a move is illegal, or `plies` goes past the end.
+pub fn analyse_positions(
+    engine: &mut dyn AnalysisEngine,
+    start: &Position,
+    moves: &[Move],
+    plies: Range<usize>,
+    settings: &SearchSettings,
+    mut progress: impl FnMut(usize) -> bool,
+) -> anyhow::Result<Option<Vec<PositionEval>>> {
+    anyhow::ensure!(
+        plies.end <= moves.len() + 1,
+        "plies {plies:?} out of a game of {} moves",
+        moves.len()
+    );
+    let start = start.without_history();
     let mut position = start.clone();
-    let mut positions = Vec::with_capacity(total);
+    for &mv in &moves[..plies.start.min(moves.len())] {
+        position.play(mv)?;
+    }
+    let mut positions = Vec::with_capacity(plies.len());
     engine.new_game()?;
-    for ply in 0..total {
-        if ply > 0 {
+    for ply in plies.clone() {
+        if ply > plies.start {
             position.play(moves[ply - 1])?;
         }
         let eval = if position.legal_moves().is_empty() {
@@ -83,15 +119,11 @@ pub fn analyse_game(
             }
         };
         positions.push(eval);
-        if !progress(ply + 1, total) {
+        if !progress(positions.len()) {
             return Ok(None);
         }
     }
-    Ok(Some(GameAnalysis {
-        engine: engine.id().to_owned(),
-        settings: *settings,
-        positions,
-    }))
+    Ok(Some(positions))
 }
 
 #[cfg(test)]
@@ -186,6 +218,46 @@ mod tests {
         .unwrap();
         assert_eq!(result, None);
         assert_eq!(engine.calls, 2);
+    }
+
+    #[test]
+    fn slices_of_a_game_add_up_to_the_whole() {
+        let game = parse_pgn(FOOLS_MATE).unwrap().remove(0);
+        let settings = SearchSettings::default();
+        let whole = analyse_game(
+            &mut CountingEngine { calls: 0 },
+            game.start(),
+            game.moves(),
+            &settings,
+            |_, _| true,
+        )
+        .unwrap()
+        .unwrap();
+        let mut slices = Vec::new();
+        for plies in [0..2, 2..5] {
+            let mut engine = CountingEngine { calls: 0 };
+            let part = analyse_positions(
+                &mut engine,
+                game.start(),
+                game.moves(),
+                plies,
+                &settings,
+                |_| true,
+            )
+            .unwrap()
+            .unwrap();
+            slices.extend(part);
+        }
+        assert_eq!(slices, whole.positions);
+        let past_the_end = analyse_positions(
+            &mut CountingEngine { calls: 0 },
+            game.start(),
+            game.moves(),
+            3..6,
+            &settings,
+            |_| true,
+        );
+        assert!(past_the_end.is_err());
     }
 
     #[test]

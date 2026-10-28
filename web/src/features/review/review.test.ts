@@ -10,8 +10,11 @@ import {
   CLASS_ORDER,
   MISSED_ARROW,
   clockAt,
+  deeperThan,
   formatClock,
   formatResult,
+  keyMoments,
+  nextMoment,
   outcomeFor,
   reviewArrows,
   sideOf,
@@ -159,5 +162,32 @@ describe('outcomeFor', () => {
     expect(outcomeFor('1-0', 'black')).toBe('loss');
     expect(outcomeFor('0-1', 'black')).toBe('win');
     expect(outcomeFor('1/2-1/2', 'white')).toBe('draw');
+  });
+});
+
+describe('key moments', () => {
+  it('are the notable moves, walked both ways', () => {
+    const moments = keyMoments(game('great'));
+    // 2... e5 (great) and 3. g4 (blunder); 1. f3 is theory.
+    expect(moments).toEqual([2, 3]);
+    expect(nextMoment(moments, 0, true)).toBe(2);
+    expect(nextMoment(moments, 2, true)).toBe(3);
+    expect(nextMoment(moments, 3, true)).toBeNull();
+    expect(nextMoment(moments, 3, false)).toBe(2);
+    expect(nextMoment(moments, 2, false)).toBeNull();
+    expect(keyMoments({ ...game('best'), analysis: null })).toEqual([]);
+  });
+});
+
+describe('deeperThan', () => {
+  it('compares depths and lines', () => {
+    const full = { depth: 20, multipv: 3 };
+    expect(deeperThan(full, 'depth 16', 3)).toBe(true);
+    expect(deeperThan(full, 'depth 20', 2)).toBe(true);
+    expect(deeperThan(full, 'depth 20', 3)).toBe(false);
+    expect(deeperThan(full, 'depth 22', 3)).toBe(false);
+    // A time budget: only the lines compare.
+    expect(deeperThan(full, '500 ms', 3)).toBe(false);
+    expect(deeperThan({ depth: null, multipv: 3 }, 'depth 12', 3)).toBe(false);
   });
 });

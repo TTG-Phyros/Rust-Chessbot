@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "metadata": {
+    "name": "Fast 768→256×2→1",
+    "version": "1",
+    "description": "Small and fast: the legacy shape with a squared clipped ReLU, usually stronger at about the same speed. A good first network to train.",
+    "tags": ["fast", "chess768"]
+  },
+  "features": { "set": "Chess768", "perspective": true },
+  "accumulator": { "size": 256, "activation": "SCReLU" },
+  "hiddenLayers": [],
+  "outputBuckets": { "strategy": "none" },
+  "quantization": { "weights": "i8", "qa": 255, "qb": 64, "evalScale": 400 }
+}

@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "metadata": {
+    "name": "HalfKA medium (8 king buckets, 8 output buckets)",
+    "version": "1",
+    "description": "HalfKAv2_hm features with 8 mirrored king buckets (finer near the own back rank), 512 SCReLU neurons per side and 8 output buckets by piece count. Needs much more data than the Chess768 networks.",
+    "tags": ["halfka", "output-buckets"]
+  },
+  "features": {
+    "set": "HalfKAv2_hm",
+    "mirror": "kingFile",
+    "perspective": true,
+    "kingBuckets": [
+      0, 1, 2, 3, 3, 2, 1, 0,
+      4, 4, 5, 5, 5, 5, 4, 4,
+      6, 6, 6, 6, 6, 6, 6, 6,
+      7, 7, 7, 7, 7, 7, 7, 7,
+      7, 7, 7, 7, 7, 7, 7, 7,
+      7, 7, 7, 7, 7, 7, 7, 7,
+      7, 7, 7, 7, 7, 7, 7, 7,
+      7, 7, 7, 7, 7, 7, 7, 7
+    ]
+  },
+  "accumulator": { "size": 512, "activation": "SCReLU" },
+  "hiddenLayers": [],
+  "outputBuckets": { "strategy": "pieceCount", "count": 8, "scope": "output" },
+  "quantization": { "weights": "i8", "qa": 255, "qb": 64, "evalScale": 400 }
+}

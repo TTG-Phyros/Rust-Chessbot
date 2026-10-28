@@ -90,9 +90,14 @@ lint:
     npm --prefix web run typecheck
     npm --prefix web run format:check
 
-# Regenerate the TypeScript API types from the Rust structs (ts-rs)
+# Regenerate the TypeScript API types (ts-rs) and the JSON Schemas (schemas/) from the Rust structs
 gen-types:
     cargo test -p chess-server --lib
+    cargo test -p chess-nnue-spec --test schema
+
+# Validate NNUE architecture documents (JSON or YAML) and print their hash and size, e.g. `just nnue-validate my-arch.yaml`
+nnue-validate +files:
+    cargo run -q -p chess-nnue-spec --example validate -- {{ files }}
 
 # lint + test
 ci: lint test

@@ -38,11 +38,11 @@ jobs:
       - name: Deep perft (release)
         run: cargo test --release -p chess-core --test perft -- --include-ignored
 
-      - name: TypeScript bindings are up to date
+      - name: TypeScript bindings and JSON Schemas are up to date
         run: |
-          if [ -n "$(git status --porcelain web/src/api/generated)" ]; then
-            git status --porcelain web/src/api/generated
-            echo "::error::Generated types changed: run 'just gen-types' and commit web/src/api/generated"
+          if [ -n "$(git status --porcelain web/src/api/generated schemas)" ]; then
+            git status --porcelain web/src/api/generated schemas
+            echo "::error::Generated files changed: run 'just gen-types' and commit web/src/api/generated and schemas"
             exit 1
           fi
 

@@ -1,0 +1,359 @@
+{
+  "$defs": {
+    "Accumulator": {
+      "additionalProperties": false,
+      "description": "The feature transformer.",
+      "properties": {
+        "activation": {
+          "$ref": "#/$defs/Activation",
+          "description": "Applied to each perspective before the dense layers."
+        },
+        "size": {
+          "description": "Neurons per perspective; a multiple of 16 (32 with `PairwiseCReLU`).",
+          "format": "uint32",
+          "maximum": 4096,
+          "minimum": 16,
+          "multipleOf": 16,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "size",
+        "activation"
+      ],
+      "type": "object"
+    },
+    "AccumulatorType": {
+      "description": "Accumulator integer type.\n- `i16`: 16-bit accumulators.",
+      "enum": [
+        "i16"
+      ],
+      "type": "string"
+    },
+    "Activation": {
+      "description": "Activation functions, on values where 1.0 is the quantized `qa`.\n- `ReLU`: `max(x, 0)` (saturated at the i16 range once quantized).\n- `CReLU`: Clipped ReLU: `clamp(x, 0, 1)`.\n- `SCReLU`: Squared clipped ReLU: `clamp(x, 0, 1)²`.\n- `PairwiseCReLU`: Accumulator only: each half of a perspective multiplied by the other, `clamp(a, 0, 1) · clamp(b, 0, 1)`; halves the accumulator's output.",
+      "enum": [
+        "ReLU",
+        "CReLU",
+        "SCReLU",
+        "PairwiseCReLU"
+      ],
+      "type": "string"
+    },
+    "BucketScope": {
+      "description": "Layers with one set of weights per bucket.\n- `output`: The output layer only.\n- `all`: Every layer after the accumulator (\"layer stacks\").",
+      "enum": [
+        "output",
+        "all"
+      ],
+      "type": "string"
+    },
+    "BucketStrategy": {
+      "description": "Bucket selection.\n- `none`: A single set of weights.\n- `pieceCount`: `(pieces − 2) / (32 / count)`, pieces counted with the kings.\n- `material`: `min(count − 1, material · count / 79)`, material counted P=1, N=B=3, R=5, Q=9 for both sides (78 at the start).",
+      "enum": [
+        "none",
+        "pieceCount",
+        "material"
+      ],
+      "type": "string"
+    },
+    "DenseLayer": {
+      "additionalProperties": false,
+      "description": "A dense (fully connected) layer.",
+      "properties": {
+        "activation": {
+          "$ref": "#/$defs/Activation",
+          "description": "`ReLU`, `CReLU` or `SCReLU`."
+        },
+        "size": {
+          "description": "Number of neurons.",
+          "format": "uint32",
+          "maximum": 4096,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "size",
+        "activation"
+      ],
+      "type": "object"
+    },
+    "FeatureSet": {
+      "description": "Predefined feature sets.\n- `Chess768`: Own/opponent × 6 piece kinds × 64 squares.\n- `HalfKP`: Own/opponent × 5 non-king kinds × 64 squares, per king bucket.\n- `HalfKAv2_hm`: Own/opponent × 5 non-king kinds + kings × 64 squares, per king bucket, horizontally mirrored.",
+      "enum": [
+        "Chess768",
+        "HalfKP",
+        "HalfKAv2_hm"
+      ],
+      "type": "string"
+    },
+    "Features": {
+      "additionalProperties": false,
+      "description": "Input features.\n\nEach perspective sees the board from its own side: squares are flipped\nvertically for Black, and pieces are \"own\" or \"opponent\". With king\nbuckets, the features are repeated once per bucket and the bucket of the\nperspective's own king selects which copy is active.",
+      "properties": {
+        "kingBuckets": {
+          "description": "Bucket of each square of the perspective's own king, 64 entries from\na1 (index 0, own back rank) to h8 (index 63). Ids are 0..N-1, all\nused. Default: one bucket for `Chess768`, one per square for\n`HalfKP`, one per square of files a–d for `HalfKAv2_hm`.",
+          "items": {
+            "format": "uint8",
+            "maximum": 63,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 64,
+          "minItems": 64,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "mirror": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Mirror"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Horizontal mirroring: with `kingFile`, a perspective whose own king\nstands on files e–h sees the board mirrored (a↔h), so its king is\nalways on files a–d. Default: `kingFile` for `HalfKAv2_hm`, `none`\notherwise."
+        },
+        "perspective": {
+          "default": true,
+          "description": "Two accumulators, one per side, the side to move's first in the\nnext layer's input. Without it, a single accumulator sees the board\nas White and the result is negated when Black is to move.",
+          "type": "boolean"
+        },
+        "set": {
+          "$ref": "#/$defs/FeatureSet",
+          "description": "Piece encoding:\n`Chess768`: 12 planes (own/opponent × 6 kinds, kings included) × 64 squares;\n`HalfKP`: 10 planes (kings excluded) × 64, one copy per king square by default;\n`HalfKAv2_hm`: 11 planes (both kings share one) × 64, mirrored, 32 king buckets by default."
+        }
+      },
+      "required": [
+        "set"
+      ],
+      "type": "object"
+    },
+    "Metadata": {
+      "additionalProperties": false,
+      "description": "Descriptive information about a network.",
+      "properties": {
+        "author": {
+          "description": "Who designed it.",
+          "maxLength": 64,
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "description": "What it is for.",
+          "maxLength": 2000,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "Display name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        "tags": {
+          "description": "Lowercase labels: letters, digits and dashes.",
+          "items": {
+            "pattern": "^[a-z0-9][a-z0-9-]{0,31}$",
+            "type": "string"
+          },
+          "maxItems": 16,
+          "type": "array"
+        },
+        "version": {
+          "description": "Free-form version, e.g. `1.2.0`.",
+          "maxLength": 32,
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "Mirror": {
+      "description": "Horizontal mirroring of the features.\n- `none`: Never mirrored.\n- `kingFile`: Mirrored when the perspective's own king is on files e–h.",
+      "enum": [
+        "none",
+        "kingFile"
+      ],
+      "type": "string"
+    },
+    "OutputBuckets": {
+      "additionalProperties": false,
+      "description": "Output buckets.",
+      "properties": {
+        "count": {
+          "description": "Number of buckets: required unless the strategy is `none`. With\n`pieceCount`, a divisor of 32.",
+          "format": "uint32",
+          "maximum": 32,
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BucketScope"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Bucketed layers: the output layer only (default) or every layer\nafter the accumulator."
+        },
+        "strategy": {
+          "$ref": "#/$defs/BucketStrategy",
+          "default": "none",
+          "description": "How a position picks its bucket."
+        }
+      },
+      "type": "object"
+    },
+    "Quantization": {
+      "additionalProperties": false,
+      "description": "Integer storage of the network.\n\nAccumulator values are stored ×`qa` (1.0 ↔ `qa`), dense weights ×`qb`,\ndense biases ×`qa·qb` in i32. Every activation brings values back to the\n`qa` scale, and the network output is `sum · evalScale / (qa · qb)`\ncentipawns.",
+      "properties": {
+        "accumulator": {
+          "$ref": "#/$defs/AccumulatorType",
+          "default": "i16",
+          "description": "Accumulator (and feature transformer weights) type."
+        },
+        "evalScale": {
+          "description": "Centipawns per unit of network output (the trainer's sigmoid scale).",
+          "format": "uint32",
+          "maximum": 10000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "ftWeightClip": {
+          "description": "Bound on feature transformer weights and biases during training, so\nthat the i16 accumulator never overflows. Default: the largest safe\nvalue, `⌊32767 / (max active features + 1)⌋ / qa`.",
+          "format": "double",
+          "minimum": 0.0,
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "qa": {
+          "description": "Scale of the accumulator: an activation of 1.0 is `qa`.",
+          "format": "uint32",
+          "maximum": 32767,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "qb": {
+          "description": "Scale of the dense weights.",
+          "format": "uint32",
+          "maximum": 32767,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "weightClip": {
+          "description": "Bound on dense weights during training. Default: the largest value\nthe weight type holds, `127 / qb` (i8) or `32767 / qb` (i16).",
+          "format": "double",
+          "minimum": 0.0,
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "weights": {
+          "$ref": "#/$defs/WeightType",
+          "description": "Type of the dense layers' weights."
+        }
+      },
+      "required": [
+        "weights",
+        "qa",
+        "qb",
+        "evalScale"
+      ],
+      "type": "object"
+    },
+    "WeightType": {
+      "description": "Dense weights integer type.\n- `i8`: 8-bit weights.\n- `i16`: 16-bit weights.",
+      "enum": [
+        "i8",
+        "i16"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "urn:chess-bot:schema:nnue-architecture:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A complete NNUE architecture: input features, feature transformer\n(accumulator), dense layers, output buckets and quantization.",
+  "properties": {
+    "$schema": {
+      "description": "Optional link to this schema, for editors. Ignored.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "accumulator": {
+      "$ref": "#/$defs/Accumulator",
+      "description": "Feature transformer: the first, sparse layer, updated incrementally."
+    },
+    "features": {
+      "$ref": "#/$defs/Features",
+      "description": "Input features of the network."
+    },
+    "hiddenLayers": {
+      "default": [],
+      "description": "Dense layers between the accumulator and the output, in order. The\noutput layer (one neuron, no activation) is implicit.",
+      "items": {
+        "$ref": "#/$defs/DenseLayer"
+      },
+      "maxItems": 16,
+      "type": "array"
+    },
+    "metadata": {
+      "$ref": "#/$defs/Metadata",
+      "description": "Descriptive information. Not part of the architecture hash."
+    },
+    "outputBuckets": {
+      "$ref": "#/$defs/OutputBuckets",
+      "default": {
+        "strategy": "none"
+      },
+      "description": "Several sets of weights for the layers after the accumulator, one of\nwhich is chosen by the position."
+    },
+    "quantization": {
+      "$ref": "#/$defs/Quantization",
+      "description": "How weights and activations are stored as integers."
+    },
+    "schemaVersion": {
+      "const": 1,
+      "description": "Version of the architecture schema. Always 1.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "metadata",
+    "features",
+    "accumulator",
+    "quantization"
+  ],
+  "title": "NNUE architecture",
+  "type": "object"
+}

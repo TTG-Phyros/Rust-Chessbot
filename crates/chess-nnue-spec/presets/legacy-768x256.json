@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "metadata": {
+    "name": "Legacy 768→256×2→1",
+    "version": "1",
+    "description": "The network trained before architectures became configurable (CBNN version 1 files): 768 inputs with perspective, 256 clipped-ReLU neurons per side, one output. Output weights are stored in i16 but bounded to the i8 range.",
+    "tags": ["legacy", "chess768"]
+  },
+  "features": { "set": "Chess768", "perspective": true },
+  "accumulator": { "size": 256, "activation": "CReLU" },
+  "hiddenLayers": [],
+  "outputBuckets": { "strategy": "none" },
+  "quantization": {
+    "accumulator": "i16",
+    "weights": "i16",
+    "qa": 255,
+    "qb": 64,
+    "evalScale": 400,
+    "ftWeightClip": 3.0,
+    "weightClip": 1.984375
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "metadata": {
+    "name": "Multi-layer 1024 pairwise → 16 → 32 → 1",
+    "version": "1",
+    "description": "Stockfish-like layer stacks: 4 mirrored king buckets on Chess768 inputs, a 1024-neuron accumulator halved by a pairwise clipped ReLU, two hidden layers, and 8 material buckets selecting every dense layer.",
+    "tags": ["multi-layer", "layer-stacks"]
+  },
+  "features": {
+    "set": "Chess768",
+    "mirror": "kingFile",
+    "perspective": true,
+    "kingBuckets": [
+      0, 0, 1, 1, 1, 1, 0, 0,
+      2, 2, 2, 2, 2, 2, 2, 2,
+      3, 3, 3, 3, 3, 3, 3, 3,
+      3, 3, 3, 3, 3, 3, 3, 3,
+      3, 3, 3, 3, 3, 3, 3, 3,
+      3, 3, 3, 3, 3, 3, 3, 3,
+      3, 3, 3, 3, 3, 3, 3, 3,
+      3, 3, 3, 3, 3, 3, 3, 3
+    ]
+  },
+  "accumulator": { "size": 1024, "activation": "PairwiseCReLU" },
+  "hiddenLayers": [
+    { "size": 16, "activation": "CReLU" },
+    { "size": 32, "activation": "CReLU" }
+  ],
+  "outputBuckets": { "strategy": "material", "count": 8, "scope": "all" },
+  "quantization": { "weights": "i8", "qa": 255, "qb": 64, "evalScale": 400 }
+}

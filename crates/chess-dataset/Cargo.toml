@@ -1,0 +1,20 @@
+[package]
+name = "chess-dataset"
+description = "Training dataset format (CBDS): records, streaming reader and writer, validated import, statistics."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+chess-core.workspace = true
+serde.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

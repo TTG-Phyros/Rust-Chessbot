@@ -14,6 +14,8 @@ members = [
     "crates/chess-reviewer",
     "crates/chess-nnue-spec",
     "crates/chess-nnue",
+    "crates/chess-dataset",
+    "crates/chess-jobs",
 ]
 
 [workspace.package]
@@ -35,6 +37,8 @@ chess-review = { path = "crates/chess-review" }
 chess-reviewer = { path = "crates/chess-reviewer" }
 chess-nnue-spec = { path = "crates/chess-nnue-spec" }
 chess-nnue = { path = "crates/chess-nnue" }
+chess-dataset = { path = "crates/chess-dataset" }
+chess-jobs = { path = "crates/chess-jobs" }
 
 # Errors
 thiserror = "2.0.21"
@@ -65,6 +69,9 @@ reqwest = { version = "0.13.5", default-features = false, features = ["json"] }
 # Chess.com review: game and analysis cache, `.env` loading for the CLI
 rusqlite = { version = "0.41.0", features = ["bundled"] }
 dotenvy = "0.15.7"
+
+# NNUE lab: server-generated ids (UUIDv7, time-ordered)
+uuid = { version = "1.29.0", features = ["v7", "serde"] }
 
 # NNUE architectures: JSON Schema generation and validation, YAML input,
 # canonical JSON (RFC 8785) hashed with SHA-256
@@ -116,4 +123,7 @@ opt-level = 3
 opt-level = 3
 
 [profile.dev.package.chess-nnue]
+opt-level = 3
+
+[profile.dev.package.chess-dataset]
 opt-level = 3

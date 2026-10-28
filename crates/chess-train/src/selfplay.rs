@@ -14,8 +14,8 @@ use chess_search::{Score, SearchLimits, Searcher, StopFlag};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::dataset::{DatasetWriter, Outcome, Record};
 use crate::rng::Rng;
+use chess_dataset::{DatasetWriter, Outcome, Record};
 
 /// Self-play parameters (`[selfplay]` section of the configuration).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -322,7 +322,7 @@ fn refresh_network(
 
 /// First unused chunk number for `prefix` in `dir`, so that runs append.
 fn next_chunk_index(dir: &Path, prefix: &str) -> u32 {
-    crate::dataset::dataset_files(dir, Some(prefix))
+    chess_dataset::dataset_files(dir, Some(prefix))
         .iter()
         .filter_map(|path| {
             path.file_stem()?
@@ -337,7 +337,7 @@ fn next_chunk_index(dir: &Path, prefix: &str) -> u32 {
 }
 
 fn chunk_path(dir: &Path, prefix: &str, index: u32) -> PathBuf {
-    dir.join(format!("{prefix}-{index:04}.{}", crate::dataset::EXTENSION))
+    dir.join(format!("{prefix}-{index:04}.{}", chess_dataset::EXTENSION))
 }
 
 fn write_chunks(
@@ -379,8 +379,8 @@ fn write_chunks(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dataset::{DatasetReader, dataset_files, record_count};
     use crate::test_dir;
+    use chess_dataset::{DatasetReader, dataset_files, record_count};
 
     fn small() -> SelfplayConfig {
         SelfplayConfig {

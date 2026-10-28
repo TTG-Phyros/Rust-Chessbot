@@ -39,6 +39,9 @@ chunk_positions = 1000000
 seed = 24301
 
 [train]
+# Architecture: a preset (`fast-768`, `halfka-medium`, `multilayer`) or a
+# JSON/YAML file; default: `legacy-768x256`, the 768 → 256 ×2 → 1 network.
+# architecture = "fast-768"
 # Positions per optimizer step (sent as 32 feature indices each; ~100 MB of
 # one-hot inputs rebuilt on the device at 16384).
 batch_size = 16384

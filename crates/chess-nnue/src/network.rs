@@ -15,9 +15,9 @@
 
 use std::cell::RefCell;
 
-use chess_core::{Color, PieceKind, Position};
+use chess_core::{Color, Position};
 use chess_nnue_spec::{
-    Activation, Architecture, ArchitectureHash, BucketStrategy, I32_DOT_LIMIT, Layout, SumWidth,
+    Activation, Architecture, ArchitectureHash, I32_DOT_LIMIT, Layout, SumWidth,
 };
 
 use crate::divisor::Divisor;
@@ -33,39 +33,6 @@ pub struct DenseWeights {
     pub weights: Vec<i16>,
     /// Biases.
     pub bias: Vec<i32>,
-}
-
-/// How a position picks its output bucket.
-#[derive(Debug, Clone, Copy)]
-enum Buckets {
-    None,
-    PieceCount { count: usize, divisor: usize },
-    Material { count: usize },
-}
-
-impl Buckets {
-    fn of(pos: &Position, buckets: Self) -> usize {
-        match buckets {
-            Self::None => 0,
-            Self::PieceCount { count, divisor } => {
-                let pieces = pos.occupied().count() as usize;
-                (pieces.saturating_sub(2) / divisor).min(count - 1)
-            }
-            Self::Material { count } => {
-                let material: usize = [
-                    (PieceKind::Pawn, 1),
-                    (PieceKind::Knight, 3),
-                    (PieceKind::Bishop, 3),
-                    (PieceKind::Rook, 5),
-                    (PieceKind::Queen, 9),
-                ]
-                .iter()
-                .map(|&(kind, value)| pos.pieces_of_kind(kind).count() as usize * value)
-                .sum();
-                (material * count / 79).min(count - 1)
-            }
-        }
-    }
 }
 
 /// How the output is computed.
@@ -89,7 +56,6 @@ pub struct Network {
     ft_weights: Vec<i16>,
     ft_bias: Vec<i16>,
     dense: Vec<DenseWeights>,
-    buckets: Buckets,
     qa: i16,
     qa_divisor: Divisor,
     /// Brings a dense layer's sum back to the `qa` scale.
@@ -174,19 +140,6 @@ impl Network {
         }
 
         let quant = &architecture.quantization;
-        let buckets = match architecture.output_buckets.strategy {
-            BucketStrategy::None => Buckets::None,
-            BucketStrategy::PieceCount => {
-                let count = layout.output_buckets;
-                Buckets::PieceCount {
-                    count,
-                    divisor: 32 / count,
-                }
-            }
-            BucketStrategy::Material => Buckets::Material {
-                count: layout.output_buckets,
-            },
-        };
         let output = if layout.dense.len() == 1
             && layout.accumulator_activation == Activation::CReLU
             && layout.dense[0].sum == SumWidth::I32
@@ -213,7 +166,6 @@ impl Network {
             ft_weights,
             ft_bias,
             dense,
-            buckets,
             output,
         })
     }
@@ -446,7 +398,7 @@ impl Network {
             [0, 0]
         };
         let halves = &order[..self.encoder.perspectives().len()];
-        let bucket = Buckets::of(pos, self.buckets);
+        let bucket = self.encoder.output_bucket_in(pos);
         let slot = |p: usize| acc.get(p * n..(p + 1) * n).unwrap_or_default();
 
         let sum = match (self.output, self.fixed_update) {

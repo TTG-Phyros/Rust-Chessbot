@@ -2,50 +2,70 @@ use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, ensure};
+use crate::{
+    DatasetError, EXTENSION, HEADER_SIZE, MAGIC, RECORD_SIZE, Record, RecordError, VERSION,
+};
 
-use super::{EXTENSION, HEADER_SIZE, MAGIC, RECORD_SIZE, Record, VERSION};
+/// Checks a dataset header.
+pub(crate) fn check_header(header: &[u8; HEADER_SIZE]) -> Result<(), DatasetError> {
+    if &header[0..4] != MAGIC {
+        return Err(DatasetError::BadMagic);
+    }
+    let version = u16::from_le_bytes([header[4], header[5]]);
+    if version != VERSION {
+        return Err(DatasetError::UnsupportedVersion(version));
+    }
+    let record_size = u16::from_le_bytes([header[6], header[7]]);
+    if usize::from(record_size) != RECORD_SIZE {
+        return Err(DatasetError::RecordSize(record_size));
+    }
+    Ok(())
+}
 
 /// Streams the records of a dataset file in chunks: the file is never
 /// loaded entirely in memory.
-pub(crate) struct DatasetReader {
+pub struct DatasetReader {
     file: BufReader<File>,
+    /// Records read so far.
+    index: u64,
 }
 
 impl DatasetReader {
-    pub(crate) fn open(path: &Path) -> Result<Self> {
-        let file = File::open(path).with_context(|| format!("cannot open {}", path.display()))?;
-        let mut file = BufReader::with_capacity(1 << 20, file);
+    /// Opens a dataset file and checks its header.
+    ///
+    /// # Errors
+    ///
+    /// When the file cannot be read or is not a dataset of this version.
+    pub fn open(path: &Path) -> Result<Self, DatasetError> {
+        let mut file = BufReader::with_capacity(1 << 20, File::open(path)?);
         let mut header = [0_u8; HEADER_SIZE];
-        file.read_exact(&mut header)
-            .with_context(|| format!("{}: no header", path.display()))?;
-        ensure!(
-            &header[0..4] == MAGIC,
-            "{}: not a dataset file",
-            path.display()
-        );
-        let version = u16::from_le_bytes([header[4], header[5]]);
-        ensure!(
-            version == VERSION,
-            "{}: unsupported dataset version {version}",
-            path.display()
-        );
-        let record_size = u16::from_le_bytes([header[6], header[7]]);
-        ensure!(
-            usize::from(record_size) == RECORD_SIZE,
-            "{}: record size {record_size}",
-            path.display()
-        );
-        Ok(Self { file })
+        file.read_exact(&mut header).map_err(|err| {
+            if err.kind() == std::io::ErrorKind::UnexpectedEof {
+                DatasetError::NoHeader
+            } else {
+                err.into()
+            }
+        })?;
+        check_header(&header)?;
+        Ok(Self { file, index: 0 })
     }
 
     /// Reads up to `max` records; an empty vector means the end of the file.
-    pub(crate) fn read_chunk(&mut self, max: usize) -> Result<Vec<Record>> {
+    ///
+    /// # Errors
+    ///
+    /// When reading fails or a record is corrupt.
+    pub fn read_chunk(&mut self, max: usize) -> Result<Vec<Record>, DatasetError> {
         let mut records = Vec::with_capacity(max.min(1 << 20));
         let mut bytes = [0_u8; RECORD_SIZE];
         while records.len() < max {
             match self.file.read_exact(&mut bytes) {
-                Ok(()) => records.push(Record::from_bytes(&bytes)?),
+                Ok(()) => {
+                    let record =
+                        Record::from_bytes(&bytes).map_err(|reason| corrupt(self.index, reason))?;
+                    records.push(record);
+                    self.index += 1;
+                }
                 Err(err) if err.kind() == std::io::ErrorKind::UnexpectedEof => break,
                 Err(err) => return Err(err.into()),
             }
@@ -54,8 +74,13 @@ impl DatasetReader {
     }
 }
 
+fn corrupt(index: u64, reason: RecordError) -> DatasetError {
+    DatasetError::Corrupt { index, reason }
+}
+
 /// Number of records in a dataset file, from its size.
-pub(crate) fn record_count(path: &Path) -> u64 {
+#[must_use]
+pub fn record_count(path: &Path) -> u64 {
     std::fs::metadata(path)
         .map(|meta| meta.len().saturating_sub(HEADER_SIZE as u64) / RECORD_SIZE as u64)
         .unwrap_or(0)
@@ -64,7 +89,8 @@ pub(crate) fn record_count(path: &Path) -> u64 {
 /// Finished dataset files of `dir` (sorted), optionally restricted to the
 /// chunks of one run (`<prefix>-<number>`: run `main` does not pick up the
 /// files of run `main-2`).
-pub(crate) fn dataset_files(dir: &Path, prefix: Option<&str>) -> Vec<PathBuf> {
+#[must_use]
+pub fn dataset_files(dir: &Path, prefix: Option<&str>) -> Vec<PathBuf> {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return Vec::new();
     };
@@ -86,11 +112,12 @@ pub(crate) fn dataset_files(dir: &Path, prefix: Option<&str>) -> Vec<PathBuf> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
+
     use chess_core::Position;
 
     use super::*;
-    use crate::dataset::{DatasetWriter, Outcome};
-    use crate::test_dir;
+    use crate::{DatasetWriter, Outcome, test_dir};
 
     #[test]
     fn write_then_stream() {
@@ -149,6 +176,14 @@ mod tests {
         let dir = test_dir("dataset-bad");
         let path = dir.join("bad.bin");
         std::fs::write(&path, b"definitely not a dataset").unwrap();
-        assert!(DatasetReader::open(&path).is_err());
+        assert!(matches!(
+            DatasetReader::open(&path),
+            Err(DatasetError::BadMagic)
+        ));
+        std::fs::write(&path, b"CBDS").unwrap();
+        assert!(matches!(
+            DatasetReader::open(&path),
+            Err(DatasetError::NoHeader)
+        ));
     }
 }

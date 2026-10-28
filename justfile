@@ -111,6 +111,14 @@ nnue-convert input output:
 nnue-random architecture output *args:
     cargo run -q --release -p chess-nnue -- random {{ architecture }} {{ output }} {{ args }}
 
+# NNUE lab from the command line (datasets, training jobs, models), e.g. `just lab jobs`
+lab *args:
+    cargo run -q --release -p chess-train --features cuda -- lab {{ args }}
+
+# NNUE lab worker on this machine: runs the queued jobs, on the GPU when there is one
+lab-worker *args:
+    cargo run --release -p chess-train --features cuda -- worker {{ args }}
+
 # lint + test
 ci: lint test
 

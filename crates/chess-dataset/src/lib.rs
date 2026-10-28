@@ -1,0 +1,383 @@
+//! Training datasets: fixed-size binary records of positions with their
+//! search score and game result, streamed from disk.
+//!
+//! # File format (`CBDS` version 1, little-endian)
+//!
+//! A 16-byte header — magic `CBDS`, version (`u16` = 1), record size
+//! (`u16` = 32), 8 reserved bytes — followed by 32-byte records:
+//!
+//! | Offset | Size | Content |
+//! | --- | --- | --- |
+//! | 0 | 8 | occupancy bitboard (`u64`, bit `i` = square `i`, `a1` = 0) |
+//! | 8 | 16 | one nibble per occupied square, in bit order: `color << 3 \| kind` |
+//! | 24 | 2 | search score, centipawns, White's point of view (`i16`) |
+//! | 26 | 1 | game result: 0 = Black won, 1 = draw, 2 = White won |
+//! | 27 | 1 | side to move: 0 = White, 1 = Black |
+//! | 28 | 2 | ply of the position in its game (`u16`) |
+//! | 30 | 2 | reserved (0) |
+//!
+//! Fixed-size records make shuffling and splitting trivial. Records hold
+//! every piece with its square, so any feature set (`Chess768`, `HalfKP`,
+//! `HalfKAv2_hm`) can be computed from them.
+//!
+//! The content hash of a dataset is the SHA-256 of its records, in order,
+//! headers excluded: a dataset split into several files hashes like the
+//! same records in one file.
+
+mod import;
+mod reader;
+mod stats;
+mod writer;
+
+use chess_core::{Bitboard, Color, Piece, PieceKind, Position, Square};
+use thiserror::Error;
+
+pub use import::{ContentHasher, Imported, import, scan};
+pub use reader::{DatasetReader, dataset_files, record_count};
+pub use stats::{DatasetStats, Histogram, Outcomes};
+pub use writer::DatasetWriter;
+
+/// First bytes of every dataset file.
+pub const MAGIC: &[u8; 4] = b"CBDS";
+/// Format version written and read.
+pub const VERSION: u16 = 1;
+/// Bytes before the first record.
+pub const HEADER_SIZE: usize = 16;
+/// Bytes per record.
+pub const RECORD_SIZE: usize = 32;
+/// Extension of finished dataset files (files being written end in `.tmp`).
+pub const EXTENSION: &str = "bin";
+
+/// Why a dataset file was rejected.
+#[derive(Debug, Error)]
+pub enum DatasetError {
+    /// Not a `CBDS` file.
+    #[error("not a dataset file (bad magic)")]
+    BadMagic,
+    /// Written by an unknown format version.
+    #[error("unsupported dataset version {0} (this build reads {VERSION})")]
+    UnsupportedVersion(u16),
+    /// Records of an unexpected size.
+    #[error("record size {0}, expected {RECORD_SIZE}")]
+    RecordSize(u16),
+    /// Shorter than its header.
+    #[error("file shorter than the {HEADER_SIZE}-byte header")]
+    NoHeader,
+    /// A record does not decode.
+    #[error("record {index}: {reason}")]
+    Corrupt {
+        /// Index of the record, from 0.
+        index: u64,
+        /// What is wrong with it.
+        reason: RecordError,
+    },
+    /// The file ends in the middle of a record.
+    #[error("file ends in the middle of record {0}")]
+    Truncated(u64),
+    /// Larger than allowed.
+    #[error("dataset larger than {0} bytes")]
+    TooLarge(u64),
+    /// No record at all.
+    #[error("dataset has no record")]
+    Empty,
+    /// Reading or writing failed.
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+}
+
+/// What is wrong with a record.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+pub enum RecordError {
+    /// Game result byte other than 0, 1 or 2.
+    #[error("invalid outcome byte {0}")]
+    Outcome(u8),
+    /// Side to move byte other than 0 or 1.
+    #[error("invalid side-to-move byte {0}")]
+    SideToMove(u8),
+    /// More than 32 occupied squares.
+    #[error("more than 32 pieces")]
+    TooManyPieces,
+    /// A nibble names no piece.
+    #[error("invalid piece nibble")]
+    Piece,
+    /// Not exactly one king per side.
+    #[error("each side needs exactly one king")]
+    Kings,
+}
+
+/// Game result from White's point of view.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Outcome {
+    /// Black won.
+    BlackWins = 0,
+    /// Draw.
+    Draw = 1,
+    /// White won.
+    WhiteWins = 2,
+}
+
+impl Outcome {
+    /// Expected score for the side `color`: 1, ½ or 0.
+    #[must_use]
+    pub fn score_for(self, color: Color) -> f32 {
+        let white = match self {
+            Self::WhiteWins => 1.0,
+            Self::Draw => 0.5,
+            Self::BlackWins => 0.0,
+        };
+        if color == Color::White {
+            white
+        } else {
+            1.0 - white
+        }
+    }
+}
+
+/// One training position.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Record {
+    occupancy: u64,
+    pieces: [u8; 16],
+    /// Search score in centipawns, White's point of view.
+    pub score: i16,
+    /// Result of the game the position comes from.
+    pub outcome: Outcome,
+    /// Side to move.
+    pub side_to_move: Color,
+    /// Ply of the position in its game.
+    pub ply: u16,
+}
+
+impl Record {
+    /// Packs `pos` with its score (White's point of view) and the game outcome.
+    #[must_use]
+    pub fn new(pos: &Position, score: i16, outcome: Outcome) -> Self {
+        let occupied = pos.occupied();
+        let mut pieces = [0_u8; 16];
+        for (i, square) in occupied.enumerate().take(32) {
+            if let Some(piece) = pos.piece_at(square) {
+                let nibble = ((piece.color.index() as u8) << 3) | piece.kind.index() as u8;
+                pieces[i / 2] |= nibble << (4 * (i % 2));
+            }
+        }
+        Self {
+            occupancy: occupied.0,
+            pieces,
+            score,
+            outcome,
+            side_to_move: pos.side_to_move(),
+            ply: pos.ply().min(usize::from(u16::MAX)) as u16,
+        }
+    }
+
+    /// The 32 bytes of the record.
+    #[must_use]
+    pub fn to_bytes(self) -> [u8; RECORD_SIZE] {
+        let mut bytes = [0_u8; RECORD_SIZE];
+        bytes[0..8].copy_from_slice(&self.occupancy.to_le_bytes());
+        bytes[8..24].copy_from_slice(&self.pieces);
+        bytes[24..26].copy_from_slice(&self.score.to_le_bytes());
+        bytes[26] = self.outcome as u8;
+        bytes[27] = self.side_to_move.index() as u8;
+        bytes[28..30].copy_from_slice(&self.ply.to_le_bytes());
+        bytes
+    }
+
+    /// Decodes and checks a record.
+    ///
+    /// # Errors
+    ///
+    /// [`RecordError`] when a field is out of range, a nibble names no
+    /// piece or a side does not have exactly one king.
+    pub fn from_bytes(bytes: &[u8; RECORD_SIZE]) -> Result<Self, RecordError> {
+        let mut occupancy = [0; 8];
+        occupancy.copy_from_slice(&bytes[0..8]);
+        let mut pieces = [0; 16];
+        pieces.copy_from_slice(&bytes[8..24]);
+        let outcome = match bytes[26] {
+            0 => Outcome::BlackWins,
+            1 => Outcome::Draw,
+            2 => Outcome::WhiteWins,
+            other => return Err(RecordError::Outcome(other)),
+        };
+        let side_to_move = match bytes[27] {
+            0 => Color::White,
+            1 => Color::Black,
+            other => return Err(RecordError::SideToMove(other)),
+        };
+        let record = Self {
+            occupancy: u64::from_le_bytes(occupancy),
+            pieces,
+            score: i16::from_le_bytes([bytes[24], bytes[25]]),
+            outcome,
+            side_to_move,
+            ply: u16::from_le_bytes([bytes[28], bytes[29]]),
+        };
+        if record.occupancy.count_ones() > 32 {
+            return Err(RecordError::TooManyPieces);
+        }
+        let mut kings = [0; 2];
+        for (_, piece) in record.slots() {
+            let piece = piece.ok_or(RecordError::Piece)?;
+            if piece.kind == PieceKind::King {
+                kings[piece.color.index()] += 1;
+            }
+        }
+        if kings != [1, 1] {
+            return Err(RecordError::Kings);
+        }
+        Ok(record)
+    }
+
+    /// Squares with their pieces (`None` for an invalid nibble).
+    fn slots(&self) -> impl Iterator<Item = (Square, Option<Piece>)> + '_ {
+        Bitboard(self.occupancy).enumerate().map(|(i, square)| {
+            let nibble = (self.pieces[i / 2] >> (4 * (i % 2))) & 0xF;
+            let color = if nibble & 8 == 0 {
+                Color::White
+            } else {
+                Color::Black
+            };
+            let kind = PieceKind::ALL.get(usize::from(nibble & 7)).copied();
+            (square, kind.map(|kind| Piece::new(color, kind)))
+        })
+    }
+
+    /// The pieces of the position, with their squares.
+    pub fn pieces(&self) -> impl Iterator<Item = (Piece, Square)> + '_ {
+        self.slots()
+            .filter_map(|(square, piece)| piece.map(|piece| (piece, square)))
+    }
+
+    /// Number of pieces, kings included.
+    #[must_use]
+    pub fn piece_count(&self) -> u32 {
+        self.occupancy.count_ones()
+    }
+
+    /// Score for the side to move.
+    #[must_use]
+    pub fn score_for_side_to_move(&self) -> f32 {
+        f32::from(self.score) * self.side_to_move.sign() as f32
+    }
+
+    /// Rebuilds the position (castling and en passant rights are not stored).
+    ///
+    /// # Errors
+    ///
+    /// When the pieces do not form a legal position.
+    pub fn to_position(self) -> Result<Position, chess_core::FenError> {
+        let mut board = [None; 64];
+        for (piece, square) in self.pieces() {
+            board[square.index()] = Some(piece);
+        }
+        let mut fen = String::new();
+        for rank in (0..8).rev() {
+            let mut empty = 0;
+            for file in 0..8 {
+                match board[rank * 8 + file] {
+                    Some(piece) => {
+                        if empty > 0 {
+                            fen.push_str(&empty.to_string());
+                            empty = 0;
+                        }
+                        fen.push(Piece::to_fen_char(piece));
+                    }
+                    None => empty += 1,
+                }
+            }
+            if empty > 0 {
+                fen.push_str(&empty.to_string());
+            }
+            if rank > 0 {
+                fen.push('/');
+            }
+        }
+        fen.push_str(if self.side_to_move == Color::White {
+            " w - - 0 1"
+        } else {
+            " b - - 0 1"
+        });
+        Position::from_fen(&fen)
+    }
+}
+
+/// A fresh, empty directory for a test.
+#[cfg(test)]
+pub(crate) fn test_dir(name: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir()
+        .join("chess-dataset-tests")
+        .join(format!("{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap_or_default();
+    dir
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use super::*;
+
+    const FENS: [&str; 4] = [
+        "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1",
+        "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R b - - 0 1",
+        "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1",
+        "4k3/8/8/8/8/8/8/4K3 b - - 0 1",
+    ];
+
+    #[test]
+    fn records_round_trip() {
+        for fen in FENS {
+            let pos = Position::from_fen(fen).unwrap();
+            let record = Record::new(&pos, -123, Outcome::Draw);
+            let decoded = Record::from_bytes(&record.to_bytes()).unwrap();
+            assert_eq!(decoded, record);
+            assert_eq!(decoded.to_position().unwrap(), pos, "{fen}");
+            assert_eq!(decoded.score, -123);
+            assert_eq!(decoded.piece_count(), pos.occupied().count());
+        }
+    }
+
+    #[test]
+    fn pieces_are_those_of_the_position() {
+        let pos = Position::from_fen(FENS[1]).unwrap();
+        let record = Record::new(&pos, 0, Outcome::WhiteWins);
+        let mut from_record: Vec<(Piece, Square)> = record.pieces().collect();
+        let mut from_position: Vec<(Piece, Square)> = pos
+            .occupied()
+            .filter_map(|square| pos.piece_at(square).map(|piece| (piece, square)))
+            .collect();
+        from_record.sort_by_key(|(_, square)| square.index());
+        from_position.sort_by_key(|(_, square)| square.index());
+        assert_eq!(from_record, from_position);
+    }
+
+    #[test]
+    fn side_relative_values() {
+        let black = Record::new(
+            &Position::from_fen(FENS[3]).unwrap(),
+            50,
+            Outcome::WhiteWins,
+        );
+        assert!((black.score_for_side_to_move() + 50.0).abs() < f32::EPSILON);
+        assert!((Outcome::WhiteWins.score_for(Color::Black)).abs() < f32::EPSILON);
+        assert!((Outcome::Draw.score_for(Color::White) - 0.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn rejects_corrupt_records() {
+        let good = Record::new(&Position::startpos(), 0, Outcome::Draw).to_bytes();
+        let corrupt = |at: usize, value: u8| {
+            let mut bytes = good;
+            bytes[at] = value;
+            Record::from_bytes(&bytes)
+        };
+        assert_eq!(corrupt(26, 7), Err(RecordError::Outcome(7)));
+        assert_eq!(corrupt(27, 2), Err(RecordError::SideToMove(2)));
+        // Kind 7 does not exist.
+        assert_eq!(corrupt(8, 0x77), Err(RecordError::Piece));
+        // The white rook of a1 becomes a king: two white kings.
+        assert_eq!(corrupt(8, 0x15), Err(RecordError::Kings));
+    }
+}

@@ -13,9 +13,9 @@ use chess_search::{Score, SearchLimits, Searcher, StopFlag};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::dataset::Outcome;
 use crate::rng::Rng;
 use crate::stockfish::{self, Stockfish, UciScore};
+use chess_dataset::Outcome;
 
 /// Match parameters (`[arena]` section of the configuration).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

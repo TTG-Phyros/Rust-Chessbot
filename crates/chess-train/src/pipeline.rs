@@ -7,17 +7,17 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use anyhow::Result;
+use chess_dataset::{dataset_files, record_count};
 use chess_search::StopFlag;
 use serde_json::json;
 
 use crate::config::Config;
-use crate::dataset::{dataset_files, record_count};
 use crate::device::SelectedDevice;
 use crate::evaluation;
 use crate::metrics::Metrics;
 use crate::ranking;
 use crate::selfplay::{self, SelfplayConfig, SelfplayStats};
-use crate::trainer::{TrainState, Trainer};
+use crate::trainer::{BurnTrainer, RunObserver, TrainState, Trainer, TrainingRun};
 
 /// Decides, at the start of each epoch, whether the trainer may go through
 /// the dataset again.
@@ -186,19 +186,27 @@ pub(crate) fn run(
                 }
             }
         });
-        let trainer = Trainer {
-            config: config.train.clone(),
+        let observer = RunObserver {
             run: config.run.clone(),
-            checkpoint_dir: config.checkpoint_dir(),
             weights_dir: config.weights_dir(),
-            device,
             metrics,
-            stop: stop.clone(),
             exports: Some(exports_tx),
         };
-        let trained = trainer.train(files, resume);
+        let trained = config.train.architecture().and_then(|architecture| {
+            let run = TrainingRun {
+                architecture,
+                config: config.train.clone(),
+                files,
+                checkpoint: config.checkpoint_dir().join(&config.run),
+                resume,
+                stop: stop.clone(),
+            };
+            BurnTrainer { device }
+                .train(run, &observer)
+                .map(|outcome| outcome.state)
+        });
         // Closes the export channel: the evaluator finishes its last match.
-        drop(trainer);
+        drop(observer);
         let _ = evaluator.join();
 
         // Training ended (limit reached or stop requested): stop producing.

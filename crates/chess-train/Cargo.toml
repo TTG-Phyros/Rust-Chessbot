@@ -20,6 +20,9 @@ cuda = ["burn/cuda", "dep:cudarc"]
 
 [dependencies]
 chess-core.workspace = true
+chess-dataset.workspace = true
+chess-jobs.workspace = true
+chess-nnue.workspace = true
 chess-eval = { workspace = true, features = ["classic", "nnue"] }
 chess-search.workspace = true
 chess-stockfish.workspace = true
@@ -39,6 +42,7 @@ tracing-subscriber.workspace = true
 
 [dev-dependencies]
 figment = { workspace = true, features = ["test"] }
+serde_norway.workspace = true
 tower.workspace = true
 
 [lints]

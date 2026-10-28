@@ -1,8 +1,9 @@
 //! Input features of an architecture: which rows of the feature transformer
-//! a piece activates, from each perspective.
+//! a piece activates, from each perspective, and which output bucket a
+//! position uses.
 
 use chess_core::{Color, Piece, PieceKind, Position, Square};
-use chess_nnue_spec::{Architecture, FeatureSet, Mirror};
+use chess_nnue_spec::{Architecture, BucketStrategy, FeatureSet, Mirror};
 
 /// What a perspective's features depend on besides the pieces: the bucket
 /// and the mirroring chosen by its own king. A king move that changes it
@@ -15,9 +16,57 @@ pub(crate) struct Context {
     xor: usize,
 }
 
-/// Feature encoding of an architecture.
+/// How a position picks its output bucket.
+#[derive(Debug, Clone, Copy)]
+enum Buckets {
+    None,
+    PieceCount { count: usize, divisor: usize },
+    Material { count: usize },
+}
+
+impl Buckets {
+    /// Material values of pawns, knights, bishops, rooks and queens.
+    const VALUES: [(PieceKind, usize); 5] = [
+        (PieceKind::Pawn, 1),
+        (PieceKind::Knight, 3),
+        (PieceKind::Bishop, 3),
+        (PieceKind::Rook, 5),
+        (PieceKind::Queen, 9),
+    ];
+
+    fn new(arch: &Architecture) -> Self {
+        let count = arch.output_buckets.count.unwrap_or(1).max(1) as usize;
+        match arch.output_buckets.strategy {
+            BucketStrategy::None => Self::None,
+            BucketStrategy::PieceCount => Self::PieceCount {
+                count,
+                divisor: 32 / count,
+            },
+            BucketStrategy::Material => Self::Material { count },
+        }
+    }
+
+    /// Bucket of a position with `pieces` pieces (kings included) and
+    /// `material` points of material over both sides.
+    fn index(self, pieces: usize, material: usize) -> usize {
+        match self {
+            Self::None => 0,
+            Self::PieceCount { count, divisor } => {
+                (pieces.saturating_sub(2) / divisor).min(count - 1)
+            }
+            Self::Material { count } => (material * count / 79).min(count - 1),
+        }
+    }
+
+    fn needs_material(self) -> bool {
+        matches!(self, Self::Material { .. })
+    }
+}
+
+/// Feature encoding of an architecture: the engine's, and the one trainers
+/// must use so that the rows they train are the rows the engine reads.
 #[derive(Debug, Clone)]
-pub(crate) struct Encoder {
+pub struct Encoder {
     set: FeatureSet,
     /// First feature of each plane, by `[own piece][kind]`; `None` for
     /// pieces without features (kings in `HalfKP`).
@@ -26,10 +75,13 @@ pub(crate) struct Encoder {
     mirror: bool,
     /// Perspectives with an accumulator: both, or White only.
     perspectives: &'static [Color],
+    buckets: Buckets,
 }
 
 impl Encoder {
-    pub(crate) fn new(arch: &Architecture) -> Self {
+    /// Encoding of `arch` (which must be valid).
+    #[must_use]
+    pub fn new(arch: &Architecture) -> Self {
         let arch = arch.normalized();
         let mut king_buckets = [0; 64];
         if let Some(map) = &arch.features.king_buckets {
@@ -64,11 +116,59 @@ impl Encoder {
             } else {
                 &[Color::White]
             },
+            buckets: Buckets::new(&arch),
         }
     }
 
-    pub(crate) fn perspectives(&self) -> &'static [Color] {
+    /// Perspectives with an accumulator, in the order of the accumulator
+    /// slots: White then Black, or White only.
+    #[must_use]
+    pub fn perspectives(&self) -> &'static [Color] {
         self.perspectives
+    }
+
+    /// Appends to `out` the active features of `pieces` (a position's
+    /// pieces, each once) from `perspective`.
+    pub fn active(&self, perspective: Color, pieces: &[(Piece, Square)], out: &mut Vec<usize>) {
+        let king = Piece::new(perspective, PieceKind::King);
+        let context = match pieces.iter().find(|(piece, _)| *piece == king) {
+            Some(&(_, square)) => self.context(perspective, square),
+            None => self.fixed_context(perspective),
+        };
+        out.extend(self.features(context, perspective, pieces.iter().copied()));
+    }
+
+    /// Output bucket of a position with `pieces`.
+    #[must_use]
+    pub fn output_bucket(&self, pieces: &[(Piece, Square)]) -> usize {
+        let material = if self.buckets.needs_material() {
+            pieces
+                .iter()
+                .filter_map(|(piece, _)| {
+                    Buckets::VALUES
+                        .iter()
+                        .find(|(kind, _)| *kind == piece.kind)
+                        .map(|&(_, value)| value)
+                })
+                .sum()
+        } else {
+            0
+        };
+        self.buckets.index(pieces.len(), material)
+    }
+
+    /// Output bucket of `pos`.
+    pub(crate) fn output_bucket_in(&self, pos: &Position) -> usize {
+        let material = if self.buckets.needs_material() {
+            Buckets::VALUES
+                .iter()
+                .map(|&(kind, value)| pos.pieces_of_kind(kind).count() as usize * value)
+                .sum()
+        } else {
+            0
+        };
+        self.buckets
+            .index(pos.occupied().count() as usize, material)
     }
 
     /// Context of `perspective` when its own king stands on `king`.
@@ -192,6 +292,33 @@ mod tests {
         // f1 is seen as c1: another bucket.
         assert_ne!(encoder.context(Color::White, Square::F1), context);
         assert_eq!(encoder.context(Color::White, Square::B1).base, context.base);
+    }
+
+    #[test]
+    fn piece_lists_encode_like_positions() {
+        let pos = Position::from_fen("6k1/5ppp/8/8/8/8/1q3PPP/3R2K1 b - - 0 1").unwrap();
+        let placed: Vec<(Piece, Square)> = pieces(&pos).collect();
+        for id in ["fast-768", "halfka-medium", "multilayer", presets::LEGACY] {
+            let encoder = encoder(id);
+            for perspective in Color::ALL {
+                let context = encoder.context_in(&pos, perspective);
+                let expected: Vec<usize> = encoder
+                    .features(context, perspective, pieces(&pos))
+                    .collect();
+                let mut active = Vec::new();
+                encoder.active(perspective, &placed, &mut active);
+                assert_eq!(active, expected, "{id}");
+            }
+            assert_eq!(
+                encoder.output_bucket(&placed),
+                encoder.output_bucket_in(&pos),
+                "{id}"
+            );
+        }
+        // 10 pieces, 8 buckets of 4: (10 - 2) / 4 = 2. Multilayer buckets
+        // by material: 5 + 9 + 6 pawns = 20 points, 20 · 8 / 79 = 2.
+        assert_eq!(encoder("halfka-medium").output_bucket(&placed), 2);
+        assert_eq!(encoder("multilayer").output_bucket(&placed), 2);
     }
 
     #[test]

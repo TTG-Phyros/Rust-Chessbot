@@ -109,11 +109,16 @@ Sous Windows : `winget install Rustlang.Rustup Casey.Just OpenJS.NodeJS.LTS`, pl
 ```
 crates/
   chess-core/    plateau, bitboards, coups, FEN/PGN, Zobrist (aucune I/O, aucune dépendance projet)
-  chess-eval/    trait Evaluator + évaluation classique (PeSTO) + inférence NNUE (AVX2 / portable)
+  chess-eval/    trait Evaluator + évaluation classique (PeSTO) + adaptateur NNUE
+  chess-nnue-spec/ architectures NNUE déclaratives : types, JSON Schema, validation, presets, hash
+  chess-nnue/    format réseau CBNN v2, inférence de toute architecture valide (AVX2 / portable)
+  chess-dataset/ format des datasets (CBDS) : lecture/écriture en flux, import vérifié, statistiques
+  chess-jobs/    laboratoire NNUE : base SQLite des datasets, jobs (entraînement, self-play) et modèles
   chess-search/  alpha-beta générique sur Evaluator (ne voit que le trait), multi-PV
   chess-stockfish/ pilote UCI de Stockfish : bridé en 10 niveaux (arène, comparaisons) ou pleine force en MultiPV (analyses)
   chess-uci/     binaire UCI
-  chess-train/   binaire : self-play, entraînement burn (CUDA ou CPU), matchs, démon de contrôle
+  chess-train/   binaire : self-play, entraînement burn (CUDA ou CPU) de toute architecture,
+                 matchs, démon de contrôle, worker du laboratoire
   chess-server/  binaire : API REST (OpenAPI) + WebSocket (axum)
   chess-chesscom/ client de l'API publique Chess.com (requêtes en série, retry, PGN + horloges)
   chess-openings/ noms d'ouvertures (base lichess, CC0) reconnus par position, coups « book »
@@ -249,7 +254,7 @@ Les scores renvoyés sont du point de vue des blancs. Les limites sont plafonné
 
 ## Entraînement (NNUE)
 
-Le réseau suit l'architecture `768 → 256 ×2 → 1` en perspective. Les entrées sont 768 features binaires (couleur relative × pièce × case), et un feature transformer commun alimente deux moitiés : celle du camp au trait et celle de l'adversaire. Les deux passent par un ReLU borné (CReLU) avant la couche de sortie.
+Par défaut, le réseau suit l'architecture `768 → 256 ×2 → 1` en perspective (preset `legacy-768x256`). Les entrées sont 768 features binaires (couleur relative × pièce × case), et un feature transformer commun alimente deux moitiés : celle du camp au trait et celle de l'adversaire. Les deux passent par un ReLU borné (CReLU) avant la couche de sortie. Toute autre architecture déclarée (voir [Laboratoire NNUE](#laboratoire-nnue)) s'entraîne de la même façon : `[train] architecture` accepte un preset ou un fichier JSON/YAML.
 
 ```sh
 docker compose --profile train up        # UI + API + entraînement GPU (repli CPU si aucun GPU)
@@ -260,10 +265,10 @@ docker compose --profile train stop      # arrêt propre : l'étape en cours se 
 Le service `train` lance le **démon de contrôle** (`chess-train serve`). Celui-ci reste en attente : rien ne s'entraîne tant qu'on ne lance pas un run depuis la page **Entraînement** ; les pages **Entraînement** et **Arène** de l'UI le pilotent via `chess-server`. Avec `--autostart`, le démon démarre aussitôt le pipeline du dernier réseau. C'est le démon qui écrit dans `data/` ; le serveur ne fait que lire. Le pipeline fait tourner **le self-play sur les cœurs CPU** (producteur) et **l'entraînement sur le GPU** (consommateur) en même temps :
 
 1. **Self-play.** Le moteur joue contre lui-même (rayon, un searcher par thread) après 6 à 10 coups aléatoires, à 5 000 nœuds par coup, **avec le dernier réseau exporté**. Il le recharge dès qu'un nouvel export paraît, et utilise PeSTO tant qu'il n'y en a pas. On ne garde que les positions calmes : pas d'échec, meilleur coup non tactique. Une partie s'arrête par adjudication quand les deux camps s'accordent sur le résultat.
-2. **Dataset.** Chaque position est un enregistrement fixe de 32 octets (format `CBDS` v1, décrit dans `crates/chess-train/src/dataset/mod.rs`), écrit par fichiers d'un million de positions publiés de façon atomique. Les datasets vivent dans le volume Docker `datasets`.
-3. **Entraînement.** Les fichiers sont **lus en continu depuis le disque**, par blocs mélangés, sans jamais tenir entièrement en mémoire. Les batchs de 16 384 positions arrivent sous forme **creuse** : 32 indices de features par position, au lieu de 768 flottants. Les entrées one-hot sont reconstruites sur le GPU par un scatter. Optimiseur AdamW, perte `(σ(sortie) − cible)²`, où la cible mélange le score de recherche et le résultat de la partie. Les poids restent bornés pour que la quantification ne puisse pas déborder. L'entraînement va bien plus vite que le self-play (environ 1,5 M positions/s contre 10 000/s). Le pipeline borne donc la réutilisation : chaque position sert en moyenne au plus 30 fois (`max_reuse`), et au-delà l'entraînement attend de nouvelles parties au lieu de sur-apprendre les anciennes.
+2. **Dataset.** Chaque position est un enregistrement fixe de 32 octets (format `CBDS` v1, décrit dans [`crates/chess-dataset/src/lib.rs`](crates/chess-dataset/src/lib.rs)), écrit par fichiers d'un million de positions publiés de façon atomique. Les datasets vivent dans le volume Docker `datasets`.
+3. **Entraînement.** Les fichiers sont **lus en continu depuis le disque**, par blocs mélangés, sans jamais tenir entièrement en mémoire. Les batchs de 16 384 positions arrivent sous forme **creuse** : 32 indices de features par position, au lieu de 768 flottants. Les entrées one-hot sont reconstruites sur le GPU par un scatter. Quand il y a plus de features que `pièces × neurones` (HalfKA avec beaucoup de king buckets et un petit accumulateur), le GPU rassemble plutôt les lignes actives du feature transformer : le plus petit des deux tenseurs est choisi. Optimiseur AdamW, perte `(σ(sortie) − cible)²`, où la cible mélange le score de recherche et le résultat de la partie. Les poids restent bornés pour que la quantification ne puisse pas déborder. L'entraînement va bien plus vite que le self-play (environ 1,5 M positions/s contre 10 000/s). Le pipeline borne donc la réutilisation : chaque position sert en moyenne au plus 30 fois (`max_reuse`), et au-delà l'entraînement attend de nouvelles parties au lieu de sur-apprendre les anciennes.
 4. **Checkpoints.** À chaque superbatch (200 pas), `data/checkpoints/<run>/` reçoit les poids flottants avec leurs identifiants de paramètres, l'état AdamW et la progression. La reprise est exacte et se fait par défaut. L'option `--fresh` (ou le bouton « Repartir de zéro ») repart de zéro et efface le top 5 du réseau.
-5. **Export.** Les poids quantifiés au format `CBNN` v1 attendu par `chess-eval` (décrit dans `crates/chess-eval/src/nnue/mod.rs`) vont dans `data/weights/<run>.nnue`, avec un instantané `data/weights/<run>/sbNNNNN.nnue` tous les 5 superbatchs. **Le serveur recharge ce fichier automatiquement** : dès le premier export, on joue et on analyse contre le réseau.
+5. **Export.** Les poids quantifiés au format `CBNN` v2 (décrit dans [docs/network-format.md](docs/network-format.md), architecture et hash dans l'en-tête) vont dans `data/weights/<run>.nnue`, avec un instantané `data/weights/<run>/sbNNNNN.nnue` tous les 5 superbatchs. **Le serveur recharge ce fichier automatiquement** : dès le premier export, on joue et on analyse contre le réseau.
 6. **Elo et top 5.** Chaque export est mesuré contre l'évaluation classique (PeSTO), en 64 parties jouées par paires couleurs inversées, sur 2 threads. On obtient la courbe d'Elo entre checkpoints. Les 5 meilleurs snapshots mesurés sont classés dans `data/weights/<run>/best.json` ; les autres snapshots mesurés sont supprimés (`keep_best` dans `[evaluation]`).
 7. **Métriques.** `data/metrics/events.jsonl` reçoit une ligne par événement (perte, vitesse, VRAM, checkpoints, exports, matchs) et `data/metrics/status.json` donne l'état courant. La page Entraînement les affiche.
 
@@ -288,7 +293,7 @@ La configuration se fait par `chess-train.toml` (voir [`chess-train.example.toml
 
 - **Réseau.** Un réseau est un run nommé, qui possède ses propres hyperparamètres dans `data/runs/<nom>.json`. Un réseau reprend toujours avec les réglages de sa création. Il a aussi son propre checkpoint, ses poids (`data/weights/<nom>.nnue`, snapshots dans `data/weights/<nom>/`) et ses parties (`<nom>-NNNN` dans le volume `datasets`).
   - On peut changer les nœuds de self-play, le taux d'apprentissage et sa décroissance, le poids du résultat (WDL), la taille de batch, le nombre de batchs par superbatch, la durée, le seuil de démarrage, la réutilisation maximale, la fréquence d'export et le nombre de parties de mesure.
-  - L'architecture reste `768 → 256 ×2 → 1` : c'est le format lu par le moteur.
+  - L'architecture des réseaux créés depuis cette page reste `768 → 256 ×2 → 1` ; le laboratoire entraîne les autres.
   - Un seul réseau s'entraîne à la fois, car le GPU et les cœurs sont partagés.
   - **Réutiliser les parties de** : le nouveau réseau s'entraîne aussi sur les parties d'autres réseaux. Il démarre ainsi sans attendre 2 M positions de son propre self-play, ce qui est pratique pour comparer des hyperparamètres d'entraînement sur les mêmes données.
 - **Bot.** Un bot est un snapshot copié dans `data/bots/<nom>.nnue`, avec sa description (`<nom>.json` : réseau d'origine, superbatch, Elo mesuré, hyperparamètres). Il ne bouge plus, même si le réseau continue de s'entraîner ou est supprimé.
@@ -316,6 +321,26 @@ La configuration se fait par `chess-train.toml` (voir [`chess-train.example.toml
   | Temps par coup | 50 ms | 100 ms | 150 ms | 200 ms | 300 ms | 400 ms | 500 ms | 1 s | 1,5 s | 2 s |
 
   Comme repère, sur la machine de référence, `main` (sb305, 5 000 nœuds par coup) s'est classé entre Stockfish 3 et Stockfish 5 : environ +45 Elo, contre +105 pour le niveau 5 et +243 pour le niveau 7, PeSTO étant à 0. Ce n'est qu'une estimation sur 8 parties par paire.
+
+### Laboratoire NNUE
+
+Le laboratoire entraîne des réseaux d'**architecture déclarée** (JSON/YAML validé par [le schéma](schemas/nnue-architecture.v1.json), voir `just nnue-validate`) sur des datasets versionnés, par des **jobs** persistants. Sa base SQLite (`data/lab/lab.sqlite`) garde les datasets, les jobs et leurs événements, et les modèles produits avec tout ce qu'il faut pour les refaire : architecture normalisée et son hash, hash SHA-256 de chaque dataset, hyperparamètres, seed. Les fichiers vivent sous `data/lab/` (`datasets/<id>/`, `models/<id>.nnue`, `runs/<id>/` pour les checkpoints) ; leurs chemins viennent toujours d'identifiants générés (UUIDv7), jamais d'un nom fourni.
+
+- **Datasets.** Un import vérifie l'en-tête et chaque enregistrement avant de publier le fichier, et calcule ses statistiques (résultats, scores, nombre de pièces, ply). Un job de self-play remplit un dataset neuf, avec l'évaluation classique ou un modèle du laboratoire.
+- **Jobs.** Un worker prend le plus ancien job qu'il sait exécuter : **un seul job à la fois sur le GPU**, les autres attendent (ou passent sur un worker CPU s'ils l'acceptent). Il envoie progression et battements de cœur ; un job dont le worker se tait plus de 2 minutes passe `interrupted`. `stop` termine le superbatch, écrit un checkpoint et met le job `stopped` ; `resume` le remet en file et il **reprend du checkpoint**. À seed égale, le même job produit le même réseau au bit près (sur CPU).
+- **Modèles.** Le réseau final est vérifié (format v2, hash de l'architecture du job) avant d'être enregistré ; il se charge partout où le moteur charge un réseau.
+
+En attendant l'API REST, le laboratoire se pilote en ligne de commande :
+
+```sh
+chess-train lab import mes-positions.bin                     # dataset vérifié, avec statistiques
+chess-train lab selfplay --games 2000 --nodes 5000           # job de self-play → nouveau dataset
+chess-train --device cuda lab train --arch halfka-medium --dataset <id> --superbatches 40   # GPU seulement
+chess-train lab jobs | datasets | models                     # listes (JSON)
+chess-train lab job <id>                                     # un job et ses événements
+chess-train lab stop <id> | resume <id>
+chess-train worker                                           # exécute les jobs (GPU si présent), Ctrl+C = arrêt propre
+```
 
 Au premier démarrage du démon, le top 5 des réseaux entraînés avant cette fonctionnalité est **reconstruit depuis l'historique des matchs**, et leurs autres snapshots mesurés sont supprimés. Pour tous les garder, il faut copier `data/weights/<run>/` ailleurs avant de mettre à jour.
 
@@ -443,6 +468,7 @@ Le moteur peut aussi être piloté par script : `printf "position startpos\ngo d
 | --- | --- |
 | La page Entraînement indique « Service arrêté » | La pile tourne sans le profil d'entraînement : relancer avec `docker compose --profile train up` (ou `train-cpu`). |
 | `device: CPU` alors qu'un GPU NVIDIA est présent | Docker ne voit pas le GPU. `docker run --rm --gpus all nvidia/cuda:12.9.1-base-ubuntu24.04 nvidia-smi` doit afficher la carte. Sinon : pilote Windows à jour et backend WSL2 (Docker Desktop), ou NVIDIA Container Toolkit (Linux). |
+| Entraînement GPU hors Docker : `libdevice.10.bc was not found` | cubecl compile les fonctions mathématiques (exp de la sigmoïde…) avec la libdevice de CUDA, que l'image `train` installe (`cuda-nvvm`). En natif, faire pointer `CUDA_PATH` vers un dossier contenant `nvvm/libdevice/libdevice.10.bc` : toolkit CUDA, ou le fichier extrait de la wheel `nvidia-cuda-nvcc-cu12`. |
 | Build interrompu par `tls: bad record MAC`, `unexpected EOF` ou un téléchargement GitHub échoué | Réseau instable sur un gros téléchargement. Relancer la commande : les images et les dépendances déjà téléchargées restent en cache, et le LLVM de cubecl est récupéré avec reprise. Une image de base récalcitrante se télécharge à part avec `docker pull`. |
 | Port 8080 déjà utilisé | `CHESS_WEB_PORT=8081 docker compose up`. |
 | Fichiers de `./data` appartenant à un autre utilisateur (Linux) | `export CHESS_UID=$(id -u) CHESS_GID=$(id -g)` avant `docker compose`. |

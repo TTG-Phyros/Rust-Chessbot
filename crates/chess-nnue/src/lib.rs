@@ -23,6 +23,7 @@ mod state;
 use thiserror::Error;
 
 pub use chess_nnue_spec as spec;
+pub use features::Encoder;
 pub use format::{FORMAT_VERSION, FileInfo, inspect, legacy_architecture};
 pub use network::{DenseWeights, Network};
 pub use state::NnueState;

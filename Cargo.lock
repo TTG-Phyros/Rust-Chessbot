@@ -1346,12 +1346,39 @@ dependencies = [
 ]
 
 [[package]]
+name = "chess-dataset"
+version = "0.1.0"
+dependencies = [
+ "chess-core",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "chess-eval"
 version = "0.1.0"
 dependencies = [
  "chess-core",
  "chess-nnue",
  "criterion",
+]
+
+[[package]]
+name = "chess-jobs"
+version = "0.1.0"
+dependencies = [
+ "chess-core",
+ "chess-dataset",
+ "chess-nnue",
+ "chess-nnue-spec",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "thiserror 2.0.21",
+ "uuid",
 ]
 
 [[package]]
@@ -1477,7 +1504,10 @@ dependencies = [
  "axum",
  "burn",
  "chess-core",
+ "chess-dataset",
  "chess-eval",
+ "chess-jobs",
+ "chess-nnue",
  "chess-search",
  "chess-stockfish",
  "clap",
@@ -1487,6 +1517,7 @@ dependencies = [
  "rayon",
  "serde",
  "serde_json",
+ "serde_norway",
  "tokio",
  "tower",
  "tracing",
@@ -8049,6 +8080,7 @@ checksum = "4a0e2d11620c50695fe12bbbfde96b3477fe606e7284c22d505c12ce51214514"
 dependencies = [
  "getrandom 0.4.3",
  "js-sys",
+ "serde_core",
  "sha1_smol",
  "wasm-bindgen",
 ]

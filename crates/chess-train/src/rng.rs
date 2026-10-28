@@ -24,6 +24,13 @@ impl Rng {
         ((u128::from(self.next_u64()) * n as u128) >> 64) as usize
     }
 
+    /// Uniform in `[-bound, bound)`.
+    pub(crate) fn uniform(&mut self, bound: f32) -> f32 {
+        // 24 random bits: every value is an exact f32.
+        let unit = (self.next_u64() >> 40) as f32 / (1 << 24) as f32;
+        (2.0 * unit - 1.0) * bound
+    }
+
     /// Uniform in `low..=high`.
     pub(crate) fn between(&mut self, low: u32, high: u32) -> u32 {
         let (low, high) = (low.min(high), low.max(high));

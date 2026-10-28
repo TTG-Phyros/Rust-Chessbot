@@ -79,7 +79,12 @@ function GameRow({
   );
 }
 
-/** Username and filters; applied to the URL on submit. */
+/**
+ * Username and filters. The username is applied to the URL on submit; with a
+ * player shown, the filters as soon as they change (the number of games once
+ * typed: on leaving the field or Enter), so that the analysis below always
+ * covers the games the form shows.
+ */
 function SearchForm({
   player,
   filters,
@@ -93,13 +98,18 @@ function SearchForm({
 }) {
   const [name, setName] = useState(player ?? '');
   const [draft, setDraft] = useState(filters);
+  const apply = (next: Filters) => {
+    setDraft(next);
+    const username = name.trim() || player;
+    if (player && username) onSubmit(username, next);
+  };
   const toggleClass = (timeClass: Filters['timeClasses'][number]) => {
-    setDraft((current) => ({
-      ...current,
-      timeClasses: current.timeClasses.includes(timeClass)
-        ? current.timeClasses.filter((value) => value !== timeClass)
-        : [...current.timeClasses, timeClass],
-    }));
+    apply({
+      ...draft,
+      timeClasses: draft.timeClasses.includes(timeClass)
+        ? draft.timeClasses.filter((value) => value !== timeClass)
+        : [...draft.timeClasses, timeClass],
+    });
   };
   return (
     <Card>
@@ -165,6 +175,9 @@ function SearchForm({
                   setDraft({ ...draft, maxGames: Math.max(1, Math.min(maxGames, value)) });
                 }
               }}
+              onBlur={() => {
+                if (draft.maxGames !== filters.maxGames) apply(draft);
+              }}
             />
           </label>
           <label className="flex items-center gap-2 text-mute">
@@ -174,7 +187,7 @@ function SearchForm({
               className={`${INPUT} w-40`}
               value={draft.since}
               onChange={(event) => {
-                setDraft({ ...draft, since: event.target.value });
+                apply({ ...draft, since: event.target.value });
               }}
             />
           </label>
@@ -185,7 +198,7 @@ function SearchForm({
               className={`${INPUT} w-40`}
               value={draft.until}
               onChange={(event) => {
-                setDraft({ ...draft, until: event.target.value });
+                apply({ ...draft, until: event.target.value });
               }}
             />
           </label>
@@ -193,7 +206,7 @@ function SearchForm({
             <Toggle
               checked={draft.ratedOnly}
               onChange={(ratedOnly) => {
-                setDraft({ ...draft, ratedOnly });
+                apply({ ...draft, ratedOnly });
               }}
             >
               Classées seulement

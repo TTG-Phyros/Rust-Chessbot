@@ -9,21 +9,24 @@
 //!    `until` are left out, so that the same options select the same games.
 //! 2. [`fit`]: one model per time class on that sample (see
 //!    [`chess_review::elo`]), saved as the model the reviews use.
+//!
+//! [`refresh`] computes the sample's features again from the cache when the
+//! classification or the accuracy change, before fitting again.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
-use chess_chesscom::{GameFilter, PlayedGame, TimeClass};
+use chess_chesscom::{ApiGame, GameFilter, PlayedGame, TimeClass};
 use chess_core::Color;
 use chess_openings::Book;
 use chess_review::elo::{self, EloFeatures, EloModel, Sample};
-use chess_review::{SearchSettings, review_game};
+use chess_review::{GameReview, SearchSettings, Thresholds, review_game};
 use serde::{Deserialize, Serialize};
 
 use crate::config::EngineKind;
 use crate::error::Error;
 use crate::jobs::{JobRequest, ReviewService};
-use crate::store::analysis_key;
+use crate::store::{Store, analysis_key};
 
 /// What [`collect`] samples.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -215,21 +218,8 @@ async fn sample_player(
         .games(username, &filter)
         .map_err(|err| err.to_string())?;
     for api in games {
-        let (Ok(game), Ok(Some(analysis))) =
-            (PlayedGame::from_api(&api), store.analysis(api.id(), &key))
+        let Some((game, review)) = review(store, &api, &key, &service.config().classification)
         else {
-            continue;
-        };
-        let book = Book::lichess()
-            .classify(game.game.start(), game.game.moves())
-            .book_plies;
-        let Ok(review) = review_game(
-            game.game.start(),
-            game.game.moves(),
-            &analysis.positions,
-            book,
-            &service.config().classification,
-        ) else {
             continue;
         };
         for color in [Color::White, Color::Black] {
@@ -252,6 +242,71 @@ async fn sample_player(
         }
     }
     Ok(key)
+}
+
+/// The review of a cached game from its analysis `key`, as the reviews
+/// make it; `None` when the analysis is missing or does not fit the game.
+fn review(
+    store: &Store,
+    api: &ApiGame,
+    key: &str,
+    thresholds: &Thresholds,
+) -> Option<(PlayedGame, GameReview)> {
+    let game = PlayedGame::from_api(api).ok()?;
+    let analysis = store.analysis(api.id(), key).ok()??;
+    let book = Book::lichess()
+        .classify(game.game.start(), game.game.moves())
+        .book_plies;
+    let review = review_game(
+        game.game.start(),
+        game.game.moves(),
+        &analysis.positions,
+        book,
+        thresholds,
+    )
+    .ok()?;
+    Some((game, review))
+}
+
+/// Computes the features of `dataset`'s samples again from the cached
+/// analyses of their games, with `thresholds` and the current accuracy:
+/// after a change of the classification, without downloading or analysing
+/// anything. Samples whose game or analysis is not in the cache, or that
+/// no longer have enough moves, are dropped; returns how many.
+///
+/// # Errors
+///
+/// When the cache fails.
+pub fn refresh(
+    store: &Store,
+    thresholds: &Thresholds,
+    dataset: &mut Dataset,
+) -> Result<usize, Error> {
+    let before = dataset.samples.len();
+    let mut reviews: HashMap<String, Option<GameReview>> = HashMap::new();
+    let mut kept = Vec::with_capacity(before);
+    for mut sample in std::mem::take(&mut dataset.samples) {
+        if !reviews.contains_key(&sample.game_id) {
+            let review = store.game(&sample.game_id)?.and_then(|api| {
+                review(store, &api, &dataset.analysis, thresholds).map(|(_, review)| review)
+            });
+            reviews.insert(sample.game_id.clone(), review);
+        }
+        let color = if sample.color == "white" {
+            Color::White
+        } else {
+            Color::Black
+        };
+        let features = reviews[&sample.game_id]
+            .as_ref()
+            .and_then(|review| EloFeatures::of(review.player(color)));
+        if let Some(features) = features {
+            sample.features = features;
+            kept.push(sample);
+        }
+    }
+    dataset.samples = kept;
+    Ok(before - dataset.samples.len())
 }
 
 /// The players met and the samples kept, for one time class.

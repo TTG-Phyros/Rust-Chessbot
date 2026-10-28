@@ -7,9 +7,10 @@ use std::path::PathBuf;
 use chess_core::Position;
 use chess_dataset::{DatasetWriter, Outcome, Record};
 use chess_jobs::{
-    Broker, DatasetStatus, Device, Directive, EventKind, Hyperparameters, JobKind, JobStatus, Lab,
-    LabError, LabPaths, Progress, SelfplayRequest, TrainingProgress, TrainingRequest,
-    TrainingSummary, WorkerInfo,
+    Broker, Contestant, DatasetStatus, Device, Directive, EvaluationProgress, EvaluationRequest,
+    EventKind, Hyperparameters, JobKind, JobSpec, JobStatus, Lab, LabError, LabPaths, MatchResult,
+    Progress, SelfplayRequest, Sprt, TrainingProgress, TrainingRequest, TrainingSummary, Verdict,
+    WorkerInfo,
 };
 use chess_nnue::Network;
 use chess_nnue::spec::presets;
@@ -595,4 +596,199 @@ fn idempotency_keys_replay_the_first_response() {
         lab.idempotency_begin("k2 POST /x", "abc", "f3").unwrap(),
         Idempotency::New
     );
+}
+
+/// A model trained (as far as the lab knows) by a training job.
+fn model(lab: &Lab, dir: &std::path::Path, seed: u64) -> chess_jobs::Model {
+    training(lab, dir, Device::Cpu);
+    let claim = lab.claim(&worker("trainer", false)).unwrap().unwrap();
+    let network = Network::pseudo_random(&presets::get("fast-768").unwrap().architecture, seed)
+        .unwrap()
+        .to_bytes();
+    let summary = TrainingSummary {
+        superbatches: 3,
+        positions: 300,
+        final_loss: None,
+        device: "CPU".into(),
+    };
+    lab.complete_training(claim.token(), &network, &summary)
+        .unwrap()
+}
+
+fn evaluation(candidate: chess_jobs::ModelId) -> EvaluationRequest {
+    EvaluationRequest {
+        name: None,
+        candidate,
+        baseline: None,
+        games: 1_000,
+        nodes: None,
+        move_time_ms: None,
+        sprt: None,
+        seed: None,
+        threads: 0,
+    }
+}
+
+#[test]
+fn evaluation_requests_report_every_problem() {
+    let (lab, dir) = lab("evaluation-requests");
+    let model = model(&lab, &dir, 1);
+    let unknown = chess_jobs::ModelId::generate();
+    let err = lab
+        .create_evaluation(&EvaluationRequest {
+            baseline: Some(unknown),
+            games: 1,
+            nodes: Some(5),
+            move_time_ms: Some(100),
+            sprt: Some(Sprt {
+                elo1: -5.0,
+                ..Sprt::default()
+            }),
+            threads: 1_000,
+            ..evaluation(model.id)
+        })
+        .unwrap_err();
+    let LabError::Invalid(errors) = err else {
+        panic!("{err}");
+    };
+    let paths: Vec<&str> = errors.iter().map(|e| e.path.as_str()).collect();
+    assert_eq!(
+        paths,
+        [
+            "/games",
+            "/moveTimeMs",
+            "/nodes",
+            "/threads",
+            "/sprt/elo1",
+            "/baseline"
+        ],
+        "{errors:?}"
+    );
+    let LabError::Invalid(errors) = lab
+        .create_evaluation(&EvaluationRequest {
+            baseline: Some(model.id),
+            ..evaluation(model.id)
+        })
+        .unwrap_err()
+    else {
+        panic!("not a validation error");
+    };
+    assert_eq!(
+        errors[0].message,
+        "the candidate cannot play against itself"
+    );
+
+    // Defaults: the classical evaluation at 5000 nodes, an even number of
+    // games, a recorded seed and both contestants described.
+    let job = lab
+        .create_evaluation(&EvaluationRequest {
+            games: 7,
+            ..evaluation(model.id)
+        })
+        .unwrap();
+    assert_eq!(job.name, format!("{} vs classical evaluation", model.name));
+    let JobSpec::Evaluation(spec) = &job.spec else {
+        panic!("not an evaluation");
+    };
+    assert_eq!(
+        (spec.games, spec.nodes, spec.move_time_ms),
+        (8, Some(5_000), None)
+    );
+    assert_eq!(spec.candidate.model, Some(model.id));
+    assert_eq!(spec.candidate.bytes, Some(model.bytes));
+    assert_eq!(
+        spec.candidate.parameters,
+        Some(model.architecture.estimate().parameters)
+    );
+    assert_eq!(spec.baseline, Contestant::classic());
+
+    // Timed matches search no fixed number of nodes.
+    let timed = lab
+        .create_evaluation(&EvaluationRequest {
+            move_time_ms: Some(50),
+            ..evaluation(model.id)
+        })
+        .unwrap();
+    let JobSpec::Evaluation(spec) = &timed.spec else {
+        panic!("not an evaluation");
+    };
+    assert_eq!((spec.nodes, spec.move_time_ms), (None, Some(50)));
+}
+
+#[test]
+fn evaluations_run_on_cpu_workers_and_keep_their_result() {
+    let (lab, dir) = lab("evaluation-lifecycle");
+    let (a, b) = (model(&lab, &dir, 1), model(&lab, &dir, 2));
+    let job = lab
+        .create_evaluation(&EvaluationRequest {
+            baseline: Some(b.id),
+            sprt: Some(Sprt::default()),
+            ..evaluation(a.id)
+        })
+        .unwrap();
+
+    // Only workers that accept evaluations take it, GPU or not.
+    assert!(lab.claim(&worker("trainer", true)).unwrap().is_none());
+    let evaluator = WorkerInfo {
+        kinds: vec![JobKind::Evaluation],
+        ..worker("evaluator", true)
+    };
+    let claim = lab.claim(&evaluator).unwrap().unwrap();
+    assert!(!claim.gpu);
+
+    // The models it plays with cannot be deleted meanwhile.
+    let err = lab.delete_model(b.id).unwrap_err();
+    assert!(err.to_string().contains("is used by job"), "{err}");
+
+    let partial = EvaluationProgress::new(
+        MatchResult {
+            wins: 10,
+            draws: 4,
+            losses: 6,
+        },
+        1_000,
+        Some(&Sprt::default()),
+    );
+    lab.progress(claim.token(), &Progress::Evaluation(partial))
+        .unwrap();
+    let last = EvaluationProgress {
+        candidate_nps: Some(1_000_000),
+        ..EvaluationProgress::new(
+            MatchResult {
+                wins: 300,
+                draws: 100,
+                losses: 100,
+            },
+            1_000,
+            Some(&Sprt::default()),
+        )
+    };
+    let done = lab.complete_evaluation(claim.token(), &last).unwrap();
+    assert_eq!(done.status, JobStatus::Succeeded);
+    assert_eq!(done.progress, Some(Progress::Evaluation(last.clone())));
+    assert_eq!(last.sprt.unwrap().verdict, Verdict::Pass);
+    assert_eq!(lab.evaluation_results().unwrap(), vec![done.clone()]);
+    let err = lab.resume(job.id).unwrap_err();
+    assert!(err.to_string().contains("only training jobs"), "{err}");
+
+    // Once over, its models can go; its result still names them.
+    lab.delete_model(b.id).unwrap();
+    let JobSpec::Evaluation(spec) = lab.job(job.id).unwrap().spec else {
+        panic!("not an evaluation");
+    };
+    assert_eq!(spec.baseline.name, b.name);
+
+    // A stopped match keeps the games played.
+    let job = lab.create_evaluation(&evaluation(a.id)).unwrap();
+    let claim = lab.claim(&evaluator).unwrap().unwrap();
+    lab.stop(job.id).unwrap();
+    assert_eq!(lab.heartbeat(claim.token()).unwrap(), Directive::Stop);
+    let stopped = lab
+        .complete_evaluation(
+            claim.token(),
+            &EvaluationProgress::new(MatchResult::default(), 1_000, None),
+        )
+        .unwrap();
+    assert_eq!(stopped.status, JobStatus::Stopped);
+    assert_eq!(lab.evaluation_results().unwrap().len(), 2);
 }

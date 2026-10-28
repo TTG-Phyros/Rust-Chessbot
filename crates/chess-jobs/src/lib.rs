@@ -1,6 +1,6 @@
 //! The NNUE lab's store and job queue.
 //!
-//! A [`Lab`] keeps datasets, jobs (training, self-play), their events and
+//! A [`Lab`] keeps datasets, jobs (training, self-play, evaluation), their events and
 //! the models they produce in one SQLite database, owned by the server,
 //! and their files in [`LabPaths`]. Workers take jobs through the
 //! [`Broker`] trait: one job at a time each, at most one job on the GPU,
@@ -15,6 +15,7 @@ mod hyper;
 mod ids;
 mod lab;
 mod paths;
+mod stats;
 mod types;
 
 use chess_nnue_spec::ValidationError;
@@ -25,11 +26,13 @@ pub use hyper::Hyperparameters;
 pub use ids::{ArchitectureId, DatasetId, JobId, ModelId};
 pub use lab::{IDEMPOTENCY_TTL, Idempotency, Lab, MAX_PAGE};
 pub use paths::LabPaths;
+pub use stats::{MatchResult, Sprt, Verdict, ratings};
 pub use types::{
-    BURN, Dataset, DatasetRef, DatasetSource, DatasetStatus, Device, EventKind, Job, JobEvent,
-    JobKind, JobSpec, JobStatus, Model, Progress, Provenance, SelfplayJob, SelfplayProgress,
-    SelfplayRequest, StoredArchitecture, TrainingJob, TrainingProgress, TrainingRequest,
-    TrainingSummary,
+    BURN, CLASSIC, Contestant, DEFAULT_MATCH_NODES, Dataset, DatasetRef, DatasetSource,
+    DatasetStatus, Device, EvaluationJob, EvaluationProgress, EvaluationRequest, EventKind, Job,
+    JobEvent, JobKind, JobSpec, JobStatus, Model, Progress, Provenance, SelfplayJob,
+    SelfplayProgress, SelfplayRequest, SprtStatus, StoredArchitecture, TrainingJob,
+    TrainingProgress, TrainingRequest, TrainingSummary,
 };
 
 /// Why a lab operation failed.

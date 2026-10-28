@@ -1,6 +1,7 @@
 """Trains a network through the NNUE lab API with the Python SDK: validates
 and saves examples/architecture.json, uploads a dataset, trains, follows the
-live events, then activates and downloads the model.
+live events, downloads the model, evaluates it against the classical
+evaluation, then activates it.
 
     pip install ../../sdk/python
     CHESS_API_URL=http://localhost:8080 CHESS_API_KEY=... python train.py positions.cbds
@@ -24,6 +25,7 @@ def main(dataset: Path) -> None:
     datasets = lab.DatasetsApi(client)
     runs = lab.TrainingRunsApi(client)
     models = lab.ModelsApi(client)
+    evaluations = lab.EvaluationsApi(client)
 
     # 1. Validate the architecture: errors, size and cost before training anything.
     document = json.loads((Path(__file__).parent.parent / "architecture.json").read_text("utf-8"))
@@ -60,7 +62,53 @@ def main(dataset: Path) -> None:
     print(f"training run {run.id} queued")
 
     # 5. Follow its live events (Server-Sent Events) until the run is over.
-    stream = runs.stream_training_events_without_preload_content(str(run.id))
+    follow(runs.stream_training_events_without_preload_content(str(run.id)))
+    job = runs.get_training_run(str(run.id))
+    if job.status != lab.JobStatus.SUCCEEDED:
+        sys.exit(f"run ended {job.status.value}: {job.error or ''}")
+    model = str(job.model)
+
+    # 6. Download the network file.
+    path = Path(f"{model}.nnue")
+    path.write_bytes(models.download_model(model))
+    print(f"model {model} saved to {path}")
+
+    # 7. Evaluate it: a match against the classical evaluation, at a fixed
+    #    number of nodes per move, stopped as soon as the SPRT concludes.
+    evaluation = evaluations.create_evaluation(
+        lab.EvaluationRequest(
+            candidate=model,
+            games=20,
+            nodes=1000,
+            sprt=lab.Sprt(elo0=0, elo1=50),
+            seed=1,
+            threads=2,
+        )
+    )
+    print(f"evaluation {evaluation.id} queued")
+    follow(evaluations.stream_evaluation_events_without_preload_content(str(evaluation.id)))
+    done = evaluations.get_evaluation(str(evaluation.id))
+    if done.status != lab.JobStatus.SUCCEEDED:
+        sys.exit(f"evaluation ended {done.status.value}: {done.error or ''}")
+    result = done.progress.actual_instance
+    candidate = done.spec.actual_instance.candidate
+    print(
+        f"against the classical evaluation: +{result.wins} ={result.draws} -{result.losses}, "
+        f"Elo {result.elo:+.1f} ± {result.elo_error:.1f}, LOS {result.los:.1%}, "
+        f"SPRT {result.sprt.verdict.value}"
+    )
+    print(
+        f"speed {result.candidate_nps} nodes/s (classical: {result.baseline_nps}), "
+        f"network {candidate.parameters} parameters, {candidate.bytes} bytes"
+    )
+
+    # 8. Make it the engine's network.
+    models.activate_model(model)
+    print(f"model {model} active")
+
+
+def follow(stream) -> None:
+    """Prints the events of a job's stream until it ends."""
     pending = b""
     for chunk in stream.stream(decode_content=True):
         *lines, pending = (pending + chunk).split(b"\n")
@@ -69,23 +117,18 @@ def main(dataset: Path) -> None:
                 show(lab.JobEvent.from_json(line[5:].decode("utf-8")))
     stream.release_conn()
 
-    job = runs.get_training_run(str(run.id))
-    if job.status != lab.JobStatus.SUCCEEDED:
-        sys.exit(f"run ended {job.status.value}: {job.error or ''}")
-
-    # 6. Make it the engine's network, and download the file.
-    models.activate_model(str(job.model))
-    path = Path(f"{job.model}.nnue")
-    path.write_bytes(models.download_model(str(job.model)))
-    print(f"model {job.model} active, saved to {path}")
-
 
 def show(event: lab.JobEvent) -> None:
-    if event.kind == lab.EventKind.PROGRESS:
-        data = event.data
+    data = event.data
+    if event.kind == lab.EventKind.STATUS:
+        print(f"  status: {data['status']}")
+    elif event.kind == lab.EventKind.PROGRESS and data["kind"] == "training":
         print(f"  superbatch {data['superbatch']}/{data['superbatches']}: loss {data['loss']}")
-    elif event.kind == lab.EventKind.STATUS:
-        print(f"  status: {event.data['status']}")
+    elif event.kind == lab.EventKind.PROGRESS and data["kind"] == "evaluation" and data["games"]:
+        print(
+            f"  games {data['games']}/{data['gamesMax']}: "
+            f"+{data['wins']} ={data['draws']} -{data['losses']}"
+        )
 
 
 if __name__ == "__main__":

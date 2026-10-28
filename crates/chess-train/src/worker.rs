@@ -1,20 +1,24 @@
 //! Lab worker: takes the jobs of the NNUE lab's queue (a
 //! [`chess_jobs::Broker`]) one at a time and runs them — training with a
-//! [`Trainer`], self-play into the job's dataset — reporting progress and
-//! heartbeats, stopping (after a checkpoint) when asked to.
+//! [`Trainer`], self-play into the job's dataset, evaluation matches in the
+//! arena — reporting progress and heartbeats, stopping (after a
+//! checkpoint) when asked to.
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, ensure};
+use chess_eval::EngineEval;
 use chess_jobs::{
-    Broker, Claim, ClaimToken, Directive, EventKind, JobId, JobSpec, LabError, LabPaths, Progress,
+    Broker, Claim, ClaimToken, Contestant, DEFAULT_MATCH_NODES, Directive, EvaluationJob,
+    EvaluationProgress, EventKind, JobId, JobSpec, LabError, LabPaths, MatchResult, Progress,
     SelfplayJob, SelfplayProgress, TrainingJob, TrainingProgress, TrainingSummary, WorkerInfo,
 };
 use chess_search::StopFlag;
 use serde_json::json;
 
+use crate::arena::{self, ArenaConfig, MoveLimit};
 use crate::device::{self, DevicePreference, SelectedDevice};
 use crate::selfplay::{self, SelfplayConfig, SelfplayStats};
 use crate::trainer::{
@@ -91,6 +95,7 @@ impl Worker<'_> {
             let result = match &claim.job.spec {
                 JobSpec::Training(training) => self.train(&claim, training, &job),
                 JobSpec::Selfplay(selfplay) => self.selfplay(selfplay, &job, &stats),
+                JobSpec::Evaluation(evaluation) => self.evaluate(evaluation, &job),
             };
             done.stop();
             let _ = heartbeats.join();
@@ -133,7 +138,9 @@ impl Worker<'_> {
                     JobSpec::Selfplay(selfplay) => self
                         .broker
                         .progress(job.token, &selfplay_progress(selfplay, stats)),
-                    JobSpec::Training(_) => self.broker.heartbeat(job.token),
+                    JobSpec::Training(_) | JobSpec::Evaluation(_) => {
+                        self.broker.heartbeat(job.token)
+                    }
                 };
                 job.obey(directive);
             }
@@ -240,6 +247,87 @@ impl Worker<'_> {
         Ok(())
     }
 }
+
+impl Worker<'_> {
+    /// Plays the match of an evaluation job, after measuring the speed of
+    /// both engines on this machine; reports the result after each batch
+    /// of games.
+    fn evaluate(&self, job: &EvaluationJob, run: &JobRun<'_>) -> Result<()> {
+        let load = |contestant: &Contestant| -> Result<EngineEval> {
+            let Some(model) = contestant.model else {
+                return Ok(EngineEval::default());
+            };
+            let path = self.paths.model_file(model);
+            let bytes = std::fs::read(&path)
+                .with_context(|| format!("network {} not found", path.display()))?;
+            EngineEval::from_nnue_bytes(&bytes)
+                .with_context(|| format!("model {model} is not a valid network"))
+        };
+        let (candidate, baseline) = (load(&job.candidate)?, load(&job.baseline)?);
+        // Before the match, which takes every core it is given.
+        let candidate_nps = arena::measure_nps(&candidate, NPS_NODES);
+        let baseline_nps = arena::measure_nps(&baseline, NPS_NODES);
+        tracing::info!(job = %run.token.job, candidate_nps, baseline_nps, "speeds measured");
+        let progress = |result: MatchResult| EvaluationProgress {
+            candidate_nps: Some(candidate_nps),
+            baseline_nps: Some(baseline_nps),
+            ..EvaluationProgress::new(result, job.games, job.sprt.as_ref())
+        };
+        let report = |result: MatchResult| {
+            run.obey(
+                self.broker
+                    .progress(run.token, &Progress::Evaluation(progress(result))),
+            );
+        };
+        report(MatchResult::default());
+
+        let sprt = job.sprt.unwrap_or_default();
+        let config = ArenaConfig {
+            games: job.games,
+            limit: Some(match job.move_time_ms {
+                Some(ms) => MoveLimit::Time(ms),
+                None => MoveLimit::Nodes(job.nodes.unwrap_or(DEFAULT_MATCH_NODES)),
+            }),
+            threads: job.threads,
+            seed: job.seed,
+            sprt: job.sprt.is_some(),
+            elo0: sprt.elo0,
+            elo1: sprt.elo1,
+            alpha: sprt.alpha,
+            beta: sprt.beta,
+            ..ArenaConfig::default()
+        };
+        let result = arena::play_match(
+            &arena::Contestant::Engine(candidate),
+            &arena::Contestant::Engine(baseline),
+            &config,
+            &run.stop,
+            report,
+        )?;
+        if run.lost() {
+            return Ok(());
+        }
+        if run.stop.is_stopped() && !run.requested.load(Ordering::Relaxed) {
+            // The worker is shutting down: the games are not all played.
+            self.broker.stopped(run.token)?;
+            return Ok(());
+        }
+        let done = self
+            .broker
+            .complete_evaluation(run.token, &progress(result))?;
+        tracing::info!(
+            job = %done.id,
+            games = result.games(),
+            elo = format!("{:+.1}", result.elo()),
+            error = format!("±{:.1}", result.elo_error()),
+            "evaluation done"
+        );
+        Ok(())
+    }
+}
+
+/// Nodes per bench position when measuring the speed of an engine.
+const NPS_NODES: u64 = 20_000;
 
 fn selfplay_progress(job: &SelfplayJob, stats: &SelfplayStats) -> Progress {
     Progress::Selfplay(SelfplayProgress {
@@ -361,7 +449,7 @@ mod tests {
             info: WorkerInfo {
                 id: "test".into(),
                 gpu: false,
-                kinds: vec![JobKind::Training, JobKind::Selfplay],
+                kinds: vec![JobKind::Training, JobKind::Selfplay, JobKind::Evaluation],
                 trainers: vec!["burn".into()],
             },
             gpu: None,
@@ -513,6 +601,29 @@ mod tests {
         assert_eq!(progress.step, 32);
     }
 
+    /// Serves the internal API of `lab` (workers' token `token`) on a
+    /// local port, for as long as the test runs.
+    fn serve(lab: &std::sync::Arc<Lab>) -> std::net::SocketAddr {
+        let api = chess_nnue_api::NnueApi::new(
+            std::sync::Arc::clone(lab),
+            chess_nnue_api::ApiConfig {
+                worker_token: Some("token".into()),
+                ..chess_nnue_api::ApiConfig::default()
+            },
+        );
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let listener = runtime
+            .block_on(tokio::net::TcpListener::bind("127.0.0.1:0"))
+            .unwrap();
+        let address = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            runtime.block_on(async move {
+                let _ = axum::serve(listener, api.router()).await;
+            });
+        });
+        address
+    }
+
     /// The same chain through the server's internal API, as a worker in
     /// another container runs it.
     #[test]
@@ -522,26 +633,7 @@ mod tests {
         let dataset = upload(&lab, &dir);
         let job = lab.create_training(&request(dataset.id, 2)).unwrap();
 
-        let api = chess_nnue_api::NnueApi::new(
-            std::sync::Arc::clone(&lab),
-            chess_nnue_api::ApiConfig {
-                worker_token: Some("token".into()),
-                ..chess_nnue_api::ApiConfig::default()
-            },
-        );
-        let (address, server) = {
-            let runtime = tokio::runtime::Runtime::new().unwrap();
-            let listener = runtime
-                .block_on(tokio::net::TcpListener::bind("127.0.0.1:0"))
-                .unwrap();
-            let address = listener.local_addr().unwrap();
-            let server = std::thread::spawn(move || {
-                runtime.block_on(async move {
-                    let _ = axum::serve(listener, api.router()).await;
-                });
-            });
-            (address, server)
-        };
+        let address = serve(&lab);
         let http = crate::remote::HttpBroker::new(&format!("http://{address}"), "token").unwrap();
         let worker = Worker {
             broker: &http,
@@ -566,7 +658,64 @@ mod tests {
             intruder.claim(&worker.info),
             Err(LabError::Unavailable(message)) if message.starts_with("401")
         ));
-        drop(server);
+    }
+
+    /// An evaluation match between a trained model and the classical
+    /// evaluation, played by a worker over HTTP: the result, the speeds
+    /// and the SPRT status are reported, and the same seed replays the
+    /// same games.
+    #[test]
+    fn evaluations_play_matches_over_http() {
+        let (lab, dir) = lab("worker-evaluation");
+        let lab = std::sync::Arc::new(lab);
+        let dataset = upload(&lab, &dir);
+        let job = lab.create_training(&request(dataset.id, 1)).unwrap();
+        worker(&lab).run_one(&StopFlag::new()).unwrap();
+        let model = lab.job(job.id).unwrap().model.unwrap();
+
+        let address = serve(&lab);
+        let http = crate::remote::HttpBroker::new(&format!("http://{address}"), "token").unwrap();
+        let worker = Worker {
+            broker: &http,
+            ..worker(&lab)
+        };
+        let evaluation = chess_jobs::EvaluationRequest {
+            name: None,
+            candidate: model,
+            baseline: None,
+            games: 6,
+            nodes: Some(300),
+            move_time_ms: None,
+            sprt: Some(chess_jobs::Sprt::default()),
+            seed: Some(3),
+            threads: 2,
+        };
+        let mut results = Vec::new();
+        for _ in 0..2 {
+            let job = lab.create_evaluation(&evaluation).unwrap();
+            assert_eq!(worker.run_one(&StopFlag::new()).unwrap(), Some(job.id));
+            let done = lab.job(job.id).unwrap();
+            assert_eq!(done.status, JobStatus::Succeeded, "{:?}", done.error);
+            let Some(Progress::Evaluation(result)) = done.progress else {
+                panic!("no result: {done:?}");
+            };
+            assert_eq!(result.games, 6);
+            assert_eq!(result.wins + result.draws + result.losses, 6);
+            assert!(result.candidate_nps.unwrap() > 0 && result.baseline_nps.unwrap() > 0);
+            let sprt = result.sprt.unwrap();
+            assert_eq!(sprt.verdict, chess_jobs::Verdict::Inconclusive);
+            assert!(sprt.lower_bound < sprt.llr && sprt.llr < sprt.upper_bound);
+            // One progress report before the games, one per batch of pairs.
+            let reports = lab
+                .events(job.id, 0, 100)
+                .unwrap()
+                .into_iter()
+                .filter(|e| e.kind == EventKind::Progress)
+                .count();
+            assert!(reports >= 3, "{reports}");
+            results.push(result.result());
+        }
+        assert_eq!(results[0], results[1]);
     }
 
     #[test]

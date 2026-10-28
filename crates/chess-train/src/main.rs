@@ -175,7 +175,8 @@ enum Command {
         #[arg(long, allow_negative_numbers = true)]
         elo1: Option<f64>,
     },
-    /// NNUE lab worker: runs the queued training and self-play jobs, one at a time.
+    /// NNUE lab worker: runs the queued training, self-play and evaluation
+    /// jobs, one at a time.
     Worker {
         #[command(flatten)]
         lab: LabLocation,
@@ -449,7 +450,7 @@ fn run_match(a: &str, b: &str, config: &arena::ArenaConfig) -> Result<()> {
     })?;
     println!("final: {}", report(result));
     if config.sprt {
-        let verdict = match result.verdict(config) {
+        let verdict = match config.sprt_test().verdict(result) {
             arena::Verdict::Pass => "H1 accepted: A is stronger",
             arena::Verdict::Fail => "H0 accepted: A is not stronger",
             arena::Verdict::Inconclusive => "inconclusive (more games needed)",
@@ -667,7 +668,7 @@ fn run_worker(
         info: WorkerInfo {
             id: format!("{host}-{}", std::process::id()),
             gpu: gpu.is_some(),
-            kinds: vec![JobKind::Training, JobKind::Selfplay],
+            kinds: vec![JobKind::Training, JobKind::Selfplay, JobKind::Evaluation],
             trainers: vec![BurnTrainer { device: &selected }.id().into()],
         },
         gpu,

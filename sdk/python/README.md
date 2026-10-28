@@ -1,5 +1,5 @@
 # chess-nnue-lab
-Declare NNUE architectures, upload or generate datasets, train networks and manage the resulting models.
+Declare NNUE architectures, upload or generate datasets, train networks, evaluate them in matches and manage the resulting models.
 
 Authentication: an API key in the `X-API-Key` header. Errors are RFC 9457 problem details (`application/problem+json`); lists page with `limit` and `cursor`; creations accept an `Idempotency-Key` header (kept 24 h). Limits: requests per minute per key (429 with `Retry-After`), size of uploads (413).
 
@@ -116,6 +116,12 @@ Class | Method | HTTP request | Description
 *DatasetsApi* | [**list_datasets**](docs/DatasetsApi.md#list_datasets) | **GET** /api/v1/datasets | Datasets.
 *DatasetsApi* | [**start_selfplay**](docs/DatasetsApi.md#start_selfplay) | **POST** /api/v1/datasets:selfplay | Starts a self-play run that generates a new dataset.
 *DatasetsApi* | [**upload_dataset**](docs/DatasetsApi.md#upload_dataset) | **POST** /api/v1/datasets | Uploads a dataset file (&#x60;CBDS&#x60;, see the documentation). It is checked record by record while it streams to disk; nothing is kept if it is invalid.
+*EvaluationsApi* | [**compare_models**](docs/EvaluationsApi.md#compare_models) | **GET** /api/v1/evaluations:compare | Compares models (and the classical evaluation) over every evaluation played between two of them, whatever its settings: network size, speed, results of each pair, and Elo ratings fitted over all the games (Bradley–Terry maximum likelihood, relative to the first player).
+*EvaluationsApi* | [**create_evaluation**](docs/EvaluationsApi.md#create_evaluation) | **POST** /api/v1/evaluations | Queues an evaluation match: the candidate model plays pairs of games against the baseline (a model, or the classical evaluation) from the same random opening with colors swapped, at a fixed number of nodes (reproducible) or time per move. With &#x60;sprt&#x60;, the match stops as soon as the test concludes. The worker first measures the speed (nodes per second) of both engines.
+*EvaluationsApi* | [**get_evaluation**](docs/EvaluationsApi.md#get_evaluation) | **GET** /api/v1/evaluations/{id} | An evaluation, with its latest result: W/D/L, Elo difference ± its 95 % error, likelihood of superiority, SPRT status, and the speed of both engines. Its &#x60;spec&#x60; describes both contestants (name, architecture, size), even once their models are deleted.
+*EvaluationsApi* | [**list_evaluations**](docs/EvaluationsApi.md#list_evaluations) | **GET** /api/v1/evaluations | Evaluations, newest first.
+*EvaluationsApi* | [**stop_evaluation**](docs/EvaluationsApi.md#stop_evaluation) | **POST** /api/v1/evaluations/{id}:stop | Stops an evaluation: a queued one is canceled, a running one stops after its current games and keeps their result.
+*EvaluationsApi* | [**stream_evaluation_events**](docs/EvaluationsApi.md#stream_evaluation_events) | **GET** /api/v1/evaluations/{id}/events | Live events of an evaluation (Server-Sent Events): &#x60;status&#x60;, and a &#x60;progress&#x60; after each batch of games. See the training runs&#39; events.
 *MetaApi* | [**get_open_api_document**](docs/MetaApi.md#get_open_api_document) | **GET** /api/v1/openapi.json | This document
 *ModelsApi* | [**activate_model**](docs/ModelsApi.md#activate_model) | **POST** /api/v1/models/{id}:activate | Makes the engine play (and analyse) with this model, from the next search on.
 *ModelsApi* | [**deactivate_model**](docs/ModelsApi.md#deactivate_model) | **POST** /api/v1/models:deactivate | Goes back to the server&#39;s configured network.
@@ -145,6 +151,9 @@ Class | Method | HTTP request | Description
  - [ArchitecturePage](docs/ArchitecturePage.md)
  - [BucketScope](docs/BucketScope.md)
  - [BucketStrategy](docs/BucketStrategy.md)
+ - [ComparedPlayer](docs/ComparedPlayer.md)
+ - [Comparison](docs/Comparison.md)
+ - [Contestant](docs/Contestant.md)
  - [Dataset](docs/Dataset.md)
  - [DatasetPage](docs/DatasetPage.md)
  - [DatasetRef](docs/DatasetRef.md)
@@ -155,6 +164,9 @@ Class | Method | HTTP request | Description
  - [DenseShape](docs/DenseShape.md)
  - [Device](docs/Device.md)
  - [Estimate](docs/Estimate.md)
+ - [EvaluationJob](docs/EvaluationJob.md)
+ - [EvaluationProgress](docs/EvaluationProgress.md)
+ - [EvaluationRequest](docs/EvaluationRequest.md)
  - [EventKind](docs/EventKind.md)
  - [FeatureSet](docs/FeatureSet.md)
  - [Features](docs/Features.md)
@@ -167,6 +179,7 @@ Class | Method | HTTP request | Description
  - [JobSpec](docs/JobSpec.md)
  - [JobSpecOneOf](docs/JobSpecOneOf.md)
  - [JobSpecOneOf1](docs/JobSpecOneOf1.md)
+ - [JobSpecOneOf2](docs/JobSpecOneOf2.md)
  - [JobStatus](docs/JobStatus.md)
  - [Layout](docs/Layout.md)
  - [Metadata](docs/Metadata.md)
@@ -178,23 +191,28 @@ Class | Method | HTTP request | Description
  - [ModelView](docs/ModelView.md)
  - [Outcomes](docs/Outcomes.md)
  - [OutputBuckets](docs/OutputBuckets.md)
+ - [PairResult](docs/PairResult.md)
  - [Preset](docs/Preset.md)
  - [Problem](docs/Problem.md)
  - [Progress](docs/Progress.md)
  - [ProgressOneOf](docs/ProgressOneOf.md)
  - [ProgressOneOf1](docs/ProgressOneOf1.md)
+ - [ProgressOneOf2](docs/ProgressOneOf2.md)
  - [Provenance](docs/Provenance.md)
  - [Quantization](docs/Quantization.md)
  - [SelfplayJob](docs/SelfplayJob.md)
  - [SelfplayProgress](docs/SelfplayProgress.md)
  - [SelfplayRequest](docs/SelfplayRequest.md)
  - [SelfplayStarted](docs/SelfplayStarted.md)
+ - [Sprt](docs/Sprt.md)
+ - [SprtStatus](docs/SprtStatus.md)
  - [StoredArchitecture](docs/StoredArchitecture.md)
  - [SumWidth](docs/SumWidth.md)
  - [TrainingJob](docs/TrainingJob.md)
  - [TrainingProgress](docs/TrainingProgress.md)
  - [TrainingRequest](docs/TrainingRequest.md)
  - [ValidationReport](docs/ValidationReport.md)
+ - [Verdict](docs/Verdict.md)
  - [WeightType](docs/WeightType.md)
 
 

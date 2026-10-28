@@ -61,7 +61,8 @@ jobs:
       # freshness the rust job checks) with the pinned generator.
       - name: SDKs match the OpenAPI document
         run: |
-          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/local" -w /local             ${{ env.OPENAPI_GENERATOR }} batch --clean sdk/python.yaml sdk/typescript.yaml
+          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/local" -w /local \
+            ${{ env.OPENAPI_GENERATOR }} batch --clean sdk/python.yaml sdk/typescript.yaml
           if [ -n "$(git status --porcelain sdk)" ]; then
             git status --porcelain sdk
             echo "::error::The SDKs are out of date: run 'just gen-sdk' and commit sdk/"
@@ -94,11 +95,16 @@ jobs:
       - name: Start a server and a CPU worker, with a small self-play dataset
         run: |
           lab=$RUNNER_TEMP/lab
-          CHESS_TRAIN_DATA_DIR=$RUNNER_TEMP/train CHESS_TRAIN_DATASET_DIR=$RUNNER_TEMP/selfplay             target/release/chess-train --device cpu selfplay --games 200 --nodes 300
+          CHESS_TRAIN_DATA_DIR=$RUNNER_TEMP/train CHESS_TRAIN_DATASET_DIR=$RUNNER_TEMP/selfplay \
+            target/release/chess-train --device cpu selfplay --games 200 --nodes 300
           cp "$(ls "$RUNNER_TEMP"/selfplay/*.bin | head -1)" "$RUNNER_TEMP/positions.cbds"
-          CHESS_SERVER_BIND=127.0.0.1:3000 CHESS_SERVER_DATA_DIR=$RUNNER_TEMP/data             CHESS_API_KEYS=$CHESS_API_KEY CHESS_LAB_DIR=$lab CHESS_LAB_WORKER_TOKEN=ci-worker             target/release/chess-server > "$RUNNER_TEMP/server.log" 2>&1 &
-          target/release/chess-train --device cpu worker --server "$CHESS_API_URL"             --token ci-worker --lab "$lab" > "$RUNNER_TEMP/worker.log" 2>&1 &
-          curl -sS --retry 30 --retry-connrefused --retry-delay 1 -o served.json             "$CHESS_API_URL/api/v1/openapi.json"
+          CHESS_SERVER_BIND=127.0.0.1:3000 CHESS_SERVER_DATA_DIR=$RUNNER_TEMP/data \
+            CHESS_API_KEYS=$CHESS_API_KEY CHESS_LAB_DIR=$lab CHESS_LAB_WORKER_TOKEN=ci-worker \
+            target/release/chess-server > "$RUNNER_TEMP/server.log" 2>&1 &
+          target/release/chess-train --device cpu worker --server "$CHESS_API_URL" \
+            --token ci-worker --lab "$lab" > "$RUNNER_TEMP/worker.log" 2>&1 &
+          curl -sS --retry 30 --retry-connrefused --retry-delay 1 -o served.json \
+            "$CHESS_API_URL/api/v1/openapi.json"
           # The server serves the committed document.
           diff <(jq -S . served.json) <(jq -S . schemas/nnue-api.v1.openapi.json)
 
@@ -112,6 +118,12 @@ jobs:
         run: cd examples/go && go run . "$RUNNER_TEMP/positions.cbds"
       - name: The four runs (same seed) trained the same network
         run: test "$(sha256sum out/*/*.nnue examples/typescript/*.nnue examples/go/*.nnue | cut -d' ' -f1 | sort -u | wc -l)" = 1
+      - name: The four evaluations (same model, seed and threads) played the same games
+        run: |
+          curl -sS -H "X-API-Key: $CHESS_API_KEY" "$CHESS_API_URL/api/v1/evaluations" > evaluations.json
+          jq -c '.items[] | [.status, .progress.wins, .progress.draws, .progress.losses]' evaluations.json
+          test "$(jq '.items | length' evaluations.json)" = 4
+          test "$(jq -c '[.items[] | [.progress.wins, .progress.draws, .progress.losses]] | unique | length' evaluations.json)" = 1
 
       - name: Server and worker logs
         if: failure()

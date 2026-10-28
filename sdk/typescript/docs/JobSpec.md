@@ -20,6 +20,10 @@ Name | Type
 `network` | string
 `nodes` | number
 `threads` | number
+`baseline` | [Contestant](Contestant.md)
+`candidate` | [Contestant](Contestant.md)
+`moveTimeMs` | number
+`sprt` | [Sprt](Sprt.md)
 
 ## Example
 
@@ -41,6 +45,10 @@ const example = {
   "network": null,
   "nodes": null,
   "threads": null,
+  "baseline": null,
+  "candidate": null,
+  "moveTimeMs": null,
+  "sprt": null,
 } satisfies JobSpec
 
 console.log(example)

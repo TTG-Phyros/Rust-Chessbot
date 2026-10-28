@@ -1,4 +1,5 @@
-//! `/api/v1/training-runs` and `/api/v1/selfplay-runs`: the lab's jobs.
+//! `/api/v1/training-runs` and `/api/v1/selfplay-runs`: the lab's jobs
+//! (and what `/api/v1/evaluations` shares with them).
 
 use std::collections::VecDeque;
 use std::convert::Infallible;
@@ -79,7 +80,7 @@ pub(crate) async fn create_training(
     Ok(response)
 }
 
-fn page(api: &NnueApi, kind: JobKind, page: &PageQuery) -> ApiResult<Json<JobPage>> {
+pub(crate) fn page(api: &NnueApi, kind: JobKind, page: &PageQuery) -> ApiResult<Json<JobPage>> {
     let limit = page.limit()?;
     let items = api.lab.jobs(Some(kind), page.after()?, limit)?;
     Ok(Json(JobPage {
@@ -89,10 +90,11 @@ fn page(api: &NnueApi, kind: JobKind, page: &PageQuery) -> ApiResult<Json<JobPag
 }
 
 /// The job `id`, if it is of `kind`.
-fn job_of(api: &NnueApi, kind: JobKind, id: &str) -> ApiResult<Job> {
+pub(crate) fn job_of(api: &NnueApi, kind: JobKind, id: &str) -> ApiResult<Job> {
     let what = match kind {
         JobKind::Training => "training run",
         JobKind::Selfplay => "self-play run",
+        JobKind::Evaluation => "evaluation",
     };
     let id: JobId = parse_id(id, what)?;
     match api.lab.job(id) {
@@ -226,7 +228,7 @@ pub(crate) async fn metrics(
                     time: event.time,
                     progress,
                 }),
-                Progress::Selfplay(_) => None,
+                Progress::Selfplay(_) | Progress::Evaluation(_) => None,
             }
         }));
     }
@@ -359,7 +361,7 @@ pub(crate) async fn events_selfplay(
 }
 
 /// Sequence number to resume after: `Last-Event-ID`, else `after`, else 0.
-fn start_after(query: &EventsQuery, headers: &HeaderMap) -> i64 {
+pub(crate) fn start_after(query: &EventsQuery, headers: &HeaderMap) -> i64 {
     headers
         .get("last-event-id")
         .and_then(|v| v.to_str().ok())
@@ -368,7 +370,7 @@ fn start_after(query: &EventsQuery, headers: &HeaderMap) -> i64 {
         .unwrap_or(0)
 }
 
-fn event_stream(api: NnueApi, job: JobId, after: i64) -> Response {
+pub(crate) fn event_stream(api: NnueApi, job: JobId, after: i64) -> Response {
     let stream = events(api, job, after);
     (
         // Nginx would otherwise buffer the stream.

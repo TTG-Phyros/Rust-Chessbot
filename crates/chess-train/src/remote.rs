@@ -5,8 +5,8 @@
 use std::time::Duration;
 
 use chess_jobs::{
-    Broker, Claim, ClaimToken, Dataset, Directive, EventKind, LabError, Model, Progress,
-    TrainingSummary, WorkerInfo,
+    Broker, Claim, ClaimToken, Dataset, Directive, EvaluationProgress, EventKind, Job, LabError,
+    Model, Progress, TrainingSummary, WorkerInfo,
 };
 use chess_nnue::spec::ValidationError;
 use reqwest::StatusCode;
@@ -146,6 +146,14 @@ impl Broker for HttpBroker {
 
     fn complete_selfplay(&self, claim: ClaimToken) -> Result<Dataset, LabError> {
         self.json(self.post(&Self::attempt(claim, "dataset")))
+    }
+
+    fn complete_evaluation(
+        &self,
+        claim: ClaimToken,
+        result: &EvaluationProgress,
+    ) -> Result<Job, LabError> {
+        self.json(self.post(&Self::attempt(claim, "evaluation")).json(result))
     }
 
     fn stopped(&self, claim: ClaimToken) -> Result<(), LabError> {

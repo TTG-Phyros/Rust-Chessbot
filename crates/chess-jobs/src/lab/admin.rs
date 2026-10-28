@@ -52,13 +52,28 @@ impl Lab {
     ///
     /// # Errors
     ///
-    /// [`LabError::Conflict`] while it is the active model.
+    /// [`LabError::Conflict`] while it is the active model, or a queued or
+    /// running job plays with it.
     pub fn delete_model(&self, id: ModelId) -> Result<(), LabError> {
         let connection = self.lock();
         model_in(&connection, id)?;
         if active_in(&connection)? == Some(id) {
             return Err(LabError::Conflict(format!(
                 "model {id} is the active model: activate another one first"
+            )));
+        }
+        // Self-play and evaluation jobs name the models they play with.
+        let user: Option<String> = connection
+            .query_row(
+                "SELECT id FROM jobs WHERE status IN ('queued', 'running', 'stopping')
+                 AND kind IN ('selfplay', 'evaluation') AND instr(spec, ?1) > 0 LIMIT 1",
+                [id.to_string()],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if let Some(job) = user {
+            return Err(LabError::Conflict(format!(
+                "model {id} is used by job {job}: wait for it or stop it first"
             )));
         }
         connection.execute("DELETE FROM models WHERE id = ?1", [id.to_string()])?;

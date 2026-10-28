@@ -7,7 +7,12 @@ The same scenario in four languages, against `/api/v1`:
 3. upload a dataset file (`CBDS`);
 4. queue a short training run (3 superbatches, seed 1) on it;
 5. follow the run's live events (Server-Sent Events) until it ends;
-6. activate the model (the engine plays with it) and download its file.
+6. download the model's network file;
+7. evaluate it: a match against the classical evaluation (20 games at most,
+   1000 nodes per move, stopped early by a SPRT), followed live, then its
+   result: W/D/L, Elo ± error, LOS, SPRT verdict, speed of both engines and
+   size of the network;
+8. activate the model (the engine plays with it).
 
 | Example | Needs | Run (from the example's directory) |
 | --- | --- | --- |
@@ -28,5 +33,5 @@ A dataset file comes from self-play, for instance
 `POST /api/v1/datasets:selfplay` on the server itself.
 
 With the same dataset and seed, the four examples train the same network,
-bit for bit: the CI runs them all against a server and a CPU worker and
-compares the files.
+bit for bit, and play the same games with it: the CI runs them all against a
+server and a CPU worker, compares the files and the match results.

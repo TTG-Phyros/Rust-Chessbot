@@ -2,7 +2,7 @@
 /* eslint-disable */
 /**
  * chess-bot NNUE lab API
- * Declare NNUE architectures, upload or generate datasets, train networks and manage the resulting models.  Authentication: an API key in the `X-API-Key` header. Errors are RFC 9457 problem details (`application/problem+json`); lists page with `limit` and `cursor`; creations accept an `Idempotency-Key` header (kept 24 h). Limits: requests per minute per key (429 with `Retry-After`), size of uploads (413).
+ * Declare NNUE architectures, upload or generate datasets, train networks, evaluate them in matches and manage the resulting models.  Authentication: an API key in the `X-API-Key` header. Errors are RFC 9457 problem details (`application/problem+json`); lists page with `limit` and `cursor`; creations accept an `Idempotency-Key` header (kept 24 h). Limits: requests per minute per key (429 with `Retry-After`), size of uploads (413).
  *
  * The version of the OpenAPI document: 1.0.0
  * 
@@ -27,13 +27,20 @@ import {
     JobSpecOneOf1FromJSONTyped,
     JobSpecOneOf1ToJSON,
 } from './JobSpecOneOf1.js';
+import type { JobSpecOneOf2 } from './JobSpecOneOf2.js';
+import {
+    instanceOfJobSpecOneOf2,
+    JobSpecOneOf2FromJSON,
+    JobSpecOneOf2FromJSONTyped,
+    JobSpecOneOf2ToJSON,
+} from './JobSpecOneOf2.js';
 
 /**
  * @type JobSpec
  * What a job does, with all its parameters.
  * @export
  */
-export type JobSpec = JobSpecOneOf | JobSpecOneOf1;
+export type JobSpec = JobSpecOneOf | JobSpecOneOf1 | JobSpecOneOf2;
 
 export function JobSpecFromJSON(json: any): JobSpec {
     return JobSpecFromJSONTyped(json, false);
@@ -51,6 +58,9 @@ export function JobSpecFromJSONTyped(json: any, ignoreDiscriminator: boolean): J
     }
     if (instanceOfJobSpecOneOf1(json)) {
         return JobSpecOneOf1FromJSONTyped(json, true);
+    }
+    if (instanceOfJobSpecOneOf2(json)) {
+        return JobSpecOneOf2FromJSONTyped(json, true);
     }
     return {} as any;
 }
@@ -71,6 +81,9 @@ export function JobSpecToJSONTyped(value?: JobSpec | null, ignoreDiscriminator: 
     }
     if (instanceOfJobSpecOneOf1(value)) {
         return JobSpecOneOf1ToJSON(value as JobSpecOneOf1);
+    }
+    if (instanceOfJobSpecOneOf2(value)) {
+        return JobSpecOneOf2ToJSON(value as JobSpecOneOf2);
     }
     return {};
 }

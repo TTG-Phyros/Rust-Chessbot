@@ -2,7 +2,7 @@
 /* eslint-disable */
 /**
  * chess-bot NNUE lab API
- * Declare NNUE architectures, upload or generate datasets, train networks and manage the resulting models.  Authentication: an API key in the `X-API-Key` header. Errors are RFC 9457 problem details (`application/problem+json`); lists page with `limit` and `cursor`; creations accept an `Idempotency-Key` header (kept 24 h). Limits: requests per minute per key (429 with `Retry-After`), size of uploads (413).
+ * Declare NNUE architectures, upload or generate datasets, train networks, evaluate them in matches and manage the resulting models.  Authentication: an API key in the `X-API-Key` header. Errors are RFC 9457 problem details (`application/problem+json`); lists page with `limit` and `cursor`; creations accept an `Idempotency-Key` header (kept 24 h). Limits: requests per minute per key (429 with `Retry-After`), size of uploads (413).
  *
  * The version of the OpenAPI document: 1.0.0
  * 

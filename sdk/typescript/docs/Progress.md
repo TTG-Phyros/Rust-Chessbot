@@ -18,6 +18,17 @@ Name | Type
 `kind` | string
 `games` | number
 `gamesTotal` | number
+`baselineNps` | number
+`candidateNps` | number
+`draws` | number
+`elo` | number
+`eloError` | number
+`gamesMax` | number
+`los` | number
+`losses` | number
+`score` | number
+`sprt` | [SprtStatus](SprtStatus.md)
+`wins` | number
 
 ## Example
 
@@ -37,6 +48,17 @@ const example = {
   "kind": null,
   "games": null,
   "gamesTotal": null,
+  "baselineNps": null,
+  "candidateNps": null,
+  "draws": null,
+  "elo": null,
+  "eloError": null,
+  "gamesMax": null,
+  "los": null,
+  "losses": null,
+  "score": null,
+  "sprt": null,
+  "wins": null,
 } satisfies Progress
 
 console.log(example)

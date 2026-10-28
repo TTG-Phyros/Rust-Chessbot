@@ -8,7 +8,9 @@ use serde_json::Value;
 
 use crate::LabError;
 use crate::ids::JobId;
-use crate::types::{Dataset, EventKind, Job, JobKind, Model, Progress, TrainingSummary};
+use crate::types::{
+    Dataset, EvaluationProgress, EventKind, Job, JobKind, Model, Progress, TrainingSummary,
+};
 
 /// What a worker can run.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -126,6 +128,18 @@ pub trait Broker: Send + Sync {
     /// When its files are unreadable, [`LabError::Lost`] when the job was
     /// taken away.
     fn complete_selfplay(&self, claim: ClaimToken) -> Result<Dataset, LabError>;
+
+    /// An evaluation match finished (or stopped on request): records its
+    /// final result.
+    ///
+    /// # Errors
+    ///
+    /// [`LabError::Lost`] when the job was taken away.
+    fn complete_evaluation(
+        &self,
+        claim: ClaimToken,
+        result: &EvaluationProgress,
+    ) -> Result<Job, LabError>;
 
     /// The worker stopped the job, after a checkpoint: `stopping` jobs
     /// become `stopped`, `running` ones (worker shutting down) `interrupted`.

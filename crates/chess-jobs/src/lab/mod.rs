@@ -28,7 +28,8 @@ use crate::broker::{Broker, Claim, ClaimToken, Directive, WorkerInfo};
 use crate::ids::{ArchitectureId, DatasetId, JobId, ModelId};
 use crate::paths::LabPaths;
 use crate::types::{
-    BURN, Dataset, DatasetRef, DatasetSource, DatasetStatus, Device, EventKind, Job, JobEvent,
+    BURN, Contestant, DEFAULT_MATCH_NODES, Dataset, DatasetRef, DatasetSource, DatasetStatus,
+    Device, EvaluationJob, EvaluationProgress, EvaluationRequest, EventKind, Job, JobEvent,
     JobKind, JobSpec, JobStatus, Model, Progress, Provenance, SelfplayJob, SelfplayRequest,
     TrainingJob, TrainingRequest, TrainingSummary,
 };
@@ -418,6 +419,125 @@ impl Lab {
         Ok((job_in(&connection, job)?, dataset_in(&connection, dataset)?))
     }
 
+    /// Queues an evaluation match, after checking its contestants and
+    /// settings; the job records what each contestant is (name,
+    /// architecture, size), so that its result stays readable once a model
+    /// is deleted.
+    ///
+    /// # Errors
+    ///
+    /// [`LabError::Invalid`] with every problem found.
+    pub fn create_evaluation(&self, request: &EvaluationRequest) -> Result<Job, LabError> {
+        let mut errors = Vec::new();
+        let mut check = |ok: bool, path: &str, message: &str| {
+            if !ok {
+                errors.push(ValidationError {
+                    path: path.into(),
+                    message: message.into(),
+                });
+            }
+        };
+        check(
+            (2..=100_000).contains(&request.games),
+            "/games",
+            "must be between 2 and 100000",
+        );
+        check(
+            request.nodes.is_none() || request.move_time_ms.is_none(),
+            "/moveTimeMs",
+            "give nodes or moveTimeMs, not both",
+        );
+        check(
+            request
+                .nodes
+                .is_none_or(|nodes| (100..=10_000_000).contains(&nodes)),
+            "/nodes",
+            "must be between 100 and 10000000",
+        );
+        check(
+            request
+                .move_time_ms
+                .is_none_or(|ms| (10..=60_000).contains(&ms)),
+            "/moveTimeMs",
+            "must be between 10 and 60000",
+        );
+        check(request.threads <= 256, "/threads", "must be at most 256");
+        check(
+            request.baseline != Some(request.candidate),
+            "/baseline",
+            "the candidate cannot play against itself",
+        );
+        if let Some(sprt) = &request.sprt {
+            errors.extend(sprt.validate("/sprt"));
+        }
+
+        let connection = self.lock();
+        let mut contestant = |id: Option<ModelId>, path: &str| match id {
+            None => Some(Contestant::classic()),
+            Some(id) => match model_in(&connection, id) {
+                Ok(model) => Some(Contestant::of(&model)),
+                Err(_) => {
+                    errors.push(ValidationError {
+                        path: path.into(),
+                        message: format!("no model {id}"),
+                    });
+                    None
+                }
+            },
+        };
+        let candidate = contestant(Some(request.candidate), "/candidate");
+        let baseline = contestant(request.baseline, "/baseline");
+        let name = match (&request.name, &candidate, &baseline) {
+            (Some(name), _, _) => check_name(name, "/name")
+                .map_err(|err| errors.push(err))
+                .ok(),
+            (None, Some(candidate), Some(baseline)) => Some(
+                format!("{} vs {}", candidate.name, baseline.name)
+                    .chars()
+                    .take(100)
+                    .collect(),
+            ),
+            _ => None,
+        };
+        let (Some(candidate), Some(baseline), Some(name), true) =
+            (candidate, baseline, name, errors.is_empty())
+        else {
+            return Err(LabError::Invalid(errors));
+        };
+        let spec = JobSpec::Evaluation(EvaluationJob {
+            candidate,
+            baseline,
+            games: request.games.next_multiple_of(2),
+            nodes: match request.move_time_ms {
+                Some(_) => None,
+                None => Some(request.nodes.unwrap_or(DEFAULT_MATCH_NODES)),
+            },
+            move_time_ms: request.move_time_ms,
+            sprt: request.sprt,
+            seed: request.seed.unwrap_or_else(random_seed),
+            threads: request.threads,
+        });
+        let id = insert_job(&connection, &name, &spec, Device::Cpu)?;
+        job_in(&connection, id)
+    }
+
+    /// The evaluation jobs that reported a result, oldest first.
+    ///
+    /// # Errors
+    ///
+    /// When the database fails.
+    pub fn evaluation_results(&self) -> Result<Vec<Job>, LabError> {
+        let connection = self.lock();
+        let mut statement = connection.prepare_cached(&format!(
+            "SELECT {JOB_COLUMNS} FROM jobs
+             WHERE kind = 'evaluation' AND progress IS NOT NULL ORDER BY id"
+        ))?;
+        let jobs = statement
+            .query_map([], job_from_row)?
+            .collect::<Result<_, _>>()?;
+        Ok(jobs)
+    }
+
     /// A job.
     ///
     /// # Errors
@@ -526,13 +646,15 @@ impl Lab {
     ///
     /// # Errors
     ///
-    /// [`LabError::Conflict`] for self-play jobs and jobs in other states.
+    /// [`LabError::Conflict`] for self-play and evaluation jobs, and jobs in
+    /// other states.
     pub fn resume(&self, id: JobId) -> Result<Job, LabError> {
         let mut connection = self.lock();
         let job = job_in(&connection, id)?;
         if job.spec.kind() != JobKind::Training {
             return Err(LabError::Conflict(format!(
-                "job {id} is a self-play job: they cannot be resumed, create a new one"
+                "job {id} is a {} job: only training jobs can be resumed, create a new one",
+                job.spec.kind().as_str()
             )));
         }
         if !matches!(
@@ -654,7 +776,7 @@ impl Broker for Lab {
                         && !(gpu && gpu_busy);
                     runnable.then_some((job, gpu))
                 }
-                JobSpec::Selfplay(_) => Some((job, false)),
+                JobSpec::Selfplay(_) | JobSpec::Evaluation(_) => Some((job, false)),
             }
         });
         let Some((job, gpu)) = chosen else {
@@ -825,6 +947,41 @@ impl Broker for Lab {
         set_status(&transaction, &job, status, None, now)?;
         transaction.commit()?;
         dataset_in(&connection, selfplay.dataset)
+    }
+
+    fn complete_evaluation(
+        &self,
+        claim: ClaimToken,
+        result: &EvaluationProgress,
+    ) -> Result<Job, LabError> {
+        let mut connection = self.lock();
+        let job = claimed_in(&connection, claim)?;
+        if job.spec.kind() != JobKind::Evaluation {
+            return Err(LabError::Conflict(format!(
+                "job {} is not an evaluation job",
+                job.id
+            )));
+        }
+        let now = now();
+        let progress = Progress::Evaluation(result.clone());
+        let transaction = connection.transaction()?;
+        // Usually the last report already said it.
+        if job.progress.as_ref() != Some(&progress) {
+            let data = serde_json::to_value(&progress).map_err(json_error)?;
+            transaction.execute(
+                "UPDATE jobs SET progress = ?2, updated_at = ?3 WHERE id = ?1",
+                params![job.id.to_string(), data.to_string(), now],
+            )?;
+            append_event(&transaction, job.id, EventKind::Progress, &data, now)?;
+        }
+        let status = if job.status == JobStatus::Stopping {
+            JobStatus::Stopped
+        } else {
+            JobStatus::Succeeded
+        };
+        set_status(&transaction, &job, status, None, now)?;
+        transaction.commit()?;
+        job_in(&connection, job.id)
     }
 
     fn stopped(&self, claim: ClaimToken) -> Result<(), LabError> {

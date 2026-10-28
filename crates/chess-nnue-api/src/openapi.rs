@@ -21,7 +21,7 @@ use chess_jobs::JobEvent;
 use crate::NnueApi;
 use crate::pagination::{ArchitecturePage, DatasetPage, JobPage, ModelPage};
 use crate::problem::{FieldError, Problem};
-use crate::routes::{architectures, datasets, models, runs};
+use crate::routes::{architectures, datasets, evaluations, models, runs};
 
 macro_rules! external_schema {
     ($marker:ident, $name:literal, $reference:ident) => {
@@ -71,8 +71,8 @@ external_schema!(EstimateSchema, "Estimate", estimate_ref);
     info(
         title = "chess-bot NNUE lab API",
         version = "1.0.0",
-        description = "Declare NNUE architectures, upload or generate datasets, train networks and \
-            manage the resulting models.\n\n\
+        description = "Declare NNUE architectures, upload or generate datasets, train networks, \
+            evaluate them in matches and manage the resulting models.\n\n\
             Authentication: an API key in the `X-API-Key` header. Errors are RFC 9457 problem \
             details (`application/problem+json`); lists page with `limit` and `cursor`; \
             creations accept an `Idempotency-Key` header (kept 24 h). Limits: requests per \
@@ -88,6 +88,8 @@ external_schema!(EstimateSchema, "Estimate", estimate_ref);
         runs::list_selfplay, runs::get_selfplay, runs::stop_selfplay_doc, runs::events_selfplay,
         models::list, models::get, models::file, models::activate_doc, models::deactivate,
         models::delete,
+        evaluations::create, evaluations::list, evaluations::get, evaluations::stop_doc,
+        evaluations::events, evaluations::compare,
     ),
     components(schemas(
         Problem, FieldError, JobEvent, ArchitecturePage, DatasetPage, JobPage, ModelPage,
@@ -101,6 +103,7 @@ external_schema!(EstimateSchema, "Estimate", estimate_ref);
         (name = "training-runs", description = "Training jobs: progress, stop and resume, live events"),
         (name = "selfplay-runs", description = "Self-play jobs generating datasets"),
         (name = "models", description = "Trained networks: provenance, files, the active one"),
+        (name = "evaluations", description = "Matches between models in the engine's arena (SPRT), comparisons"),
         (name = "meta", description = "This API's description"),
     )
 )]

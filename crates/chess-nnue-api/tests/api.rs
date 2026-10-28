@@ -966,3 +966,270 @@ async fn the_internal_api_needs_the_worker_token() {
         .await;
     assert_eq!(reply.status, StatusCode::NOT_FOUND);
 }
+
+/// A model in the lab, as a finished training job leaves it.
+fn model(h: &Harness, seed: u64) -> String {
+    use chess_jobs::Broker;
+    let dataset = h
+        .lab
+        .import_dataset("data", dataset_bytes(&h.dir, 100).as_slice(), 1 << 20)
+        .unwrap();
+    h.lab
+        .create_training(&chess_jobs::TrainingRequest {
+            name: Some(format!("net {seed}")),
+            architecture: Some(architecture("fast-768")),
+            architecture_id: None,
+            datasets: vec![dataset.id],
+            hyperparameters: chess_jobs::Hyperparameters {
+                batch_size: 64,
+                shuffle_records: 64,
+                ..chess_jobs::Hyperparameters::default()
+            },
+            seed: Some(seed),
+            device: chess_jobs::Device::Cpu,
+            trainer: "burn".into(),
+        })
+        .unwrap();
+    let worker = chess_jobs::WorkerInfo {
+        id: "trainer".into(),
+        gpu: false,
+        kinds: vec![chess_jobs::JobKind::Training],
+        trainers: vec!["burn".into()],
+    };
+    let claim = h.lab.claim(&worker).unwrap().unwrap();
+    let network = Network::pseudo_random(&presets::get("fast-768").unwrap().architecture, seed)
+        .unwrap()
+        .to_bytes();
+    let summary = chess_jobs::TrainingSummary {
+        superbatches: 1,
+        positions: 64,
+        final_loss: None,
+        device: "CPU".into(),
+    };
+    h.lab
+        .complete_training(claim.token(), &network, &summary)
+        .unwrap()
+        .id
+        .to_string()
+}
+
+/// A worker plays the evaluation `id` over the internal API: claims it,
+/// reports a batch, then the final result.
+async fn play(h: &Harness, id: &str, wins: u32, draws: u32, losses: u32) {
+    let worker = json!({ "id": "w", "gpu": false, "kinds": ["evaluation"], "trainers": [] });
+    let claim = h
+        .internal(
+            "/internal/v1/claims",
+            Body::from(worker.to_string()),
+            "application/json",
+        )
+        .await;
+    assert_eq!(claim.json()["job"]["id"], id);
+    let attempt = format!("/internal/v1/jobs/{id}/attempts/1");
+    let result = |w: u32, d: u32, l: u32| {
+        serde_json::to_value(chess_jobs::EvaluationProgress {
+            candidate_nps: Some(900_000),
+            baseline_nps: Some(2_000_000),
+            ..chess_jobs::EvaluationProgress::new(
+                chess_jobs::MatchResult {
+                    wins: w,
+                    draws: d,
+                    losses: l,
+                },
+                100,
+                Some(&chess_jobs::Sprt::default()),
+            )
+        })
+        .unwrap()
+    };
+    let mut report = result(1, 0, 1);
+    report["kind"] = "evaluation".into();
+    let directive = h
+        .internal(
+            &format!("{attempt}/progress"),
+            Body::from(report.to_string()),
+            "application/json",
+        )
+        .await;
+    assert_eq!(directive.json(), json!("continue"));
+    let done = h
+        .internal(
+            &format!("{attempt}/evaluation"),
+            Body::from(result(wins, draws, losses).to_string()),
+            "application/json",
+        )
+        .await;
+    assert_eq!(
+        done.status,
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&done.body)
+    );
+    assert_eq!(done.json()["status"], "succeeded");
+}
+
+#[tokio::test]
+async fn evaluations_report_matches_and_compare_models() {
+    let h = harness("evaluations", config());
+    let (a, b) = (model(&h, 1), model(&h, 2));
+
+    let invalid = h
+        .call(
+            Method::POST,
+            "/api/v1/evaluations",
+            Some(json!({ "candidate": a, "baseline": a, "games": 1, "sprt": { "alpha": 0.7 } })),
+        )
+        .await;
+    assert_eq!(invalid.status, StatusCode::UNPROCESSABLE_ENTITY);
+    let paths: Vec<String> = invalid.json()["errors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["path"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(paths, ["/games", "/baseline", "/sprt/alpha"]);
+
+    // a against the classical evaluation, then b against a.
+    let first = h
+        .call(
+            Method::POST,
+            "/api/v1/evaluations",
+            Some(json!({ "candidate": a, "games": 100, "nodes": 1000, "sprt": {}, "seed": 9 })),
+        )
+        .await;
+    assert_eq!(first.status, StatusCode::ACCEPTED, "{}", first.json());
+    let first = first.json();
+    assert_eq!(first["spec"]["kind"], "evaluation");
+    assert_eq!(first["spec"]["baseline"]["name"], "classical evaluation");
+    assert!(first["spec"]["candidate"]["parameters"].as_u64().unwrap() > 100_000);
+    assert_eq!(first["spec"]["sprt"]["elo1"], 10.0);
+    let first = first["id"].as_str().unwrap().to_owned();
+    play(&h, &first, 60, 20, 20).await;
+
+    let second = h
+        .call(
+            Method::POST,
+            "/api/v1/evaluations",
+            Some(json!({ "candidate": b, "baseline": a, "games": 100 })),
+        )
+        .await
+        .json();
+    let second = second["id"].as_str().unwrap().to_owned();
+    play(&h, &second, 30, 40, 30).await;
+
+    let done = h
+        .call(Method::GET, &format!("/api/v1/evaluations/{first}"), None)
+        .await
+        .json();
+    let progress = &done["progress"];
+    assert_eq!(
+        (progress["wins"].as_u64(), progress["games"].as_u64()),
+        (Some(60), Some(100))
+    );
+    // +147 Elo, but 100 games do not yet prove +10 at 5 % risk.
+    assert_eq!(progress["sprt"]["verdict"], "inconclusive");
+    let llr = progress["sprt"]["llr"].as_f64().unwrap();
+    assert!((1.7..1.8).contains(&llr), "{llr}");
+    assert!(progress["eloError"].as_f64().unwrap() > 0.0);
+    assert_eq!(progress["candidateNps"], 900_000);
+
+    // The stream replays the match: queued, running, two reports, succeeded.
+    let events = h
+        .call(
+            Method::GET,
+            &format!("/api/v1/evaluations/{first}/events"),
+            None,
+        )
+        .await;
+    let text = String::from_utf8(events.body).unwrap();
+    let kinds: Vec<&str> = text
+        .lines()
+        .filter_map(|l| l.strip_prefix("event: "))
+        .collect();
+    assert_eq!(
+        kinds,
+        ["status", "status", "progress", "progress", "status"]
+    );
+
+    // Compared: b is as strong as a, a well above the classical evaluation.
+    let comparison = h
+        .call(
+            Method::GET,
+            &format!("/api/v1/evaluations:compare?players=classic,{a},{b}"),
+            None,
+        )
+        .await;
+    assert_eq!(comparison.status, StatusCode::OK);
+    let comparison = comparison.json();
+    let players = comparison["players"].as_array().unwrap();
+    assert_eq!(players[0]["elo"], 0.0);
+    assert_eq!(players[0]["nps"], 2_000_000);
+    let (elo_a, elo_b) = (
+        players[1]["elo"].as_f64().unwrap(),
+        players[2]["elo"].as_f64().unwrap(),
+    );
+    assert!(
+        elo_a > 100.0 && (elo_a - elo_b).abs() < 1.0,
+        "{comparison:#}"
+    );
+    assert_eq!(players[1]["games"], 200);
+    assert_eq!(players[2]["contestant"]["name"], "net 2");
+    let pairs = comparison["pairs"].as_array().unwrap();
+    assert_eq!(pairs.len(), 2);
+    // Pairs read from the first player listed: the classical evaluation lost 20-20-60.
+    assert_eq!(
+        (pairs[0]["a"].as_u64(), pairs[0]["b"].as_u64()),
+        (Some(0), Some(1))
+    );
+    assert_eq!(pairs[0]["wins"], 20);
+    assert_eq!(pairs[0]["evaluations"], json!([first]));
+    let bad = h
+        .call(
+            Method::GET,
+            "/api/v1/evaluations:compare?players=classic,classic",
+            None,
+        )
+        .await;
+    assert_eq!(bad.status, StatusCode::BAD_REQUEST);
+    let unknown = chess_jobs::ModelId::generate();
+    let missing = h
+        .call(
+            Method::GET,
+            &format!("/api/v1/evaluations:compare?players={unknown}"),
+            None,
+        )
+        .await;
+    assert_eq!(missing.status, StatusCode::NOT_FOUND);
+
+    // A queued evaluation is canceled by :stop.
+    let third = h
+        .call(
+            Method::POST,
+            "/api/v1/evaluations",
+            Some(json!({ "candidate": b })),
+        )
+        .await
+        .json();
+    let third = third["id"].as_str().unwrap();
+    let canceled = h
+        .call(
+            Method::POST,
+            &format!("/api/v1/evaluations/{third}:stop"),
+            None,
+        )
+        .await
+        .json();
+    assert_eq!(canceled["status"], "canceled");
+    let list = h
+        .call(Method::GET, "/api/v1/evaluations", None)
+        .await
+        .json();
+    assert_eq!(list["items"].as_array().unwrap().len(), 3);
+    // An evaluation is not a training run.
+    assert_eq!(
+        h.call(Method::GET, &format!("/api/v1/training-runs/{first}"), None)
+            .await
+            .status,
+        StatusCode::NOT_FOUND
+    );
+}

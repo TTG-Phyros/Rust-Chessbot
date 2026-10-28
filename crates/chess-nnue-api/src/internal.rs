@@ -10,6 +10,7 @@
 //! | `POST …/events` (`{kind, data}`) | `event` → 204 |
 //! | `POST …/network?superbatches&positions&finalLoss&device` (the file) | `complete_training` → `Model` |
 //! | `POST …/dataset` | `complete_selfplay` → `Dataset` |
+//! | `POST …/evaluation` (`EvaluationProgress`) | `complete_evaluation` → `Job` |
 //! | `POST …/stopped` | `stopped` → 204 |
 //! | `POST …/failure` (`{message}`) | `fail` → 204 |
 //!
@@ -23,7 +24,8 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::post;
 use axum::{Json, Router};
 use chess_jobs::{
-    Broker, ClaimToken, Directive, EventKind, JobId, Progress, TrainingSummary, WorkerInfo,
+    Broker, ClaimToken, Directive, EvaluationProgress, EventKind, Job, JobId, Progress,
+    TrainingSummary, WorkerInfo,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -49,6 +51,7 @@ pub(crate) fn router(api: NnueApi) -> Router<NnueApi> {
             post(network).layer(axum::extract::DefaultBodyLimit::max(MAX_NETWORK)),
         )
         .route(&format!("{ATTEMPT}/dataset"), post(dataset))
+        .route(&format!("{ATTEMPT}/evaluation"), post(evaluation))
         .route(&format!("{ATTEMPT}/stopped"), post(stopped))
         .route(&format!("{ATTEMPT}/failure"), post(failure))
         .layer(from_fn_with_state(api, token))
@@ -154,6 +157,17 @@ async fn dataset(
     let dataset =
         crate::blocking(move || lab.complete_selfplay(claim).map_err(ApiProblem::from)).await?;
     Ok(Json(dataset).into_response())
+}
+
+async fn evaluation(
+    State(api): State<NnueApi>,
+    Path((job, attempt)): Path<(String, u32)>,
+    JsonBody(result): JsonBody<EvaluationProgress>,
+) -> ApiResult<Json<Job>> {
+    Ok(Json(api.lab.complete_evaluation(
+        claim_token(&job, attempt)?,
+        &result,
+    )?))
 }
 
 async fn stopped(

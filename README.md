@@ -336,6 +336,7 @@ Le laboratoire entraîne des réseaux d'**architecture déclarée** (JSON/YAML v
 - **Datasets.** Un import vérifie l'en-tête et chaque enregistrement avant de publier le fichier, et calcule ses statistiques (résultats, scores, nombre de pièces, ply). Un job de self-play remplit un dataset neuf, avec l'évaluation classique ou un modèle du laboratoire.
 - **Jobs.** Un worker prend le plus ancien job qu'il sait exécuter : **un seul job à la fois sur le GPU**, les autres attendent (ou passent sur un worker CPU s'ils l'acceptent). Il envoie progression et battements de cœur ; un job dont le worker se tait plus de 2 minutes passe `interrupted`. `stop` termine le superbatch, écrit un checkpoint et met le job `stopped` ; `resume` le remet en file et il **reprend du checkpoint**. À seed égale, le même job produit le même réseau au bit près (sur CPU).
 - **Modèles.** Le réseau final est vérifié (format v2, hash de l'architecture du job) avant d'être enregistré ; il se charge partout où le moteur charge un réseau.
+- **Évaluations.** Un job d'évaluation fait jouer un modèle contre un autre ou contre l'évaluation classique, dans l'arène du moteur : paires de parties depuis la même ouverture aléatoire, couleurs inversées, à nombre de nœuds fixe (reproductible) ou à temps fixe par coup. Avec un **SPRT** (`elo0`, `elo1`, `alpha`, `beta`), le match s'arrête dès que le test conclut. Le résultat donne les victoires, nulles et défaites, l'**Elo ± erreur** (intervalle à 95 %), la probabilité de supériorité, le LLR et son verdict, le **NPS** des deux moteurs mesuré sur la même machine avant le match, et la **taille** de chaque réseau (paramètres, octets). Une comparaison classe plusieurs modèles sur tous les matchs joués entre eux.
 
 #### API du laboratoire (`/api/v1`)
 
@@ -363,6 +364,9 @@ Documentation interactive sur **`/docs`** (Scalar, avec essai des requêtes), do
 | `GET /api/v1/selfplay-runs[/{id}]`, `POST …/{id}:stop`, `GET …/{id}/events` | les jobs de self-play |
 | `GET /api/v1/models[/{id}]`, `GET …/{id}/file`, `DELETE …/{id}` | modèles avec leur provenance, fichier réseau |
 | `POST /api/v1/models/{id}:activate`, `POST /api/v1/models:deactivate` | le moteur (partie, analyse) joue avec ce modèle, ou revient au réseau configuré |
+| `POST`, `GET /api/v1/evaluations`, `GET /api/v1/evaluations/{id}` | match `{"candidate", "baseline" (absent : évaluation classique), "games", "nodes" \| "moveTimeMs", "sprt", "seed", "threads"}`, puis son résultat en cours |
+| `POST /api/v1/evaluations/{id}:stop`, `GET …/{id}/events` | arrêt (les parties jouées comptent), progression en direct (SSE) |
+| `GET /api/v1/evaluations:compare?players=classic,<id>,<id>` | comparaison : taille, NPS, résultats de chaque paire, Elo ajusté sur toutes les parties (relatif au premier) |
 
 ```sh
 K="X-API-Key: $CHESS_API_KEY"
@@ -373,7 +377,7 @@ curl -H "$K" -H 'Content-Type: application/json' -d '{"architectureId": "…", "
 curl -N -H "$K" http://localhost:8080/api/v1/training-runs/<id>/events
 ```
 
-**SDK et exemples.** Les SDK [Python](sdk/python) et [TypeScript](sdk/typescript) sont générés depuis [le document OpenAPI](schemas/nnue-api.v1.openapi.json) par openapi-generator (image Docker épinglée) : `just gen-sdk` après toute modification de l'API, et la CI échoue si `schemas/` ou `sdk/` ne sont pas à jour (voir [sdk/README.md](sdk/README.md)). [examples/](examples) déroule le même scénario en curl, Python, TypeScript et Go : valider et sauvegarder une architecture, envoyer un dataset, entraîner en suivant les événements, activer et télécharger le modèle. La CI exécute les quatre contre un vrai serveur et un worker CPU, et vérifie qu'ils produisent le même réseau au bit près.
+**SDK et exemples.** Les SDK [Python](sdk/python) et [TypeScript](sdk/typescript) sont générés depuis [le document OpenAPI](schemas/nnue-api.v1.openapi.json) par openapi-generator (image Docker épinglée) : `just gen-sdk` après toute modification de l'API, et la CI échoue si `schemas/` ou `sdk/` ne sont pas à jour (voir [sdk/README.md](sdk/README.md)). [examples/](examples) déroule le même scénario en curl, Python, TypeScript et Go : valider et sauvegarder une architecture, envoyer un dataset, entraîner en suivant les événements, télécharger le modèle, l'évaluer contre l'évaluation classique (SPRT), puis l'activer. La CI exécute les quatre contre un vrai serveur et un worker CPU, et vérifie qu'ils produisent le même réseau au bit près et le même résultat de match.
 
 Les jobs sont exécutés par les **workers** : les services `lab-worker` (GPU, profil `train`) et `lab-worker-cpu` (profil `train-cpu`) de `docker compose`. Ils prennent les jobs par l'API interne `/internal/v1` du serveur, authentifiés par `CHESS_LAB_WORKER_TOKEN`, et lisent et écrivent les mêmes fichiers que lui (datasets dans le volume `datasets`, modèles dans `data/models`, checkpoints dans `data/lab/runs`) ; nginx n'expose jamais `/internal`. Ils partagent le GPU avec le pipeline de la page Entraînement : lancer l'un ou l'autre.
 
@@ -387,6 +391,7 @@ chess-train lab jobs | datasets | models                     # listes (JSON)
 chess-train lab job <id>                                     # un job et ses événements
 chess-train lab stop <id> | resume <id>
 chess-train worker                                           # exécute les jobs (GPU si présent), Ctrl+C = arrêt propre
+                                                             # (entraînement, self-play et évaluations)
 chess-train worker --server http://localhost:3000            # même chose via l'API interne (CHESS_LAB_WORKER_TOKEN)
 ```
 

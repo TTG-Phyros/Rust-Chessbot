@@ -7,6 +7,7 @@ use serde_json::Value;
 
 use crate::hyper::Hyperparameters;
 use crate::ids::{ArchitectureId, DatasetId, JobId, ModelId};
+use crate::stats::{MatchResult, Sprt, Verdict};
 
 /// Text values of an enum stored in a column.
 macro_rules! text_enum {
@@ -41,11 +42,14 @@ pub enum JobKind {
     Training,
     /// Plays games to produce a dataset.
     Selfplay,
+    /// Plays a match between two engines.
+    Evaluation,
 }
 
 text_enum!(JobKind {
     Training = "training",
     Selfplay = "selfplay",
+    Evaluation = "evaluation",
 });
 
 /// Where a job is in its life.
@@ -180,6 +184,76 @@ pub struct SelfplayJob {
     pub threads: usize,
 }
 
+/// A player of an evaluation match: a model, or the classical evaluation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(rename_all = "camelCase")]
+pub struct Contestant {
+    /// The model; absent for the classical evaluation.
+    pub model: Option<ModelId>,
+    /// Its name.
+    pub name: String,
+    /// Hash of its architecture.
+    pub architecture_hash: Option<String>,
+    /// Trainable parameters of its network.
+    pub parameters: Option<u64>,
+    /// Size of its network file.
+    pub bytes: Option<u64>,
+}
+
+impl Contestant {
+    /// The classical evaluation (material and piece-square tables).
+    #[must_use]
+    pub fn classic() -> Self {
+        Self {
+            model: None,
+            name: CLASSIC.into(),
+            architecture_hash: None,
+            parameters: None,
+            bytes: None,
+        }
+    }
+
+    /// A model.
+    #[must_use]
+    pub fn of(model: &Model) -> Self {
+        Self {
+            model: Some(model.id),
+            name: model.name.clone(),
+            architecture_hash: Some(model.architecture_hash.clone()),
+            parameters: Some(model.architecture.estimate().parameters),
+            bytes: Some(model.bytes),
+        }
+    }
+}
+
+/// Name of the classical evaluation as a contestant.
+pub const CLASSIC: &str = "classical evaluation";
+
+/// An evaluation match, fully resolved: the candidate plays pairs of games
+/// against the baseline from the same random opening with colors swapped.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(rename_all = "camelCase")]
+pub struct EvaluationJob {
+    /// The engine evaluated.
+    pub candidate: Contestant,
+    /// The engine it is measured against.
+    pub baseline: Contestant,
+    /// Games to play at most (an even number).
+    pub games: u32,
+    /// Nodes searched per move (reproducible), unless `moveTimeMs`.
+    pub nodes: Option<u64>,
+    /// Milliseconds per move, instead of nodes.
+    pub move_time_ms: Option<u64>,
+    /// Stops as soon as this test concludes; without it, every game is played.
+    pub sprt: Option<Sprt>,
+    /// Seed of the random openings.
+    pub seed: u64,
+    /// Worker threads (0: all cores).
+    pub threads: usize,
+}
+
 /// What a job does, with all its parameters.
 // One per job, never in hot paths: boxing the large variant buys nothing.
 #[allow(clippy::large_enum_variant)]
@@ -191,6 +265,8 @@ pub enum JobSpec {
     Training(TrainingJob),
     /// See [`SelfplayJob`].
     Selfplay(SelfplayJob),
+    /// See [`EvaluationJob`].
+    Evaluation(EvaluationJob),
 }
 
 impl JobSpec {
@@ -200,6 +276,7 @@ impl JobSpec {
         match self {
             Self::Training(_) => JobKind::Training,
             Self::Selfplay(_) => JobKind::Selfplay,
+            Self::Evaluation(_) => JobKind::Evaluation,
         }
     }
 }
@@ -240,6 +317,92 @@ pub struct SelfplayProgress {
     pub positions: u64,
 }
 
+/// Where a SPRT stands.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(rename_all = "camelCase")]
+pub struct SprtStatus {
+    /// Log-likelihood ratio of H1 against H0.
+    pub llr: f64,
+    /// H0 is accepted when the LLR falls to this bound.
+    pub lower_bound: f64,
+    /// H1 is accepted when the LLR rises to this bound.
+    pub upper_bound: f64,
+    /// Conclusion so far.
+    pub verdict: Verdict,
+}
+
+/// Latest result of an evaluation match, from the candidate's side.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(rename_all = "camelCase")]
+pub struct EvaluationProgress {
+    /// Games played.
+    pub games: u32,
+    /// Games to play at most.
+    pub games_max: u32,
+    /// Games the candidate won.
+    pub wins: u32,
+    /// Games drawn.
+    pub draws: u32,
+    /// Games the candidate lost.
+    pub losses: u32,
+    /// Candidate's mean score, in [0, 1].
+    pub score: f64,
+    /// Elo difference of the candidate over the baseline.
+    pub elo: f64,
+    /// Half-width of the 95 % confidence interval of `elo`.
+    pub elo_error: f64,
+    /// Likelihood of superiority: probability that the candidate is stronger.
+    pub los: f64,
+    /// The SPRT, when the match runs one.
+    pub sprt: Option<SprtStatus>,
+    /// Nodes per second of the candidate's search (one thread, measured
+    /// by the worker before the match).
+    pub candidate_nps: Option<u64>,
+    /// Nodes per second of the baseline's search, on the same worker.
+    pub baseline_nps: Option<u64>,
+}
+
+impl EvaluationProgress {
+    /// The statistics of `result` in a match of at most `games_max` games.
+    #[must_use]
+    pub fn new(result: MatchResult, games_max: u32, sprt: Option<&Sprt>) -> Self {
+        Self {
+            games: result.games(),
+            games_max,
+            wins: result.wins,
+            draws: result.draws,
+            losses: result.losses,
+            score: result.score(),
+            elo: result.elo(),
+            elo_error: result.elo_error(),
+            los: result.los(),
+            sprt: sprt.map(|sprt| {
+                let (lower_bound, upper_bound) = sprt.bounds();
+                SprtStatus {
+                    llr: result.llr(sprt.elo0, sprt.elo1),
+                    lower_bound,
+                    upper_bound,
+                    verdict: sprt.verdict(result),
+                }
+            }),
+            candidate_nps: None,
+            baseline_nps: None,
+        }
+    }
+
+    /// The games, from the candidate's side.
+    #[must_use]
+    pub fn result(&self) -> MatchResult {
+        MatchResult {
+            wins: self.wins,
+            draws: self.draws,
+            losses: self.losses,
+        }
+    }
+}
+
 /// Latest progress of a job.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
@@ -249,6 +412,8 @@ pub enum Progress {
     Training(TrainingProgress),
     /// See [`SelfplayProgress`].
     Selfplay(SelfplayProgress),
+    /// See [`EvaluationProgress`].
+    Evaluation(EvaluationProgress),
 }
 
 /// A job.
@@ -506,6 +671,48 @@ pub struct SelfplayRequest {
 fn default_nodes() -> u64 {
     5_000
 }
+
+/// An evaluation match, as a client asks for it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EvaluationRequest {
+    /// Name (default: from the contestants).
+    #[serde(default)]
+    pub name: Option<String>,
+    /// The model evaluated.
+    pub candidate: ModelId,
+    /// The model it plays against (default: the classical evaluation).
+    #[serde(default)]
+    pub baseline: Option<ModelId>,
+    /// Games to play at most, 2 to 100000 (rounded up to pairs).
+    #[serde(default = "default_games")]
+    pub games: u32,
+    /// Nodes searched per move, 100 to 10000000 (default 5000 unless
+    /// `moveTimeMs` is given). Matches at fixed nodes are reproducible.
+    #[serde(default)]
+    pub nodes: Option<u64>,
+    /// Milliseconds per move, 10 to 60000, instead of nodes: a slower
+    /// network then searches less. Not reproducible.
+    #[serde(default)]
+    pub move_time_ms: Option<u64>,
+    /// Stop as soon as this test concludes (default: play every game).
+    #[serde(default)]
+    pub sprt: Option<Sprt>,
+    /// Seed of the openings (default: drawn at random, then recorded).
+    #[serde(default)]
+    pub seed: Option<u64>,
+    /// Worker threads (0: all cores).
+    #[serde(default)]
+    pub threads: usize,
+}
+
+fn default_games() -> u32 {
+    1_000
+}
+
+/// Nodes per move of a match that gives neither nodes nor time.
+pub const DEFAULT_MATCH_NODES: u64 = 5_000;
 
 /// Report of a finished training, sent with the network.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

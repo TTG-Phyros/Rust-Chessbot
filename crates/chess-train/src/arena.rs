@@ -5,11 +5,14 @@
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::time::Instant;
 
 use anyhow::{Context, Result};
 use chess_core::{Color, GameStatus, Position};
 use chess_eval::EngineEval;
-use chess_search::{Score, SearchLimits, Searcher, StopFlag};
+use chess_jobs::Sprt;
+pub(crate) use chess_jobs::{MatchResult, Verdict};
+use chess_search::{BENCH_POSITIONS, Score, SearchLimits, Searcher, StopFlag};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -122,124 +125,50 @@ impl ArenaConfig {
     pub(crate) fn move_limit(&self) -> MoveLimit {
         self.limit.unwrap_or(MoveLimit::Nodes(self.nodes))
     }
-}
 
-/// Games won, drawn and lost by engine A.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct MatchResult {
-    pub(crate) wins: u32,
-    pub(crate) draws: u32,
-    pub(crate) losses: u32,
-}
-
-/// What the SPRT concluded.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub(crate) enum Verdict {
-    /// A is at least `elo1` stronger (H1 accepted).
-    Pass,
-    /// A is not `elo1` stronger (H0 accepted).
-    Fail,
-    /// Not enough games yet.
-    Inconclusive,
-}
-
-impl MatchResult {
-    pub(crate) fn games(self) -> u32 {
-        self.wins + self.draws + self.losses
-    }
-
-    /// Mean score of A, in `[0, 1]`.
-    pub(crate) fn score(self) -> f64 {
-        let n = f64::from(self.games().max(1));
-        (f64::from(self.wins) + 0.5 * f64::from(self.draws)) / n
-    }
-
-    /// Per-game variance of A's score.
-    fn variance(self) -> f64 {
-        let n = f64::from(self.games().max(1));
-        let s = self.score();
-        (f64::from(self.wins) * (1.0 - s).powi(2)
-            + f64::from(self.draws) * (0.5 - s).powi(2)
-            + f64::from(self.losses) * s.powi(2))
-            / n
-    }
-
-    /// Elo difference of A over B (logistic model).
-    pub(crate) fn elo(self) -> f64 {
-        score_to_elo(self.score())
-    }
-
-    /// Half-width of the 95 % confidence interval of [`MatchResult::elo`].
-    pub(crate) fn elo_error(self) -> f64 {
-        let n = f64::from(self.games().max(1));
-        let stderr = (self.variance() / n).sqrt();
-        let s = self.score();
-        (score_to_elo(s + 1.96 * stderr) - score_to_elo(s - 1.96 * stderr)) / 2.0
-    }
-
-    /// Likelihood of superiority: probability that A is stronger.
-    pub(crate) fn los(self) -> f64 {
-        let (w, l) = (f64::from(self.wins), f64::from(self.losses));
-        if w + l == 0.0 {
-            return 0.5;
-        }
-        0.5 * (1.0 + erf((w - l) / (2.0 * (w + l)).sqrt()))
-    }
-
-    /// Log-likelihood ratio of H1 (`elo1`) against H0 (`elo0`), normal
-    /// approximation of the trinomial model as used by fishtest.
-    pub(crate) fn llr(self, elo0: f64, elo1: f64) -> f64 {
-        let variance = self.variance();
-        if variance <= 0.0 {
-            return 0.0;
-        }
-        let (s0, s1) = (elo_to_score(elo0), elo_to_score(elo1));
-        f64::from(self.games()) * (s1 - s0) * (2.0 * self.score() - s0 - s1) / (2.0 * variance)
-    }
-
-    pub(crate) fn verdict(self, config: &ArenaConfig) -> Verdict {
-        let llr = self.llr(config.elo0, config.elo1);
-        let lower = (config.beta / (1.0 - config.alpha)).ln();
-        let upper = ((1.0 - config.beta) / config.alpha).ln();
-        if llr >= upper {
-            Verdict::Pass
-        } else if llr <= lower {
-            Verdict::Fail
-        } else {
-            Verdict::Inconclusive
+    /// The SPRT of `elo0`, `elo1`, `alpha` and `beta`.
+    pub(crate) fn sprt_test(&self) -> Sprt {
+        Sprt {
+            elo0: self.elo0,
+            elo1: self.elo1,
+            alpha: self.alpha,
+            beta: self.beta,
         }
     }
+}
 
-    fn add(&mut self, outcome: Outcome, a_color: Color) {
-        match (outcome, a_color) {
-            (Outcome::Draw, _) => self.draws += 1,
-            (Outcome::WhiteWins, Color::White) | (Outcome::BlackWins, Color::Black) => {
-                self.wins += 1
+/// Counts a game of A (playing `a_color`) in `result`.
+fn record(result: &mut MatchResult, outcome: Outcome, a_color: Color) {
+    match (outcome, a_color) {
+        (Outcome::Draw, _) => result.draws += 1,
+        (Outcome::WhiteWins, Color::White) | (Outcome::BlackWins, Color::Black) => result.wins += 1,
+        _ => result.losses += 1,
+    }
+}
+
+/// Nodes per second of our search with `eval`: one thread, `nodes` nodes
+/// on each bench position from a cleared state, best of two runs (the
+/// first also warms the caches up).
+pub(crate) fn measure_nps(eval: &EngineEval, nodes: u64) -> u64 {
+    let mut searcher = Searcher::new(eval.clone(), StopFlag::new());
+    let positions: Vec<Position> = BENCH_POSITIONS
+        .iter()
+        .filter_map(|fen| Position::from_fen(fen).ok())
+        .collect();
+    (0..2)
+        .map(|_| {
+            let start = Instant::now();
+            let mut searched = 0;
+            for pos in &positions {
+                searcher.clear();
+                searched += searcher
+                    .search(pos, &SearchLimits::nodes(nodes), |_| {})
+                    .nodes;
             }
-            _ => self.losses += 1,
-        }
-    }
-}
-
-fn elo_to_score(elo: f64) -> f64 {
-    1.0 / (1.0 + 10f64.powf(-elo / 400.0))
-}
-
-fn score_to_elo(score: f64) -> f64 {
-    let s = score.clamp(1e-4, 1.0 - 1e-4);
-    -400.0 * (1.0 / s - 1.0).log10()
-}
-
-/// Error function (Abramowitz & Stegun 7.1.26, |error| < 1.5e-7).
-fn erf(x: f64) -> f64 {
-    let t = 1.0 / (1.0 + 0.327_591_1 * x.abs());
-    let poly = t
-        * (0.254_829_592
-            + t * (-0.284_496_736
-                + t * (1.421_413_741 + t * (-1.453_152_027 + t * 1.061_405_429))));
-    let y = 1.0 - poly * (-x * x).exp();
-    if x >= 0.0 { y } else { -y }
+            (searched as f64 / start.elapsed().as_secs_f64().max(1e-6)) as u64
+        })
+        .max()
+        .unwrap_or(0)
 }
 
 /// Loads an evaluator: `classic`, or the path of a `.nnue` file.
@@ -470,21 +399,20 @@ pub(crate) fn play_match(
                         let moves = opening(config, u64::from(pair));
                         let mut pair_result = MatchResult::default();
                         // Same opening, colors swapped.
-                        pair_result.add(play_game(seat_a, seat_b, config, &moves)?, Color::White);
-                        pair_result.add(play_game(seat_b, seat_a, config, &moves)?, Color::Black);
+                        let outcome = play_game(seat_a, seat_b, config, &moves)?;
+                        record(&mut pair_result, outcome, Color::White);
+                        let outcome = play_game(seat_b, seat_a, config, &moves)?;
+                        record(&mut pair_result, outcome, Color::Black);
                         Ok(pair_result)
                     },
                 )
                 .collect()
         });
         for pair in batch {
-            let pair = pair?;
-            result.wins += pair.wins;
-            result.draws += pair.draws;
-            result.losses += pair.losses;
+            result += pair?;
         }
         on_progress(result);
-        if config.sprt && result.verdict(config) != Verdict::Inconclusive {
+        if config.sprt && config.sprt_test().verdict(result) != Verdict::Inconclusive {
             break;
         }
     }
@@ -496,60 +424,29 @@ mod tests {
     use super::*;
 
     #[test]
-    fn elo_statistics() {
-        let even = MatchResult {
-            wins: 30,
-            draws: 40,
-            losses: 30,
-        };
-        assert!((even.score() - 0.5).abs() < 1e-12);
-        assert!(even.elo().abs() < 1e-9);
-        assert!((even.los() - 0.5).abs() < 1e-9);
-
-        // 75 % is +190.85 Elo in the logistic model.
-        let strong = MatchResult {
-            wins: 70,
-            draws: 10,
-            losses: 20,
-        };
-        assert!((strong.elo() - 190.85).abs() < 0.1, "{}", strong.elo());
-        assert!(strong.elo_error() > 0.0 && strong.elo_error() < 100.0);
-        assert!(strong.los() > 0.999);
-
-        let weak = MatchResult {
-            wins: 20,
-            draws: 10,
-            losses: 70,
-        };
-        assert!((weak.elo() + strong.elo()).abs() < 1e-9);
-        assert!(weak.los() < 0.001);
-    }
-
-    #[test]
-    fn sprt_concludes_both_ways() {
+    fn sprt_uses_the_configured_hypotheses() {
         let config = ArenaConfig {
-            sprt: true,
+            elo1: 5.0,
+            alpha: 0.1,
             ..ArenaConfig::default()
         };
+        let sprt = config.sprt_test();
+        assert_eq!(
+            (sprt.elo0, sprt.elo1, sprt.alpha, sprt.beta),
+            (0.0, 5.0, 0.1, 0.05)
+        );
         let crushing = MatchResult {
             wins: 300,
             draws: 100,
             losses: 100,
         };
-        assert_eq!(crushing.verdict(&config), Verdict::Pass);
-        let losing = MatchResult {
-            wins: 100,
-            draws: 100,
-            losses: 300,
-        };
-        assert_eq!(losing.verdict(&config), Verdict::Fail);
-        let early = MatchResult {
-            wins: 3,
-            draws: 2,
-            losses: 2,
-        };
-        assert_eq!(early.verdict(&config), Verdict::Inconclusive);
-        assert!((erf(0.5) - 0.520_499_877_8).abs() < 1e-6);
+        assert_eq!(sprt.verdict(crushing), Verdict::Pass);
+    }
+
+    #[test]
+    fn nps_is_measured() {
+        let nps = measure_nps(&EngineEval::default(), 2_000);
+        assert!(nps > 1_000, "{nps}");
     }
 
     #[test]

@@ -17,6 +17,17 @@ Name | Type | Description | Notes
 **kind** | **str** |  | 
 **games** | **int** | Games played. | 
 **games_total** | **int** | Games to play. | 
+**baseline_nps** | **int** | Nodes per second of the baseline&#39;s search, on the same worker. | [optional] 
+**candidate_nps** | **int** | Nodes per second of the candidate&#39;s search (one thread, measured by the worker before the match). | [optional] 
+**draws** | **int** | Games drawn. | 
+**elo** | **float** | Elo difference of the candidate over the baseline. | 
+**elo_error** | **float** | Half-width of the 95 % confidence interval of &#x60;elo&#x60;. | 
+**games_max** | **int** | Games to play at most. | 
+**los** | **float** | Likelihood of superiority: probability that the candidate is stronger. | 
+**losses** | **int** | Games the candidate lost. | 
+**score** | **float** | Candidate&#39;s mean score, in [0, 1]. | 
+**sprt** | [**SprtStatus**](SprtStatus.md) | The SPRT, when the match runs one. | [optional] 
+**wins** | **int** | Games the candidate won. | 
 
 ## Example
 

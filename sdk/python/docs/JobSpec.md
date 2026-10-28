@@ -15,10 +15,14 @@ Name | Type | Description | Notes
 **trainer** | **str** | Trainer backend (&#x60;burn&#x60;). | 
 **kind** | **str** |  | 
 **dataset** | **UUID** | Dataset filled by the games. | 
-**games** | **int** | Games to play. | 
+**games** | **int** | Games to play at most (an even number). | 
 **network** | **UUID** | Network playing the games; &#x60;None&#x60;: the classical evaluation. | [optional] 
-**nodes** | **int** | Nodes searched per move. | 
+**nodes** | **int** | Nodes searched per move (reproducible), unless &#x60;moveTimeMs&#x60;. | 
 **threads** | **int** | Worker threads (0: all cores). | 
+**baseline** | [**Contestant**](Contestant.md) | The engine it is measured against. | 
+**candidate** | [**Contestant**](Contestant.md) | The engine evaluated. | 
+**move_time_ms** | **int** | Milliseconds per move, instead of nodes. | [optional] 
+**sprt** | [**Sprt**](Sprt.md) | Stops as soon as this test concludes; without it, every game is played. | [optional] 
 
 ## Example
 

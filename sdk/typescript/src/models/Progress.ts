@@ -2,7 +2,7 @@
 /* eslint-disable */
 /**
  * chess-bot NNUE lab API
- * Declare NNUE architectures, upload or generate datasets, train networks and manage the resulting models.  Authentication: an API key in the `X-API-Key` header. Errors are RFC 9457 problem details (`application/problem+json`); lists page with `limit` and `cursor`; creations accept an `Idempotency-Key` header (kept 24 h). Limits: requests per minute per key (429 with `Retry-After`), size of uploads (413).
+ * Declare NNUE architectures, upload or generate datasets, train networks, evaluate them in matches and manage the resulting models.  Authentication: an API key in the `X-API-Key` header. Errors are RFC 9457 problem details (`application/problem+json`); lists page with `limit` and `cursor`; creations accept an `Idempotency-Key` header (kept 24 h). Limits: requests per minute per key (429 with `Retry-After`), size of uploads (413).
  *
  * The version of the OpenAPI document: 1.0.0
  * 
@@ -27,13 +27,20 @@ import {
     ProgressOneOf1FromJSONTyped,
     ProgressOneOf1ToJSON,
 } from './ProgressOneOf1.js';
+import type { ProgressOneOf2 } from './ProgressOneOf2.js';
+import {
+    instanceOfProgressOneOf2,
+    ProgressOneOf2FromJSON,
+    ProgressOneOf2FromJSONTyped,
+    ProgressOneOf2ToJSON,
+} from './ProgressOneOf2.js';
 
 /**
  * @type Progress
  * Latest progress of a job.
  * @export
  */
-export type Progress = ProgressOneOf | ProgressOneOf1;
+export type Progress = ProgressOneOf | ProgressOneOf1 | ProgressOneOf2;
 
 export function ProgressFromJSON(json: any): Progress {
     return ProgressFromJSONTyped(json, false);
@@ -51,6 +58,9 @@ export function ProgressFromJSONTyped(json: any, ignoreDiscriminator: boolean): 
     }
     if (instanceOfProgressOneOf1(json)) {
         return ProgressOneOf1FromJSONTyped(json, true);
+    }
+    if (instanceOfProgressOneOf2(json)) {
+        return ProgressOneOf2FromJSONTyped(json, true);
     }
     return {} as any;
 }
@@ -71,6 +81,9 @@ export function ProgressToJSONTyped(value?: Progress | null, ignoreDiscriminator
     }
     if (instanceOfProgressOneOf1(value)) {
         return ProgressOneOf1ToJSON(value as ProgressOneOf1);
+    }
+    if (instanceOfProgressOneOf2(value)) {
+        return ProgressOneOf2ToJSON(value as ProgressOneOf2);
     }
     return {};
 }

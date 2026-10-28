@@ -2,6 +2,7 @@
 
 pub(crate) mod architectures;
 pub(crate) mod datasets;
+pub(crate) mod evaluations;
 pub(crate) mod models;
 pub(crate) mod runs;
 
@@ -71,6 +72,16 @@ pub(crate) fn router() -> Router<NnueApi> {
             "/api/v1/selfplay-runs/{id}/events",
             get(runs::events_selfplay),
         )
+        .route(
+            "/api/v1/evaluations",
+            get(evaluations::list).post(evaluations::create),
+        )
+        .route("/api/v1/evaluations:compare", get(evaluations::compare))
+        .route(
+            "/api/v1/evaluations/{id}",
+            get(evaluations::get).post(evaluations::act),
+        )
+        .route("/api/v1/evaluations/{id}/events", get(evaluations::events))
         .route("/api/v1/models", get(models::list))
         .route("/api/v1/models:deactivate", post(models::deactivate))
         .route(
